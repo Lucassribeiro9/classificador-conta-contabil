@@ -8,7 +8,7 @@ O núcleo da ferramenta é um modelo de Processamento de Linguagem Natural (PLN)
 
 **Os arquivos contidos neste repositório podem ser usados para executar a ferramenta em um ambiente local.**
 
-O link da aplicação em uso estará aqui: `https://classificador-contas-contabeis.streamlit.app/`
+O link da aplicação em uso estará aqui: `https://classificador-contabil.streamlit.app`
 
 ## ✨ Funcionalidades Principais
 
