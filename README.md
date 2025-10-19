@@ -8,7 +8,7 @@ O núcleo da ferramenta é um modelo de Processamento de Linguagem Natural (PLN)
 
 **Os arquivos contidos neste repositório podem ser usados para executar a ferramenta em um ambiente local.**
 
-O link da aplicação em uso estará aqui: `https://classificador-contabil.streamlit.app`
+O link da aplicação em uso estará [aqui](https://classificador-contabil.streamlit.app).
 
 ## ✨ Funcionalidades Principais
 
@@ -75,7 +75,7 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 Abra o navegador no endereço local fornecido pelo Streamlit (geralmente `http://localhost:8501`).
-Caso tenha alguma dúvida, no `https://streamlit.io` possui o passo a passo para realizar o build do projeto.
+Caso tenha alguma dúvida, no [Streamlit](https://streamlit.io) possui o passo a passo para realizar o build do projeto.
 
 ## 📋 Como Usar a Ferramenta
 
