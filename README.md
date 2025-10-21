@@ -25,7 +25,7 @@ O link da aplicação em uso estará [aqui](https://classificador-contabil.strea
 -   **Linguagem:** Python 3
 -   **Análise de Dados e ML:** Pandas, Scikit-learn, NLTK
 -   **Interface Web:** Streamlit
--   **Análise Exploratória:** O repositório contém dois notebooks: `classificando-contas-contabeis.ipynb` e `analise-contabil.ipynb`. Os notebooks contém uma visão geral da ferramenta e das ferramentas utilizadas, respectivamente. Porém, um mostra a execução a partir de um modelo salvo e o outro mostra a execução em tempo real.
+-   **Análise Exploratória:** O repositório contém dois notebooks: `analise-contabil-modelo.ipynb` e `analise-contabil-real.ipynb`. Os notebooks contém uma visão geral da ferramenta e das ferramentas utilizadas, respectivamente. Porém, um mostra a execução a partir de um modelo salvo e o outro mostra a execução em tempo real.
 
 ## 🚀 Como Executar o Projeto Localmente
 
