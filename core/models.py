@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Date, Numeric
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime
+from typing import Optional
 
 from core.database import Base
 
@@ -65,11 +66,11 @@ class Transacao(Base):
     
     # --- Atributos de Classificação Contábil ---
     
-    # Código da conta contábil onde o lançamento será classificado
-    conta_contabil: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Código da conta contábil onde o lançamento será classificado (preenchido após classificação)
+    conta_contabil: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     
-    # Índice de confiança (0.0 a 1.0) da IA/Algoritmo na classificação
-    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    # Índice de confiança (0.0 a 1.0) da IA/Algoritmo na classificação (preenchido após classificação)
+    confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     
     # Indica se a transação foi marcada para conferência manual
     needs_review: Mapped[bool] = mapped_column(Boolean, default=False)
