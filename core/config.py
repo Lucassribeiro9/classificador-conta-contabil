@@ -1,7 +1,7 @@
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = "sqlite:///./conta.db"
+    DATABASE_URL: str = "sqlite:///./classificador.db"
 
     class Config:
         env_file = ".env"
