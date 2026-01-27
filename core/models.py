@@ -1,36 +1,85 @@
 from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Date, Numeric
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime
 
 from core.database import Base
 
-class Empresa(Base):
-    __tablename__ = "empresas"
-    id = Column(Integer, primary_key=True, index=True)
-    nome_empresa = Column(String, unique=True, index=True, nullable=False)
-    api_key = Column(String, unique=True, index=True, nullable=False)
-    cnpj_cpf = Column(String, unique=True, index=True, nullable=False)
-    cod_dominio = Column(Integer, nullable=False)
-    created_at = Column(DateTime, default=datetime.now)
+"""
+Módulo de modelos de dados da aplicação.
+Este arquivo define as entidades do banco de dados e seus relacionamentos utilizando SQLAlchemy ORM.
+"""
 
-    transacoes = relationship("Transacao", back_populates="empresa", cascade="all, delete-orphan")
+class Empresa(Base):
+    """
+    Representa uma empresa cliente no sistema.
+    Armazena informações de identificação, chaves de acesso e metadados.
+    """
+    __tablename__ = "empresas"
+    
+    # Identificador único da empresa (Chave Primária)
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    
+    # Nome ou Razão Social
+    nome_empresa: Mapped[str] = mapped_column(String(100), nullable=False)
+    
+    # Chave única para autenticação de requisições via API
+    api_key: Mapped[str] = mapped_column(String(70), unique=True, index=True, nullable=False)
+    
+    # Cadastro de Pessoa Jurídica ou Física
+    cnpj_cpf: Mapped[str] = mapped_column(String(15), unique=True, index=True, nullable=False)
+    
+    # Código identificador interno do sistema Domínio
+    cod_dominio: Mapped[int] = mapped_column(Integer, nullable=False)
+    
+    # Data de criação do registro no banco de dados
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+    # Relacionamento One-to-Many: Uma empresa pode ter múltiplas transações
+    # 'cascade' garante que ao deletar uma empresa, suas transações também sejam removidas
+    transacoes: Mapped[list["Transacao"]] = relationship("Transacao", back_populates="empresa", cascade="all, delete-orphan")
 
 class Transacao(Base):
+    """
+    Representa uma movimentação financeira de uma empresa.
+    Contém dados da transação bancária e informações resultantes do processo de classificação contábil.
+    """
     __tablename__ = "transacoes"
-    id = Column(Integer, primary_key=True)
-    empresa_id = Column(Integer, ForeignKey("empresas.id"))
-    data = Column(Date, nullable=False)
-    cod_banco = Column(Integer, nullable=False)
-    descricao = Column(String, nullable=False)
-    valor = Column(Numeric(precision=10, scale=2), nullable=False)
     
-    # Classificação
-    conta_contabil = Column(Integer, nullable=False)
-    confidence = Column(Float, nullable=False)
-    needs_review = Column(Boolean, default=False)
-    is_classified = Column(Boolean, default=False)
+    # Identificador único da transação
+    id: Mapped[int] = mapped_column(primary_key=True)
+    
+    # Referência (FK) para a empresa à qual esta transação pertence
+    empresa_id: Mapped[int] = mapped_column(Integer, ForeignKey("empresas.id"))
+    
+    # Data da ocorrência do fato contábil
+    data: Mapped[datetime] = mapped_column(Date, nullable=False)
+    
+    # Código identificador da instituição financeira
+    cod_banco: Mapped[int] = mapped_column(Integer, nullable=False)
+    
+    # Texto descritivo da movimentação (extrato)
+    historico: Mapped[str] = mapped_column(String, nullable=False)
+    
+    # Valor da transação com precisão decimal (10 dígitos totais, 2 decimais)
+    valor: Mapped[float] = mapped_column(Numeric(precision=10, scale=2), nullable=False)
+    
+    # --- Atributos de Classificação Contábil ---
+    
+    # Código da conta contábil onde o lançamento será classificado
+    conta_contabil: Mapped[int] = mapped_column(Integer, nullable=False)
+    
+    # Índice de confiança (0.0 a 1.0) da IA/Algoritmo na classificação
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    
+    # Indica se a transação foi marcada para conferência manual
+    needs_review: Mapped[bool] = mapped_column(Boolean, default=False)
+    
+    # Indica se a transação já passou pelo processo de classificação
+    is_classified: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    created_at = Column(DateTime, default=datetime.now)
-    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    # Metadados de controle temporal
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
 
-    empresa = relationship("Empresa", back_populates="transacoes")
+    # Relacionamento Many-to-One: Referência para o objeto Empresa pai
+    empresa: Mapped["Empresa"] = relationship("Empresa", back_populates="transacoes")
