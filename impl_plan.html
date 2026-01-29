@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plano de Implementação: Arquitetura API-First</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- Chosen Palette: Slate & Emerald (Professional, Technical, Clean) -->
+    <!-- Application Structure Plan: 
+         1. Hero/Header: Sets the context of the migration project.
+         2. Strategic Dashboard: High-level objectives and progress metrics (Chart.js) to give immediate status visibility.
+         3. Architecture Hub: Interactive breakdown of the folder structure and system components using a split view (Tree vs Detail).
+         4. Data Model Explorer: Dedicated section to visualize the Entity-Relationship logic (Company <-> Transaction) without SVGs, using styled HTML cards.
+         5. Process Flow Simulator: Interactive tabs showing how data moves through the system (Ingestion, Classification, Feedback), replacing static text with step-by-step UI visualization.
+         6. Implementation Roadmap: A vertical timeline of phases that allows users to drill down into tasks.
+         This structure moves from abstract strategy to concrete technical details, facilitating understanding for both managers and developers.
+    -->
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc; /* Slate 50 */
+            color: #334155; /* Slate 700 */
+        }
+
+        /* Chart Container Styling - MANDATORY */
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px;
+            max-height: 400px;
+        }
+
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 350px;
+            }
+        }
+
+        /* Custom Scrollbar for inner panels */
+        .custom-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scroll::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background-color: #cbd5e1;
+            border-radius: 20px;
+        }
+
+        /* Interactive Element Styles */
+        .interactive-card {
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        .interactive-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            border-color: #10b981; /* Emerald 500 */
+        }
+
+        .phase-item.active {
+            border-left-color: #10b981;
+            background-color: #f0fdf4;
+        }
+        
+        .nav-link.active {
+            color: #0f172a;
+            border-bottom: 2px solid #10b981;
+        }
+
+        /* Connector Lines for Data Model (CSS Only) */
+        .connector-line {
+            position: absolute;
+            background-color: #94a3b8;
+            z-index: 0;
+        }
+    </style>
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+</head>
+<body class="flex flex-col min-h-screen">
+
+    <!-- Navigation -->
+    <nav class="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-200 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <i class="fa-solid fa-server text-emerald-600 text-2xl mr-3"></i>
+                    <span class="font-bold text-xl text-slate-800 tracking-tight">Migração API-First</span>
+                </div>
+                <div class="hidden md:flex space-x-8 items-center">
+                    <button onclick="scrollToSection('objectives')" class="nav-link text-slate-500 hover:text-emerald-600 px-3 py-2 text-sm font-medium transition-colors">Objetivos</button>
+                    <button onclick="scrollToSection('architecture')" class="nav-link text-slate-500 hover:text-emerald-600 px-3 py-2 text-sm font-medium transition-colors">Arquitetura</button>
+                    <button onclick="scrollToSection('datamodel')" class="nav-link text-slate-500 hover:text-emerald-600 px-3 py-2 text-sm font-medium transition-colors">Modelo de Dados</button>
+                    <button onclick="scrollToSection('workflows')" class="nav-link text-slate-500 hover:text-emerald-600 px-3 py-2 text-sm font-medium transition-colors">Fluxos</button>
+                    <button onclick="scrollToSection('roadmap')" class="nav-link text-slate-500 hover:text-emerald-600 px-3 py-2 text-sm font-medium transition-colors">Roadmap</button>
+                </div>
+                <!-- Mobile menu button omitted for brevity but container prepared -->
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <header class="bg-white border-b border-slate-100">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20 text-center">
+            <h1 class="text-4xl md:text-5xl font-extrabold text-slate-900 mb-4">
+                Plano de Modernização Contábil
+            </h1>
+            <p class="text-xl text-slate-500 max-w-2xl mx-auto mb-8">
+                Transformando uma ferramenta baseada em Streamlit em uma plataforma robusta, escalável e orientada a API com FastAPI e SQLAlchemy.
+            </p>
+            <div class="flex justify-center gap-4">
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                    <span class="w-2 h-2 bg-blue-600 rounded-full mr-2"></span> Fase 2: Database
+                </span>
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-emerald-100 text-emerald-800">
+                    <i class="fa-solid fa-check mr-2"></i> Ambiente Pronto
+                </span>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow">
+        
+        <!-- Section 1: Objectives & Stats (Dashboard) -->
+        <section id="objectives" class="py-16 bg-slate-50">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="mb-10 text-center md:text-left">
+                    <h2 class="text-3xl font-bold text-slate-900">Objetivos Estratégicos</h2>
+                    <p class="mt-4 text-slate-600 max-w-3xl">
+                        Esta migração visa resolver limitações de escala e integração. Abaixo estão os pilares fundamentais do novo sistema, quantificados por impacto esperado.
+                    </p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+                    <!-- Cards populated by JS -->
+                    <div id="objectives-container" class="contents">
+                        <!-- JS renders content here -->
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 md:p-8">
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+                        <div>
+                            <h3 class="text-xl font-bold text-slate-800 mb-4">Métricas de Progresso da Migração</h3>
+                            <p class="text-slate-600 mb-6">
+                                Visualização do status atual baseado no checklist de verificação do projeto. A migração está focada agora na camada de persistência.
+                            </p>
+                            <ul class="space-y-3">
+                                <li class="flex items-center text-sm text-slate-700">
+                                    <i class="fa-solid fa-circle-check text-emerald-500 mr-3"></i> Infraestrutura Base (100%)
+                                </li>
+                                <li class="flex items-center text-sm text-slate-700">
+                                    <i class="fa-solid fa-spinner text-blue-500 mr-3 fa-spin"></i> Database & Models (Em andamento)
+                                </li>
+                                <li class="flex items-center text-sm text-slate-400">
+                                    <i class="fa-regular fa-circle mr-3"></i> API Endpoints (Pendente)
+                                </li>
+                            </ul>
+                        </div>
+                        <div class="flex flex-col items-center">
+                            <div class="chart-container">
+                                <canvas id="progressChart"></canvas>
+                            </div>
+                            <p class="text-xs text-slate-400 mt-2 text-center">Status estimado por fase de implementação</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 2: Architecture Explorer -->
+        <!-- Visualization & Content Choices: Tree view for directory structure allows developers to explore the codebase organization without opening an IDE. Combined with a detail panel. -->
+        <section id="architecture" class="py-16 bg-white border-t border-slate-200">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="mb-10">
+                    <h2 class="text-3xl font-bold text-slate-900">Arquitetura do Sistema</h2>
+                    <p class="mt-4 text-slate-600">
+                        Explore a nova estrutura de diretórios e componentes. Esta organização separa responsabilidades claramente entre API, Core Logic e Camada de Dados.
+                    </p>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 h-[600px]">
+                    <!-- Directory Tree -->
+                    <div class="col-span-1 bg-slate-50 rounded-xl border border-slate-200 p-6 overflow-y-auto custom-scroll">
+                        <h3 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Estrutura de Pastas</h3>
+                        <div id="file-tree" class="font-mono text-sm">
+                            <!-- JS Generated Tree -->
+                        </div>
+                    </div>
+
+                    <!-- Detail Panel -->
+                    <div class="col-span-1 lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-lg p-8 relative overflow-hidden flex flex-col justify-center items-center text-center" id="arch-detail-panel">
+                        <div class="bg-blue-50 rounded-full p-6 mb-6">
+                            <i class="fa-solid fa-cubes text-blue-600 text-4xl"></i>
+                        </div>
+                        <h3 class="text-2xl font-bold text-slate-800 mb-2" id="arch-title">Selecione um componente</h3>
+                        <p class="text-slate-500 max-w-md" id="arch-desc">Clique nos itens da estrutura de pastas à esquerda para ver os detalhes técnicos, responsabilidades e dependências de cada módulo.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 3: Data Model (Updated with UML info) -->
+        <section id="datamodel" class="py-16 bg-slate-50 border-t border-slate-200">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="mb-10">
+                    <h2 class="text-3xl font-bold text-slate-900">Modelo de Dados</h2>
+                    <p class="mt-4 text-slate-600">
+                        Diagrama de Entidade-Relacionamento interativo. As entidades foram atualizadas para suportar <strong>Multi-tenancy</strong> e integrações fiscais (CNPJ, Cód. Domínio).
+                    </p>
+                </div>
+
+                <div class="relative w-full overflow-x-auto bg-white rounded-xl shadow-sm border border-slate-200 p-8 md:p-12 min-h-[500px] flex items-center justify-center">
+                    
+                    <!-- Diagram Container -->
+                    <div class="relative w-full max-w-4xl h-[400px] flex justify-between items-center gap-12 md:gap-24">
+                        
+                        <!-- Connecting Line -->
+                        <div class="absolute top-1/2 left-0 w-full h-1 bg-slate-200 -z-0"></div>
+                        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-slate-100 px-2 py-1 rounded text-xs text-slate-500 border border-slate-300 z-10">
+                            1 : N
+                        </div>
+
+                        <!-- Entity: Company -->
+                        <div class="relative bg-white border-l-4 border-indigo-500 rounded-lg shadow-lg w-full md:w-5/12 z-10 interactive-card group" onclick="showEntityDetails('company')">
+                            <div class="bg-slate-50 p-3 border-b border-slate-100 flex justify-between items-center">
+                                <h3 class="font-bold text-indigo-700">Company</h3>
+                                <span class="text-xs bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded">Master</span>
+                            </div>
+                            <div class="p-4 font-mono text-sm space-y-2">
+                                <div class="flex justify-between hover:bg-indigo-50 p-1 rounded cursor-help" title="Primary Key">
+                                    <span class="text-slate-700 font-semibold">id</span>
+                                    <span class="text-slate-400">PK, Int</span>
+                                </div>
+                                <div class="flex justify-between hover:bg-indigo-50 p-1 rounded">
+                                    <span class="text-slate-700">name</span>
+                                    <span class="text-slate-400">Str</span>
+                                </div>
+                                <div class="flex justify-between hover:bg-indigo-50 p-1 rounded cursor-help" title="Autenticação">
+                                    <span class="text-slate-700">api_key</span>
+                                    <span class="text-slate-400">Str, Unq</span>
+                                </div>
+                                <div class="flex justify-between hover:bg-indigo-50 p-1 rounded bg-yellow-50 border border-yellow-100" title="Novo Campo Fiscal">
+                                    <span class="text-slate-800 font-bold">cnpj_cpf</span>
+                                    <span class="text-yellow-600 text-xs flex items-center">New!</span>
+                                </div>
+                                <div class="flex justify-between hover:bg-indigo-50 p-1 rounded bg-yellow-50 border border-yellow-100" title="Integração Domínio">
+                                    <span class="text-slate-800 font-bold">cod_dominio</span>
+                                    <span class="text-yellow-600 text-xs flex items-center">New!</span>
+                                </div>
+                            </div>
+                            <!-- Tooltip hint -->
+                            <div class="absolute -top-3 -right-3 bg-indigo-600 text-white text-xs px-2 py-1 rounded shadow opacity-0 group-hover:opacity-100 transition-opacity">
+                                Clique para detalhes
+                            </div>
+                        </div>
+
+                        <!-- Entity: Transaction -->
+                        <div class="relative bg-white border-l-4 border-emerald-500 rounded-lg shadow-lg w-full md:w-5/12 z-10 interactive-card group" onclick="showEntityDetails('transaction')">
+                            <div class="bg-slate-50 p-3 border-b border-slate-100 flex justify-between items-center">
+                                <h3 class="font-bold text-emerald-700">Transaction</h3>
+                                <span class="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">Detail</span>
+                            </div>
+                            <div class="p-4 font-mono text-sm space-y-2">
+                                <div class="flex justify-between hover:bg-emerald-50 p-1 rounded">
+                                    <span class="text-slate-700 font-semibold">id</span>
+                                    <span class="text-slate-400">PK, Int</span>
+                                </div>
+                                <div class="flex justify-between hover:bg-emerald-50 p-1 rounded cursor-help" title="Foreign Key -> Company.id">
+                                    <span class="text-slate-700 font-semibold">company_id</span>
+                                    <span class="text-slate-400">FK, Int</span>
+                                </div>
+                                <div class="flex justify-between hover:bg-emerald-50 p-1 rounded">
+                                    <span class="text-slate-700">description</span>
+                                    <span class="text-slate-400">Str</span>
+                                </div>
+                                <div class="flex justify-between hover:bg-emerald-50 p-1 rounded">
+                                    <span class="text-slate-700">value</span>
+                                    <span class="text-slate-400">Dec</span>
+                                </div>
+                                <div class="flex justify-between hover:bg-emerald-50 p-1 rounded bg-blue-50">
+                                    <span class="text-blue-700">account_code</span>
+                                    <span class="text-blue-400 text-xs">ML Result</span>
+                                </div>
+                                <div class="flex justify-between hover:bg-emerald-50 p-1 rounded bg-blue-50">
+                                    <span class="text-blue-700">confidence</span>
+                                    <span class="text-blue-400 text-xs">Float</span>
+                                </div>
+                            </div>
+                            <div class="absolute -top-3 -right-3 bg-emerald-600 text-white text-xs px-2 py-1 rounded shadow opacity-0 group-hover:opacity-100 transition-opacity">
+                                Clique para detalhes
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+                <p class="text-center text-sm text-slate-400 mt-4"><i class="fa-solid fa-info-circle mr-1"></i> Os campos <code>cnpj_cpf</code> e <code>cod_dominio</code> foram adicionados à tabela Company para permitir a integração com o sistema Domínio.</p>
+            </div>
+        </section>
+
+        <!-- Section 4: Workflows Simulator -->
+        <!-- Visualization & Content Choices: Instead of reading about the flow, users can click through the steps. This clarifies the "API-First" nature of the project. -->
+        <section id="workflows" class="py-16 bg-white border-t border-slate-200">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="mb-10 flex flex-col md:flex-row md:items-end justify-between">
+                    <div>
+                        <h2 class="text-3xl font-bold text-slate-900">Fluxos de Dados da API</h2>
+                        <p class="mt-4 text-slate-600 max-w-2xl">
+                            Simule como os dados trafegam entre o Cliente (n8n), a API FastAPI e o Banco de Dados. Selecione um cenário abaixo.
+                        </p>
+                    </div>
+                    
+                    <!-- Tabs -->
+                    <div class="mt-6 md:mt-0 flex space-x-2 bg-slate-100 p-1 rounded-lg">
+                        <button onclick="setWorkflow('ingest')" id="tab-ingest" class="px-4 py-2 rounded-md text-sm font-medium bg-white text-emerald-600 shadow-sm transition-all">1. Ingestão</button>
+                        <button onclick="setWorkflow('classify')" id="tab-classify" class="px-4 py-2 rounded-md text-sm font-medium text-slate-600 hover:bg-slate-200 transition-all">2. Classificação</button>
+                        <button onclick="setWorkflow('feedback')" id="tab-feedback" class="px-4 py-2 rounded-md text-sm font-medium text-slate-600 hover:bg-slate-200 transition-all">3. Feedback</button>
+                    </div>
+                </div>
+
+                <!-- Workflow Stage -->
+                <div class="bg-slate-900 rounded-xl p-8 text-white relative overflow-hidden min-h-[300px] flex flex-col justify-center">
+                    <!-- Background Grid -->
+                    <div class="absolute inset-0 opacity-10" style="background-image: radial-gradient(#ffffff 1px, transparent 1px); background-size: 20px 20px;"></div>
+
+                    <div id="flow-display" class="relative z-10 flex flex-col md:flex-row items-center justify-between gap-4">
+                        <!-- JS renders the steps here -->
+                    </div>
+
+                    <div class="mt-8 pt-8 border-t border-slate-700 text-center">
+                        <p id="flow-description" class="text-slate-400 text-sm italic">
+                            Selecione um fluxo acima para visualizar a operação.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 5: Implementation Roadmap -->
+        <section id="roadmap" class="py-16 bg-slate-50 border-t border-slate-200">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="mb-10">
+                    <h2 class="text-3xl font-bold text-slate-900">Roadmap de Implementação</h2>
+                    <p class="mt-4 text-slate-600">
+                        Cronograma sequencial das 6 fases de migração. Clique em uma fase para ver o detalhamento técnico.
+                    </p>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <!-- Timeline List -->
+                    <div class="col-span-1 space-y-4" id="phase-list">
+                        <!-- JS Generated -->
+                    </div>
+
+                    <!-- Details Panel -->
+                    <div class="col-span-1 lg:col-span-2 bg-white rounded-xl border border-slate-200 p-8 shadow-sm h-full" id="phase-detail-panel">
+                        <div class="h-full flex flex-col justify-center items-center text-center text-slate-400">
+                            <i class="fa-solid fa-list-check text-4xl mb-4 text-slate-300"></i>
+                            <p>Selecione uma fase ao lado para ver as tarefas.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="bg-slate-900 text-slate-300 py-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <p class="font-semibold text-white text-lg mb-2">Migração Contábil API-First</p>
+            <p class="text-sm text-slate-500">Documentação Interativa do Plano de Implementação</p>
+            <div class="mt-8 pt-8 border-t border-slate-800 text-xs text-slate-600">
+                Gerado a partir de PLANO_IMPLEMENTACAO.md e DOCUMENTACAO_MODELO.md
+            </div>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script>
+        // --- Data Definitions ---
+
+        const objectives = [
+            { icon: "fa-network-wired", title: "API-First", desc: "Endpoints RESTful para todas as operações, desacoplando o frontend da lógica." },
+            { icon: "fa-building", title: "Multi-Tenancy", desc: "Suporte isolado para múltiplas empresas com segurança via API Key." },
+            { icon: "fa-database", title: "Persistência", desc: "Histórico completo em banco SQL (SQLite/Postgres) em vez de CSVs voláteis." },
+            { icon: "fa-bolt", title: "Automação", desc: "Arquitetura pronta para integração direta com n8n para ingestão e feedback." }
+        ];
+
+        const fileStructure = [
+            { name: "api", type: "folder", desc: "Camada de Interface. Contém rotas, validações e injeção de dependência.", children: [
+                { name: "__init__.py", type: "file" },
+                { name: "main.py", type: "file", desc: "Entrada da aplicação FastAPI. Configura middleware e inclui rotas." },
+                { name: "routes", type: "folder", desc: "Endpoints organizados por domínio.", children: [
+                    { name: "companies.py", type: "file", desc: "CRUD de empresas." },
+                    { name: "transactions.py", type: "file", desc: "Ingestão e listagem de transações." },
+                    { name: "classification.py", type: "file", desc: "Endpoint de inferência ML." }
+                ]},
+                { name: "schemas.py", type: "file", desc: "Modelos Pydantic para validação de entrada/saída." }
+            ]},
+            { name: "core", type: "folder", desc: "Núcleo do sistema. Regras de negócio, acesso a dados e configuração.", children: [
+                { name: "database.py", type: "file", desc: "Configuração do SQLAlchemy e Sessão." },
+                { name: "models.py", type: "file", desc: "Definição das tabelas do banco de dados." },
+                { name: "ml_engine.py", type: "file", desc: "Lógica de ML refatorada para trabalhar com DB." }
+            ]},
+            { name: "tests", type: "folder", desc: "Testes unitários e de integração.", children: [
+                { name: "test_api.py", type: "file" }
+            ]}
+        ];
+
+        const phases = [
+            { id: 1, title: "Fase 1: Infrastructure", status: "done", tasks: ["Atualizar requirements.txt", "Criar estrutura de diretórios", "Configurar SQLAlchemy"] },
+            { id: 2, title: "Fase 2: Database & Models", status: "active", tasks: ["Criar models SQLAlchemy (Company, Transaction)", "Adicionar campos CNPJ/Dominio", "Script de init do DB"] },
+            { id: 3, title: "Fase 3: Core Logic", status: "pending", tasks: ["Refatorar ml_engine.py", "Adaptar limpeza de texto", "Implementar cache de modelos"] },
+            { id: 4, title: "Fase 4: API Development", status: "pending", tasks: ["Criar Schemas Pydantic", "Implementar Rotas CRUD", "Middleware de Auth (API Key)"] },
+            { id: 5, title: "Fase 5: Testing", status: "pending", tasks: ["Testes Unitários", "Integração n8n", "Validar fluxo de feedback"] },
+            { id: 6, title: "Fase 6: Docs & Deploy", status: "pending", tasks: ["Swagger/ReDoc", "Guia de uso", "Deploy (Opcional)"] }
+        ];
+
+        const workflows = {
+            ingest: {
+                steps: [
+                    { icon: "fa-robot", label: "n8n / Cliente", sub: "POST /transactions" },
+                    { icon: "fa-shield-halved", label: "Auth Middleware", sub: "Valida API Key" },
+                    { icon: "fa-database", label: "Banco de Dados", sub: "Salva dados brutos" }
+                ],
+                desc: "Dados históricos são enviados em lote para treinar o modelo futuramente."
+            },
+            classify: {
+                steps: [
+                    { icon: "fa-bolt", label: "n8n Trigger", sub: "Nova Transação" },
+                    { icon: "fa-brain", label: "ML Engine", sub: "Treina/Carrega Modelo" },
+                    { icon: "fa-tags", label: "Resposta API", sub: "Conta + Confiança" }
+                ],
+                desc: "O sistema busca o histórico da empresa, treina o modelo (se necessário) e retorna a previsão."
+            },
+            feedback: {
+                steps: [
+                    { icon: "fa-user", label: "Humano", sub: "Corrige classificação" },
+                    { icon: "fa-server", label: "API Feedback", sub: "PATCH /feedback" },
+                    { icon: "fa-rotate", label: "Retreino", sub: "Melhora o modelo" }
+                ],
+                desc: "O feedback do usuário corrige o registro e fortalece o aprendizado do modelo para a próxima vez."
+            }
+        };
+
+        // --- Initialization ---
+
+        document.addEventListener('DOMContentLoaded', () => {
+            renderObjectives();
+            renderFileTree(fileStructure, document.getElementById('file-tree'));
+            initChart();
+            renderPhases();
+            setWorkflow('ingest'); // Default view
+        });
+
+        function scrollToSection(id) {
+            document.getElementById(id).scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // --- Renders ---
+
+        function renderObjectives() {
+            const container = document.getElementById('objectives-container');
+            container.innerHTML = objectives.map(obj => `
+                <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6 hover:shadow-md transition-shadow">
+                    <div class="w-12 h-12 bg-emerald-50 rounded-lg flex items-center justify-center mb-4 text-emerald-600">
+                        <i class="fa-solid ${obj.icon} text-xl"></i>
+                    </div>
+                    <h3 class="font-bold text-slate-800 mb-2">${obj.title}</h3>
+                    <p class="text-sm text-slate-500 leading-relaxed">${obj.desc}</p>
+                </div>
+            `).join('');
+        }
+
+        function renderFileTree(nodes, container, level = 0) {
+            nodes.forEach(node => {
+                const div = document.createElement('div');
+                div.className = `py-1 px-2 rounded hover:bg-slate-100 cursor-pointer flex items-center transition-colors ml-${level * 4}`;
+                div.style.marginLeft = `${level * 1.5}rem`;
+                
+                const iconClass = node.type === 'folder' ? 'fa-folder text-yellow-400' : 'fa-file-code text-blue-400';
+                
+                div.innerHTML = `<i class="fa-solid ${iconClass} mr-2 w-4"></i> ${node.name}`;
+                
+                div.onclick = (e) => {
+                    e.stopPropagation();
+                    showArchDetail(node);
+                    // Highlight logic
+                    document.querySelectorAll('#file-tree div').forEach(el => el.classList.remove('bg-blue-50', 'text-blue-700'));
+                    div.classList.add('bg-blue-50', 'text-blue-700');
+                };
+
+                container.appendChild(div);
+
+                if (node.children) {
+                    renderFileTree(node.children, container, level + 1);
+                }
+            });
+        }
+
+        function showArchDetail(node) {
+            const title = document.getElementById('arch-title');
+            const desc = document.getElementById('arch-desc');
+            const panel = document.getElementById('arch-detail-panel');
+
+            title.textContent = node.name;
+            desc.textContent = node.desc || "Arquivo de código fonte do projeto.";
+            
+            // Visual feedback animation
+            panel.classList.remove('bg-white');
+            panel.classList.add('bg-blue-50');
+            setTimeout(() => {
+                panel.classList.remove('bg-blue-50');
+                panel.classList.add('bg-white');
+            }, 300);
+        }
+
+        function showEntityDetails(entity) {
+            // Simple alert simulation for interaction - in a real app this would open a modal
+            // but we want to stay within the single page flow
+            let info = "";
+            if (entity === 'company') {
+                info = "Entidade Company:\n- Armazena dados cadastrais.\n- Chave API para segurança.\n- CNPJ e Cod Dominio para integrações.";
+            } else {
+                info = "Entidade Transaction:\n- Registros financeiros.\n- Resultados da IA (confidence).\n- Status de revisão.";
+            }
+            alert(info);
+        }
+
+        function renderPhases() {
+            const list = document.getElementById('phase-list');
+            list.innerHTML = phases.map(phase => {
+                const activeClass = phase.status === 'active' ? 'border-l-4 border-emerald-500 bg-white shadow-md' : 'border-l-4 border-transparent hover:bg-white hover:shadow-sm';
+                const icon = phase.status === 'done' ? '<i class="fa-solid fa-check-circle text-emerald-500"></i>' : 
+                             phase.status === 'active' ? '<i class="fa-solid fa-spinner fa-spin text-blue-500"></i>' : 
+                             '<i class="fa-regular fa-circle text-slate-300"></i>';
+                
+                return `
+                <div class="phase-item p-4 cursor-pointer rounded transition-all ${activeClass}" onclick="showPhaseDetail(${phase.id})">
+                    <div class="flex items-center justify-between">
+                        <span class="font-bold text-slate-700">${phase.title}</span>
+                        ${icon}
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function showPhaseDetail(id) {
+            const phase = phases.find(p => p.id === id);
+            const panel = document.getElementById('phase-detail-panel');
+            
+            const tasksHtml = phase.tasks.map(t => `<li class="flex items-start mb-2"><i class="fa-solid fa-angle-right text-emerald-500 mt-1 mr-2"></i><span>${t}</span></li>`).join('');
+
+            panel.innerHTML = `
+                <div class="text-left animate-fade-in">
+                    <span class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2 block">Detalhes da Fase</span>
+                    <h3 class="text-2xl font-bold text-slate-800 mb-6">${phase.title}</h3>
+                    <div class="bg-slate-50 rounded-lg p-6 border border-slate-100">
+                        <h4 class="font-semibold text-slate-700 mb-4">Checklist de Tarefas:</h4>
+                        <ul class="text-slate-600 text-sm">
+                            ${tasksHtml}
+                        </ul>
+                    </div>
+                    <div class="mt-6">
+                        <span class="inline-block px-3 py-1 text-xs font-semibold rounded-full ${phase.status === 'done' ? 'bg-emerald-100 text-emerald-800' : phase.status === 'active' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-500'}">
+                            Status: ${phase.status.toUpperCase()}
+                        </span>
+                    </div>
+                </div>
+            `;
+        }
+
+        function setWorkflow(type) {
+            // Update tabs
+            ['ingest', 'classify', 'feedback'].forEach(t => {
+                const btn = document.getElementById(`tab-${t}`);
+                if (t === type) {
+                    btn.classList.remove('text-slate-600', 'hover:bg-slate-200');
+                    btn.classList.add('bg-white', 'text-emerald-600', 'shadow-sm');
+                } else {
+                    btn.classList.add('text-slate-600', 'hover:bg-slate-200');
+                    btn.classList.remove('bg-white', 'text-emerald-600', 'shadow-sm');
+                }
+            });
+
+            // Update display
+            const data = workflows[type];
+            const container = document.getElementById('flow-display');
+            const desc = document.getElementById('flow-description');
+
+            desc.textContent = data.desc;
+
+            container.innerHTML = data.steps.map((step, index) => `
+                <div class="flex flex-col items-center text-center z-10 group">
+                    <div class="w-16 h-16 rounded-full bg-slate-800 border-2 border-emerald-500 flex items-center justify-center text-2xl text-emerald-400 mb-3 shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-transform group-hover:scale-110">
+                        <i class="fa-solid ${step.icon}"></i>
+                    </div>
+                    <h4 class="font-bold text-white text-lg">${step.label}</h4>
+                    <span class="text-xs text-slate-400 mt-1 px-2 py-1 bg-slate-800 rounded">${step.sub}</span>
+                </div>
+                ${index < data.steps.length - 1 ? '<div class="hidden md:block text-slate-600 text-2xl"><i class="fa-solid fa-arrow-right"></i></div><div class="md:hidden text-slate-600 text-xl my-2"><i class="fa-solid fa-arrow-down"></i></div>' : ''}
+            `).join('');
+        }
+
+        function initChart() {
+            const ctx = document.getElementById('progressChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Concluído', 'Em Andamento', 'Pendente'],
+                    datasets: [{
+                        data: [20, 20, 60], // Based roughly on phases 1 done, 2 active, 3-6 pending
+                        backgroundColor: ['#10b981', '#3b82f6', '#e2e8f0'],
+                        borderWidth: 0,
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '70%',
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 20
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>

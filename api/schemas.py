@@ -1,6 +1,7 @@
 from pydantic import BaseModel, ConfigDict
 from datetime import date, datetime
-from typing import Optional, List
+from typing import Optional
+
 
 # Schemas para transação
 class TransacaoBase(BaseModel):
@@ -11,8 +12,10 @@ class TransacaoBase(BaseModel):
     conta_contabil: Optional[int] = None
     empresa_id: int
 
+
 class TransacaoCreate(TransacaoBase):
     pass
+
 
 class Transacao(TransacaoBase):
     id: int
@@ -26,14 +29,17 @@ class Transacao(TransacaoBase):
     # Permite conversão de objetos ORM para Pydantic
     model_config = ConfigDict(from_attributes=True)
 
+
 # Schema para empresa
 class EmpresaBase(BaseModel):
     nome: str
     cnpj: str
     cod_dominio: int
 
+
 class EmpresaCreate(EmpresaBase):
     pass
+
 
 class Empresa(EmpresaBase):
     id: int
