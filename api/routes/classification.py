@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from api.dependencies import get_db
-from core import models
+from api.dependencies import get_db, verify_api_key
+from core.models import Empresa, Transacao
 from core.database import SessionLocal
 from core.ml_engine import ClassificadorContabil
 
@@ -11,8 +11,8 @@ router = APIRouter()
 
 # POST - Busca as transações pendentes de classificação
 @router.post("/companies/{empresa_id}/classification")
-def trigger_classification(company_id: int, db: Session = Depends(get_db)):
-    empresa = db.query(models.Empresa).filter(models.Empresa.id == company_id).first()
+def trigger_classification(company_id: int, db: Session = Depends(get_db), empresa: Empresa = Depends(verify_api_key)):
+    empresa = db.query(Empresa).filter(Empresa.id == company_id).first()
     if not empresa:
         raise HTTPException(status_code=404, detail="Empresa não encontrada")
     """Dispara a classificação das transações pendentes"""
@@ -27,10 +27,10 @@ def trigger_classification(company_id: int, db: Session = Depends(get_db)):
 
     # Busca ID das transações sem conta
     pendentes = (
-        db.query(models.Transacao)
+        db.query(Transacao)
         .filter(
-            models.Transacao.empresa_id == company_id,
-            models.Transacao.conta_contabil is None,
+            Transacao.empresa_id == company_id,
+            Transacao.conta_contabil is None,
         )
         .all()
     )
