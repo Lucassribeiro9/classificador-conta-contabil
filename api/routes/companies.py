@@ -3,25 +3,17 @@ import secrets
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from api.schemas import EmpresaCreate, Empresa
+from api.dependencies import get_db
+from api.schemas import Empresa, EmpresaCreate
 from core import models
-from core.database import SessionLocal
 
 # Instanciando o router
 router = APIRouter()
 
 
-# Injetando a dependência do banco de dados
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
 # POST - Criar/Adicionar empresa
 @router.post("/companies", response_model=Empresa)
+# trunk-ignore(ruff/B008)
 def create_company(company: EmpresaCreate, db: Session = Depends(get_db)):
     # Criar empresa no banco de dados e gera uma api key única
     db_company = (

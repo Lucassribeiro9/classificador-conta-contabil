@@ -1,18 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+
+from api.dependencies import get_db
+from core import models
 from core.database import SessionLocal
 from core.ml_engine import ClassificadorContabil
-from core.models import models
 
 router = APIRouter()
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 # POST - Busca as transações pendentes de classificação
@@ -53,4 +47,6 @@ def trigger_classification(company_id: int, db: Session = Depends(get_db)):
             "quantidade_processada": len(resultados),
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao classificar transações: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Erro ao classificar transações: {e}"
+        )
