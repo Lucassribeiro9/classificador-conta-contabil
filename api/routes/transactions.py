@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from api import schemas
-from api.dependencies import get_db
+from api.dependencies import get_db, verify_api_key
 from core import models
 
 # Instanciando o router 
@@ -19,6 +19,7 @@ def create_transactions_batch(
     company_id: int,
     transactions_in: List[schemas.TransacaoCreate],
     db: Session = Depends(get_db),
+    empresa: models.Empresa = Depends(verify_api_key),
 ):
     """Criando transações em lote"""
     empresa = db.query(models.Empresa).filter(models.Empresa.id == company_id).first()
@@ -41,7 +42,7 @@ def create_transactions_batch(
 @router.get(
     "/companies/{company_id}/transactions", response_model=List[schemas.Transacao]
 )
-def list_transactions(company_id: int, limit: int = 100, db: Session = Depends(get_db)):
+def list_transactions(company_id: int, limit: int = 100, db: Session = Depends(get_db), empresa: models.Empresa = Depends(verify_api_key)):
     """Listando transações de uma empresa"""
     empresa = db.query(models.Empresa).filter(models.Empresa.id == company_id).first()
     if not empresa:
