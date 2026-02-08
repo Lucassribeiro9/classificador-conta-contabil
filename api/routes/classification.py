@@ -10,7 +10,7 @@ router = APIRouter()
 
 
 # POST - Busca as transações pendentes de classificação
-@router.post("/companies/{empresa_id}/classification")
+@router.post("/companies/{company_id}/classification")
 def trigger_classification(company_id: int, db: Session = Depends(get_db), empresa: Empresa = Depends(verify_api_key)):
     empresa = db.query(Empresa).filter(Empresa.id == company_id).first()
     if not empresa:
@@ -30,7 +30,7 @@ def trigger_classification(company_id: int, db: Session = Depends(get_db), empre
         db.query(Transacao)
         .filter(
             Transacao.empresa_id == company_id,
-            Transacao.conta_contabil is None,
+            Transacao.conta_contabil == None,
         )
         .all()
     )
