@@ -1,0 +1,55 @@
+services:
+  api-contabil:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - DATABASE_URL=sqlite:///./data/classificador_conta_contabil.db
+    restart: unless-stopped
+    networks:
+      - n8n-network-test
+  
+  n8n-test:
+    image: n8nio/n8n:latest
+    ports:
+      - "5678:5678"
+    volumes:
+      - ./n8n_data:/home/node/.n8n
+    environment:
+      GENERIC_TIMEZONE: America/Sao_Paulo
+      TZ: America/Sao_Paulo
+
+      # atrás do ngrok (TLS termina no ngrok; upstream é http)
+      N8N_SECURE_COOKIE: "false"
+      N8N_PROXY_HOPS: "1"
+
+      # bind correto dentro do container
+      N8N_HOST: 0.0.0.0
+      N8N_PROTOCOL: http
+      N8N_PORT: 5678
+
+      # URL pública do ngrok (pra webhooks e links do editor)
+      WEBHOOK_URL: ${WEBHOOK_URL}
+
+    restart: unless-stopped
+    networks:
+      - n8n-network-test
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    command: ["http", "http://n8n-test:5678"]
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTH_TOKEN}
+    ports:
+      - "4040:4040"
+    restart: unless-stopped
+    depends_on:
+      - n8n-test
+    networks:
+      - n8n-network-test
+
+networks:
+  n8n-network-test:
+    driver: bridge
