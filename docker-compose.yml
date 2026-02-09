@@ -6,7 +6,7 @@ services:
     volumes:
       - ./data:/app/data
     environment:
-      - DATABASE_URL=sqlite:///./data/classificador_conta_contabil.db
+      - DATABASE_URL=sqlite:///./data/classificador.db
     restart: unless-stopped
     networks:
       - n8n-network-test
