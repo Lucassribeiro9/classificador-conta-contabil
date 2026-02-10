@@ -178,3 +178,6 @@ ipython_config.py
 *.db
 *.sqlite
 *.sqlite3
+
+# Docker e n8n
+n8n_data
