@@ -7,7 +7,6 @@ services:
       - ./data:/app/data
     environment:
       - DATABASE_URL=sqlite:///./data/classificador.db
-      - API_URL=http://api-contabil:8000
     restart: unless-stopped
     networks:
       - n8n-network-test
@@ -21,6 +20,7 @@ services:
     environment:
       GENERIC_TIMEZONE: America/Sao_Paulo
       TZ: America/Sao_Paulo
+      API_URL: http://api-contabil:8000
 
       # atrás do ngrok (TLS termina no ngrok; upstream é http)
       N8N_SECURE_COOKIE: "false"
