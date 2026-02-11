@@ -7,6 +7,7 @@ services:
       - ./data:/app/data
     environment:
       - DATABASE_URL=sqlite:///./data/classificador.db
+      - API_URL=http://api-contabil:8000
     restart: unless-stopped
     networks:
       - n8n-network-test
