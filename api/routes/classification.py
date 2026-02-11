@@ -1,17 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from api.dependencies import get_db, verify_api_key
-from core.models import Empresa, Transacao
-from core.database import SessionLocal
+from api.dependencies import DB_DEPENDENCY, verify_api_key
 from core.ml_engine import ClassificadorContabil
+from core.models import Empresa, Transacao
 
 router = APIRouter()
 
 
 # POST - Busca as transações pendentes de classificação
 @router.post("/companies/{company_id}/classification")
-def trigger_classification(company_id: int, db: Session = Depends(get_db), empresa: Empresa = Depends(verify_api_key)):
+def trigger_classification(
+    company_id: int,
+    db: Session = DB_DEPENDENCY,
+    empresa: Empresa = Depends(verify_api_key),
+):
     empresa = db.query(Empresa).filter(Empresa.id == company_id).first()
     if not empresa:
         raise HTTPException(status_code=404, detail="Empresa não encontrada")

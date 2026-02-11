@@ -13,9 +13,12 @@ def get_db():
         db.close()
 
 
+DB_DEPENDENCY = Depends(get_db)
+
+
 def verify_api_key(
     x_api_key: str = Header(..., description="API Key da empresa"),
-    db: Session = Depends(get_db),
+    db: Session = DB_DEPENDENCY,
 ):
     # Verifica se possui a chave
     if not x_api_key:
