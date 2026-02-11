@@ -1,9 +1,9 @@
 import secrets
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from sqlalchemy.orm import Session
 
-from api.dependencies import get_db
+from api.dependencies import DB_DEPENDENCY
 from api.schemas import Empresa, EmpresaCreate
 from core import models
 
@@ -13,8 +13,9 @@ router = APIRouter()
 
 # POST - Criar/Adicionar empresa
 @router.post("/companies", response_model=Empresa)
+# trunk-ignore(trunk/ignore-does-nothing)
 # trunk-ignore(ruff/B008)
-def create_company(company: EmpresaCreate, db: Session = Depends(get_db)):
+def create_company(company: EmpresaCreate, db: Session = DB_DEPENDENCY):
     # Criar empresa no banco de dados e gera uma api key única
     db_company = (
         db.query(models.Empresa)
@@ -35,13 +36,13 @@ def create_company(company: EmpresaCreate, db: Session = Depends(get_db)):
 
 # GET - Listar todas
 @router.get("/companies", response_model=list[Empresa])
-def get_companies(db: Session = Depends(get_db)):
+def get_companies(db: Session = DB_DEPENDENCY):
     return db.query(models.Empresa).all()
 
 
 # GET - Listar empresa por ID
 @router.get("/companies/{company_id}", response_model=Empresa)
-def get_company(company_id: int, db: Session = Depends(get_db)):
+def get_company(company_id: int, db: Session = DB_DEPENDENCY):
     company = db.query(models.Empresa).filter(models.Empresa.id == company_id).first()
     if not company:
         raise HTTPException(status_code=404, detail="Empresa não encontrada")

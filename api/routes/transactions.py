@@ -4,10 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from api import schemas
-from api.dependencies import get_db, verify_api_key
+from api.dependencies import DB_DEPENDENCY, get_db, verify_api_key
 from core import models
 
-# Instanciando o router 
+# Instanciando o router
 router = APIRouter()
 
 
@@ -18,7 +18,7 @@ router = APIRouter()
 def create_transactions_batch(
     company_id: int,
     transactions_in: List[schemas.TransacaoCreate],
-    db: Session = Depends(get_db),
+    db: Session = DB_DEPENDENCY,
     empresa: models.Empresa = Depends(verify_api_key),
 ):
     """Criando transações em lote"""
@@ -42,7 +42,13 @@ def create_transactions_batch(
 @router.get(
     "/companies/{company_id}/transactions", response_model=List[schemas.Transacao]
 )
-def list_transactions(company_id: int, limit: int = 100, db: Session = Depends(get_db), empresa: models.Empresa = Depends(verify_api_key)):
+def list_transactions(
+    company_id: int,
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = DB_DEPENDENCY,
+    empresa: models.Empresa = Depends(verify_api_key),
+):
     """Listando transações de uma empresa"""
     empresa = db.query(models.Empresa).filter(models.Empresa.id == company_id).first()
     if not empresa:
@@ -50,20 +56,23 @@ def list_transactions(company_id: int, limit: int = 100, db: Session = Depends(g
     transactions = (
         db.query(models.Transacao)
         .filter(models.Transacao.empresa_id == company_id)
+        .offset(skip)
         .limit(limit)
         .all()
     )
     return transactions
 
+
 # GET - Listar transações que precisam de revisão
 @router.get(
-    "/companies/{company_id}/transactions/needs_review", response_model=List[schemas.Transacao]
+    "/companies/{company_id}/transactions/needs_review",
+    response_model=List[schemas.Transacao],
 )
 def list_transactions_for_review(
-    company_id: int, 
-    limit: int = 100, 
-    db: Session = Depends(get_db), 
-    empresa: models.Empresa = Depends(verify_api_key)
+    company_id: int,
+    limit: int = 100,
+    db: Session = DB_DEPENDENCY,
+    empresa: models.Empresa = Depends(verify_api_key),
 ):
     """Retorna transações que precisam de revisão manual (needs_review=True).
     As transações são ordenadas por confidence (menor primeiro) para priorizar
@@ -72,12 +81,12 @@ def list_transactions_for_review(
     empresa = db.query(models.Empresa).filter(models.Empresa.id == company_id).first()
     if not empresa:
         raise HTTPException(status_code=404, detail="Empresa não encontrada")
-    
+
     transactions = (
         db.query(models.Transacao)
         .filter(
             models.Transacao.empresa_id == company_id,
-            models.Transacao.needs_review == True
+            models.Transacao.needs_review == True,
         )
         .order_by(models.Transacao.confidence.asc())  # Menor confiança primeiro
         .limit(limit)
