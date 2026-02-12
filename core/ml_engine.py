@@ -30,6 +30,14 @@ from sqlalchemy.orm import Session
 from core.models import Transacao
 
 
+def download_nltk_resources():
+    try:
+        stopwords.words("portuguese")
+    except LookupError:
+        nltk.download("stopwords")
+        stopwords.words("portuguese")
+
+
 class ClassificadorContabil:
     def __init__(self, db: Session):
         self.db = db
