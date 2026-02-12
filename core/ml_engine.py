@@ -14,10 +14,11 @@ import seaborn as sns
 from IPython.display import Image, Markdown, display
 
 try:
-    from nltk.corpus import stopwords
-except:
+    import nltk
+    nltk.data.find('corpora/stopwords')
+except LookupError:
+    import nltk
     nltk.download("stopwords")
-    from nltk.corpus import stopwords
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression

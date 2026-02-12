@@ -14,6 +14,9 @@ COPY requirements.txt .
 # Instala as dependências
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Baixar os dados do NLTK necessários para o classificador
+RUN python -m nltk.downloader stopwords
+
 # Copia o código da aplicação
 COPY . .
 
