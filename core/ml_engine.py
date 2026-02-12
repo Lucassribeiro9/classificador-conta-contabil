@@ -6,19 +6,17 @@ import matplotlib.pyplot as plt
 
 # - Bibliotecas para ML
 import nltk
+from nltk.corpus import stopwords
+try:
+    nltk.data.find("corpora/stopwords")
+except LookupError:
+    nltk.download("stopwords")
 import pandas as pd
 
 # - Bibliotecas para visualização de dados
 import plotly.express as px
 import seaborn as sns
 from IPython.display import Image, Markdown, display
-
-try:
-    import nltk
-    nltk.data.find('corpora/stopwords')
-except LookupError:
-    import nltk
-    nltk.download("stopwords")
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
@@ -29,14 +27,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from core.models import Transacao
-
-
-def download_nltk_resources():
-    try:
-        stopwords.words("portuguese")
-    except LookupError:
-        nltk.download("stopwords")
-        stopwords.words("portuguese")
 
 
 class ClassificadorContabil:
