@@ -55,3 +55,24 @@ class Empresa(EmpresaBase):
     created_at: datetime
     # Permite conversão de objetos ORM para Pydantic
     model_config = ConfigDict(from_attributes=True)
+
+
+# Schemas para predição
+class PredictInput(BaseModel):
+    historico: str
+    cod_banco: Optional[int] = None
+
+
+class PredictResult(BaseModel):
+    conta_contabil_predita: int
+    confidence: float
+    needs_review: bool
+    historico: str
+    cod_banco: Optional[int] = None
+
+
+class PredictResponse(BaseModel):
+    empresa_id: int
+    quantidade_processada: int
+    persisted: bool
+    results: list[PredictResult]

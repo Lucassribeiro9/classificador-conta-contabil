@@ -3,7 +3,7 @@ Testes da API de Classificação de Contas Contábeis.
 Testa endpoints de empresas, transações, classificação e feedback.
 """
 
-import pytest
+from api.routes.classification import ClassificadorContabil
 
 
 class TestHealth:
@@ -64,7 +64,7 @@ class TestCompanies:
         """Testa busca de empresa inexistente."""
         response = client.get("/api/v1/companies/9999")
         assert response.status_code == 404
-    
+
     def test_deactivate_company(self, client, empresa_criada):
         """Testa desativação de empresa."""
         company_id = empresa_criada["id"]
@@ -94,10 +94,209 @@ class TestCompanies:
         response = client.patch(f"/api/v1/companies/{company_id}/activate")
         assert response.status_code == 400
         assert "Empresa já está ativa" in response.json()["detail"]
+
+
+class TestPredict:
+    """Testes do endpoint de predição."""
+
+    @staticmethod
+    def _mock_train_for_company(self, company_id):
+        return True
+
+    @staticmethod
+    def _mock_predict_inputs(self, inputs):
+        results = []
+        for item in inputs:
+            confidence = 0.5 if "incerto" in item["historico"].lower() else 0.9
+            results.append(
+                {
+                    "conta_contabil_predita": 1234,
+                    "confidence": confidence,
+                    "needs_review": confidence < 0.7,
+                    "historico": item["historico"],
+                    "cod_banco": item.get("cod_banco"),
+                }
+            )
+        return results
+
+    def test_predict_single_success(self, client, empresa_criada, monkeypatch):
+        """Testa predição unitária com sucesso."""
+
+        monkeypatch.setattr(
+            ClassificadorContabil, "train_for_company", self._mock_train_for_company
+        )
+        monkeypatch.setattr(
+            ClassificadorContabil, "predict_inputs", self._mock_predict_inputs
+        )
+
+        company_id = empresa_criada["id"]
+        api_key = empresa_criada["api_key"]
+        payload = {"historico": "Pagamento fornecedor", "cod_banco": 341}
+
+        response = client.post(
+            f"/api/v1/companies/{company_id}/predict",
+            json=payload,
+            headers={"X-API-Key": api_key},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["empresa_id"] == company_id
+        assert data["quantidade_processada"] == 1
+        assert data["persisted"] is False
+        assert len(data["results"]) == 1
+        assert data["results"][0]["conta_contabil_predita"] == 1234
+        assert data["results"][0]["needs_review"] is False
+
+    def test_predict_batch_success(self, client, empresa_criada, monkeypatch):
+        """Testa predição em lote com sucesso."""
+        from api.routes.classification import ClassificadorContabil
+
+        monkeypatch.setattr(
+            ClassificadorContabil, "train_for_company", self._mock_train_for_company
+        )
+        monkeypatch.setattr(
+            ClassificadorContabil, "predict_inputs", self._mock_predict_inputs
+        )
+
+        company_id = empresa_criada["id"]
+        api_key = empresa_criada["api_key"]
+        payload = [
+            {"historico": "Recebimento cliente", "cod_banco": 341},
+            {"historico": "Pagamento incerto taxa", "cod_banco": 33},
+        ]
+
+        response = client.post(
+            f"/api/v1/companies/{company_id}/predict",
+            json=payload,
+            headers={"X-API-Key": api_key},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["quantidade_processada"] == 2
+        assert len(data["results"]) == 2
+        assert data["results"][0]["needs_review"] is False
+        assert data["results"][1]["needs_review"] is True
+
+    def test_predict_company_not_found(self, client, empresa_criada, monkeypatch):
+        """Testa erro de empresa inexistente."""
+
+        monkeypatch.setattr(
+            ClassificadorContabil, "train_for_company", self._mock_train_for_company
+        )
+        monkeypatch.setattr(
+            ClassificadorContabil, "predict_inputs", self._mock_predict_inputs
+        )
+
+        api_key = empresa_criada["api_key"]
+        response = client.post(
+            "/api/v1/companies/9999/predict",
+            json={"historico": "Pagamento fornecedor", "cod_banco": 341},
+            headers={"X-API-Key": api_key},
+        )
+        assert response.status_code == 404
+        assert "Empresa não encontrada" in response.json()["detail"]
+
+    def test_predict_invalid_api_key(self, client, empresa_criada):
+        """Testa erro para API key inválida."""
+        company_id = empresa_criada["id"]
+        response = client.post(
+            f"/api/v1/companies/{company_id}/predict",
+            json={"historico": "Pagamento fornecedor", "cod_banco": 341},
+            headers={"X-API-Key": "invalid_key"},
+        )
+        assert response.status_code == 403
+
+    def test_predict_company_inactive(self, client, empresa_criada, monkeypatch):
+        """Testa erro para empresa desativada."""
+
+        monkeypatch.setattr(
+            ClassificadorContabil, "train_for_company", self._mock_train_for_company
+        )
+        monkeypatch.setattr(
+            ClassificadorContabil, "predict_inputs", self._mock_predict_inputs
+        )
+
+        company_id = empresa_criada["id"]
+        api_key = empresa_criada["api_key"]
+        client.patch(f"/api/v1/companies/{company_id}/deactivate")
+
+        response = client.post(
+            f"/api/v1/companies/{company_id}/predict",
+            json={"historico": "Pagamento fornecedor", "cod_banco": 341},
+            headers={"X-API-Key": api_key},
+        )
+        assert response.status_code == 400
+        assert "Empresa está desativada" in response.json()["detail"]
+
+    def test_predict_persist_false_does_not_create_transaction(
+        self, client, empresa_criada, monkeypatch
+    ):
+        """Testa que persist=false não cria transação."""
+
+        monkeypatch.setattr(
+            ClassificadorContabil, "train_for_company", self._mock_train_for_company
+        )
+        monkeypatch.setattr(
+            ClassificadorContabil, "predict_inputs", self._mock_predict_inputs
+        )
+
+        company_id = empresa_criada["id"]
+        api_key = empresa_criada["api_key"]
+
+        predict_response = client.post(
+            f"/api/v1/companies/{company_id}/predict",
+            json={"historico": "Pagamento fornecedor", "cod_banco": 341},
+            headers={"X-API-Key": api_key},
+        )
+        assert predict_response.status_code == 200
+        assert predict_response.json()["persisted"] is False
+
+        list_response = client.get(
+            f"/api/v1/companies/{company_id}/transactions",
+            headers={"X-API-Key": api_key},
+        )
+        assert list_response.status_code == 200
+        assert len(list_response.json()) == 0
+
+    def test_predict_persist_true_creates_transaction(
+        self, client, empresa_criada, monkeypatch
+    ):
+        """Testa que persist=true cria transação classificada."""
+
+        monkeypatch.setattr(
+            ClassificadorContabil, "train_for_company", self._mock_train_for_company
+        )
+        monkeypatch.setattr(
+            ClassificadorContabil, "predict_inputs", self._mock_predict_inputs
+        )
+
+        company_id = empresa_criada["id"]
+        api_key = empresa_criada["api_key"]
+
+        predict_response = client.post(
+            f"/api/v1/companies/{company_id}/predict?persist=true",
+            json={"historico": "Pagamento fornecedor", "cod_banco": 341},
+            headers={"X-API-Key": api_key},
+        )
+        assert predict_response.status_code == 200
+        assert predict_response.json()["persisted"] is True
+
+        list_response = client.get(
+            f"/api/v1/companies/{company_id}/transactions",
+            headers={"X-API-Key": api_key},
+        )
+        assert list_response.status_code == 200
+        assert len(list_response.json()) == 1
+        assert list_response.json()[0]["conta_contabil"] == 1234
+        assert list_response.json()[0]["is_classified"] is True
+
+
 class TestTransactionsAuth:
     """Testes de autenticação nos endpoints de transações."""
 
-    def test_create_transactions_without_api_key(self, client, empresa_criada, transacao_data):
+    def test_create_transactions_without_api_key(
+        self, client, empresa_criada, transacao_data
+    ):
         """Testa que criar transações sem API key retorna erro."""
         company_id = empresa_criada["id"]
         response = client.post(
@@ -125,11 +324,11 @@ class TestTransactionsAuth:
         """Testa criação de transações com API key válida."""
         company_id = empresa_criada["id"]
         api_key = empresa_criada["api_key"]
-        
+
         # Ajusta empresa_id nas transações
         for transacao in transacao_data:
             transacao["empresa_id"] = company_id
-        
+
         response = client.post(
             f"/api/v1/companies/{company_id}/transactions",
             json=transacao_data,

@@ -66,6 +66,29 @@ class ClassificadorContabil:
         clean_text = " ".join(words_filtered)
         return clean_text
 
+    def _build_feature_text(self, historico: str, cod_banco: int | None = None):
+        clean_historico = self.clean_text(historico)
+        if cod_banco is None:
+            return clean_historico
+        # O token de banco entra como feature categórica simples para o modelo.
+        return f"{clean_historico} banco_cod_{cod_banco}"
+
+    def _predict_features(self, feature_texts: list[str]):
+        probabilities = self.pipeline.predict_proba(feature_texts)
+        classes = self.pipeline.classes_
+        predictions: list[dict] = []
+        for i in range(len(feature_texts)):
+            max_prob = float(probabilities[i].max())
+            best_class = int(classes[probabilities[i].argmax()])
+            predictions.append(
+                {
+                    "conta_contabil_predita": best_class,
+                    "confidence": max_prob,
+                    "needs_review": True if max_prob < 0.7 else False,
+                }
+            )
+        return predictions
+
     def train_for_company(self, empresa_id: int):
         # Buscar as transações da empresa e verificar se não são nulas
         stmt = select(Transacao).where(
@@ -84,14 +107,14 @@ class ClassificadorContabil:
         df = pd.DataFrame(
             [
                 {
-                    "historico": self.clean_text(t.historico),
+                    "features": self._build_feature_text(t.historico, t.cod_banco),
                     "conta_contabil": t.conta_contabil,
                 }
                 for t in results
             ]
         )
         # Treinando o modelo
-        self.pipeline.fit(df["historico"], df["conta_contabil"])
+        self.pipeline.fit(df["features"], df["conta_contabil"])
         return True
 
     def classify_transactions(self, empresa_id: int, transacao_id: list[int]):
@@ -100,16 +123,26 @@ class ClassificadorContabil:
         transactions = self.db.execute(stmt).scalars().all()
         if not transactions:
             raise ValueError(f"Nenhuma transação encontrada para os IDs {transacao_id}")
-        clean_historico = [self.clean_text(t.historico) for t in transactions]
-        # Pega as probabilidades de cada classe
-        probabilities = self.pipeline.predict_proba(clean_historico)
-        # Pega a classe com maior probabilidade
-        classes = self.pipeline.classes_
+        feature_texts = [
+            self._build_feature_text(t.historico, t.cod_banco) for t in transactions
+        ]
+        predictions = self._predict_features(feature_texts)
         for i, t in enumerate(transactions):
-            max_prob = probabilities[i].max()
-            best_class = classes[probabilities[i].argmax()]
-            t.conta_contabil = int(best_class)
-            t.confidence = float(max_prob)
-            t.needs_review = True if max_prob < 0.7 else False
+            t.conta_contabil = predictions[i]["conta_contabil_predita"]
+            t.confidence = predictions[i]["confidence"]
+            t.needs_review = predictions[i]["needs_review"]
         self.db.commit()
         return transactions
+
+    def predict_inputs(self, inputs: list[dict]):
+        if not inputs:
+            return []
+        feature_texts = [
+            self._build_feature_text(item["historico"], item.get("cod_banco"))
+            for item in inputs
+        ]
+        predictions = self._predict_features(feature_texts)
+        for idx, item in enumerate(inputs):
+            predictions[idx]["historico"] = item["historico"]
+            predictions[idx]["cod_banco"] = item.get("cod_banco")
+        return predictions
