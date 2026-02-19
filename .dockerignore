@@ -1,0 +1,35 @@
+# Git
+.git
+.gitignore
+
+# Python cache/venv
+__pycache__/
+*.py[cod]
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# Local/dev files
+.env
+.env.*
+*.log
+.DS_Store
+
+# Notebook and temporary artifacts
+*.ipynb
+*.xlsx
+*.csv
+*.tmp
+*.bak
+
+# Test and docs not needed in runtime image
+tests/
+test_*.py
+*_test.py
+README.md
+PLANO_IMPLEMENTACAO.md
+impl_plan.html
