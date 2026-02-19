@@ -68,3 +68,14 @@ def deactivate_company(company_id: int, db: Session = DB_DEPENDENCY):
     db.commit()
     db.refresh(company)
     return company
+
+# PATCH - Ativar empresa
+@router.patch("/companies/{company_id}", response_model=Empresa)
+def activate_company(company_id: int, db: Session = DB_DEPENDENCY):
+    company = db.query(models.Empresa).filter(models.Empresa.id == company_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Empresa não encontrada")
+    company.is_active = True
+    db.commit()
+    db.refresh(company)
+    return company
