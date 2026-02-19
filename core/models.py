@@ -49,6 +49,9 @@ class Empresa(Base):
     # Código identificador interno do sistema Domínio
     cod_dominio: Mapped[int] = mapped_column(Integer, nullable=False, unique=True)
 
+    # Status da empresa (Ativa/Inativa)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
     # Data de criação do registro no banco de dados
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
