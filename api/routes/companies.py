@@ -47,3 +47,24 @@ def get_company(company_id: int, db: Session = DB_DEPENDENCY):
     if not company:
         raise HTTPException(status_code=404, detail="Empresa não encontrada")
     return company
+
+# DELETE - Deletar empresa e suas transações (possível apenas para o root)
+@router.delete("/companies/{company_id}", status_code=204)
+def delete_company(company_id: int, db: Session = DB_DEPENDENCY):
+    company = db.query(models.Empresa).filter(models.Empresa.id == company_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Empresa não encontrada")
+    db.delete(company)
+    db.commit()
+    return
+
+# PATCH - Desativar empresa
+@router.patch("/companies/{company_id}", response_model=Empresa)
+def deactivate_company(company_id: int, db: Session = DB_DEPENDENCY):
+    company = db.query(models.Empresa).filter(models.Empresa.id == company_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Empresa não encontrada")
+    company.is_active = False
+    db.commit()
+    db.refresh(company)
+    return company

@@ -42,6 +42,7 @@ class EmpresaBase(BaseModel):
     nome_empresa: str
     cnpj_cpf: str
     cod_dominio: int
+    is_active: bool = True
 
 
 class EmpresaCreate(EmpresaBase):

@@ -64,7 +64,14 @@ class TestCompanies:
         """Testa busca de empresa inexistente."""
         response = client.get("/api/v1/companies/9999")
         assert response.status_code == 404
-
+    
+    def test_deactivate_company(self, client, empresa_criada):
+        """Testa desativação de empresa."""
+        company_id = empresa_criada["id"]
+        # A rota definida é PATCH /companies/{id} que seta is_active=False
+        response = client.patch(f"/api/v1/companies/{company_id}")
+        assert response.status_code == 200
+        assert response.json()["is_active"] is False
 
 class TestTransactionsAuth:
     """Testes de autenticação nos endpoints de transações."""
