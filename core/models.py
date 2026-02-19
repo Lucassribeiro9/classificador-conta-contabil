@@ -47,7 +47,7 @@ class Empresa(Base):
     )
 
     # Código identificador interno do sistema Domínio
-    cod_dominio: Mapped[int] = mapped_column(Integer, nullable=False)
+    cod_dominio: Mapped[int] = mapped_column(Integer, nullable=False, unique=True)
 
     # Data de criação do registro no banco de dados
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
