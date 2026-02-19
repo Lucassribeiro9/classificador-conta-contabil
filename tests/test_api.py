@@ -68,11 +68,32 @@ class TestCompanies:
     def test_deactivate_company(self, client, empresa_criada):
         """Testa desativação de empresa."""
         company_id = empresa_criada["id"]
-        # A rota definida é PATCH /companies/{id} que seta is_active=False
-        response = client.patch(f"/api/v1/companies/{company_id}")
+        response = client.patch(f"/api/v1/companies/{company_id}/deactivate")
         assert response.status_code == 200
         assert response.json()["is_active"] is False
 
+    def test_activate_company(self, client, empresa_criada):
+        """Testa ativação de empresa."""
+        company_id = empresa_criada["id"]
+        client.patch(f"/api/v1/companies/{company_id}/deactivate")
+        response = client.patch(f"/api/v1/companies/{company_id}/activate")
+        assert response.status_code == 200
+        assert response.json()["is_active"] is True
+
+    def test_deactivate_company_already_inactive(self, client, empresa_criada):
+        """Testa erro ao desativar empresa já desativada."""
+        company_id = empresa_criada["id"]
+        client.patch(f"/api/v1/companies/{company_id}/deactivate")
+        response = client.patch(f"/api/v1/companies/{company_id}/deactivate")
+        assert response.status_code == 400
+        assert "Empresa já está desativada" in response.json()["detail"]
+
+    def test_activate_company_already_active(self, client, empresa_criada):
+        """Testa erro ao ativar empresa já ativa."""
+        company_id = empresa_criada["id"]
+        response = client.patch(f"/api/v1/companies/{company_id}/activate")
+        assert response.status_code == 400
+        assert "Empresa já está ativa" in response.json()["detail"]
 class TestTransactionsAuth:
     """Testes de autenticação nos endpoints de transações."""
 
