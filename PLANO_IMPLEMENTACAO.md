@@ -1,315 +1,234 @@
-# Plano de Implementação - Migração para Arquitetura API-First
+# Plano de Implementação - Estado Real e Próximas Fases
 
-## 📋 Visão Geral
+## Resumo
 
-Migração da ferramenta de classificação contábil baseada em Streamlit para uma arquitetura robusta **API-first** utilizando **FastAPI** e **SQLAlchemy**, permitindo integração com automações (n8n), suporte a multi-tenancy e preparação para análises de BI.
+Este documento consolida o plano com base no que já foi efetivamente implementado no projeto.
+O foco é:
 
----
+1. refletir o status real da API e do core de ML;
+2. priorizar backlog por risco técnico;
+3. definir próximas fases com critérios de aceite objetivos.
 
-## 🎯 Objetivos
-
-1. **API-First**: Criar endpoints RESTful para todas as operações
-2. **Multi-Tenancy**: Suportar múltiplas empresas (companies) isoladas
-3. **Persistência**: Armazenar histórico de transações e classificações no banco de dados
-4. **Integração**: Permitir integração com n8n e outras ferramentas de automação
-5. **Compatibilidade**: Manter a aplicação Streamlit funcional (opcional, para suporte legado)
+O plano deixa de ser aspiracional e passa a ser um guia de execução aderente ao código atual.
 
 ---
 
-## 🏗️ Arquitetura Proposta
+## Checklist de Acompanhamento
 
-```
-classificador-conta-contabil/
-├── api/
-│   ├── __init__.py
-│   ├── main.py              # FastAPI app principal
-│   ├── dependencies.py      # Dependency injection (get_db, auth)
-│   ├── routes/
-│   │   ├── __init__.py
-│   │   ├── companies.py     # CRUD de empresas
-│   │   ├── transactions.py  # CRUD de transações
-│   │   ├── classification.py # Endpoint de classificação
-│   │   └── feedback.py      # Endpoint de feedback/correção
-│   └── schemas.py           # Pydantic models
-├── core/
-│   ├── __init__.py
-│   ├── database.py          # Configuração SQLAlchemy
-│   ├── models.py            # Models SQLAlchemy
-│   ├── ml_engine.py         # Lógica de ML refatorada
-│   └── config.py            # Configurações da aplicação
-├── tests/
-│   ├── __init__.py
-│   ├── test_api.py          # Testes da API
-│   └── test_ml_engine.py    # Testes do ML
-├── n8n_workflows/           # Workflows do n8n (JSON)
-├── app.py                   # Streamlit (legado, opcional)
-├── requirements.txt
-└── README.md
-```
+Use esta seção para controle de execução contínua.
 
----
+### Itens já concluídos
 
-## 📦 Dependências Adicionais
+- [x] Estrutura base em `api/`, `core/` e `tests`
+- [x] Modelos SQLAlchemy `Empresa` e `Transacao`
+- [x] Autenticação por `X-API-Key`
+- [x] Endpoints de empresas, transações, classificação e feedback
+- [x] Endpoint `/companies/{company_id}/predict` com suporte unitário/lote
+- [x] Query param `persist` no fluxo de predição
+- [x] Health check em `/health`
+- [x] Documentação automática via FastAPI (`/docs` e `/redoc`)
+- [x] Suíte de testes de API existente em `tests/test_api.py`
+- [x] Plano atualizado para refletir estado real + backlog por risco
 
-### Novas Dependências Necessárias
+### Itens pendentes (priorizados)
 
-```txt
-fastapi==0.115.0
-uvicorn[standard]==0.32.0
-sqlalchemy==2.0.36
-pydantic==2.9.2
-pydantic-settings==2.5.2
-python-multipart==0.0.12  # Para upload de arquivos
-```
+#### Fase A - Estabilização técnica
 
-### Dependências Existentes (já presentes)
-- pandas, numpy, scikit-learn, nltk, openpyxl, xlsxwriter
+- [ ] Corrigir imports e organização dos testes
+- [ ] Atualizar ou remover `test_schema.py`
+- [ ] Limpar imports/dependências não usadas em `core/ml_engine.py`
+- [ ] Definir e documentar comando padrão de testes no `venv`
+
+#### Fase B - Consistência de domínio e API
+
+- [ ] Definir estratégia oficial para coexistência/convergência entre `/classification` e `/predict`
+- [ ] Revisar códigos HTTP e mensagens de erro para consistência de contrato
+- [ ] Completar validações de escopo por empresa em feedback/classificação
+
+#### Fase C - Integração e operação
+
+- [ ] Publicar workflow n8n versionado em `n8n_workflows/`
+- [ ] Definir padrão mínimo de observabilidade (logs estruturados + métricas)
+- [ ] Planejar migração opcional SQLite -> PostgreSQL com critérios objetivos
+
+#### Governança e documentação
+
+- [ ] Sincronizar `README.md` com o estado real da API
+- [ ] Validar checklist de DoD por fase com evidências (teste, código, documentação)
 
 ---
 
-## 🔄 Fluxo de Dados
+## 1) Contexto e Objetivo da Migração
 
-### 1. Ingestão de Dados Históricos (Treinamento)
-```
-n8n/Cliente → POST /api/v1/transactions (batch)
-  → Salva no DB (company_id, description, account_code, date, value)
-  → Dados ficam disponíveis para treinamento
-```
+O projeto iniciou com uma aplicação Streamlit para classificação contábil e evoluiu para uma arquitetura API-first com FastAPI e SQLAlchemy.
 
-### 2. Classificação de Nova Transação
-```
-n8n/Cliente → POST /api/v1/classify
-  → Busca histórico da company_id
-  → Treina modelo (ou usa cache)
-  → Classifica transação
-  → Retorna: {account_code, confidence, needs_review}
-  → Salva transação no DB
-```
+Atualmente, o sistema opera em modo híbrido:
 
-### 3. Feedback/Correção
-```
-n8n/Cliente → POST /api/v1/feedback
-  → Atualiza transação com account_code correto
-  → Marca como "corrigido"
-  → Dados podem ser usados para retreinar
-```
+- `app.py` como interface Streamlit legada;
+- API FastAPI ativa em `api/main.py` para integração com automações e clientes externos.
+
+Objetivo desta fase do plano: estabilizar e consolidar a camada API como contrato principal sem interromper o legado.
 
 ---
 
-## 🗄️ Modelo de Dados
+## 2) Estado Atual (Implementado)
 
-### Tabela: `companies`
-```python
-- id: Integer (PK)
-- name: String (único)
-- api_key: String (único, para autenticação)
-- created_at: DateTime
-- updated_at: DateTime
-```
+Itens implementados e disponíveis no código:
 
-### Tabela: `transactions`
-```python
-- id: Integer (PK)
-- company_id: Integer (FK → companies.id)
-- date: Date
-- bank: String (nullable)
-- description: String
-- value: Decimal
-- account_code: Integer (nullable - preenchido pela classificação)
-- confidence: Float (nullable - probabilidade da classificação)
-- needs_review: Boolean (default: False)
-- is_corrected: Boolean (default: False)
-- created_at: DateTime
-- updated_at: DateTime
-```
-
-### Tabela: `account_codes` (opcional - catálogo de contas)
-```python
-- id: Integer (PK)
-- code: Integer (único)
-- name: String
-- description: String (nullable)
-```
+1. Estrutura de projeto com separação em `api/`, `core/` e `tests/`.
+2. Persistência com SQLAlchemy e modelos `Empresa` e `Transacao`.
+3. Autenticação via API key no header `X-API-Key`.
+4. Endpoints de empresas, transações, classificação e feedback.
+5. Endpoint de predição `/companies/{company_id}/predict` com suporte a:
+   - entrada unitária ou em lote;
+   - persistência opcional via query param `persist`.
+6. Health check e documentação automática do FastAPI (`/docs`, `/redoc`).
+7. Testes de API existentes em `tests/test_api.py`.
 
 ---
 
-## 🔐 Autenticação
+## 3) APIs/Interfaces Públicas (Estado Vigente)
 
-### Estratégia Inicial: API Key
-- Cada `company` possui um `api_key` único
-- Header: `X-API-Key: <api_key>`
-- Middleware FastAPI valida a chave antes de processar requests
+Contratos atuais expostos pela API:
 
-### Futuro: OAuth2 (se necessário para acesso multiusuário direto)
+1. `POST /api/v1/companies`
+2. `GET /api/v1/companies`
+3. `GET /api/v1/companies/{company_id}`
+4. `PATCH /api/v1/companies/{company_id}/deactivate`
+5. `PATCH /api/v1/companies/{company_id}/activate`
+6. `DELETE /api/v1/companies/{company_id}`
+7. `POST /api/v1/companies/{company_id}/transactions`
+8. `GET /api/v1/companies/{company_id}/transactions`
+9. `GET /api/v1/companies/{company_id}/transactions/needs_review`
+10. `POST /api/v1/companies/{company_id}/classification`
+11. `POST /api/v1/companies/{company_id}/predict?persist={bool}`
+12. `PATCH /api/v1/transactions/{transaction_id}/feedback`
+13. `GET /health`
+14. `GET /`
 
----
-
-## 📡 Endpoints da API
-
-### Companies
-- `POST /api/v1/companies` - Criar empresa
-- `GET /api/v1/companies/{company_id}` - Obter empresa
-- `GET /api/v1/companies` - Listar empresas (admin)
-
-### Transactions
-- `POST /api/v1/transactions` - Criar transação (batch suportado)
-- `GET /api/v1/transactions` - Listar transações (filtrado por company_id)
-- `GET /api/v1/transactions/{transaction_id}` - Obter transação
-- `PATCH /api/v1/transactions/{transaction_id}` - Atualizar transação
-
-### Classification
-- `POST /api/v1/classify` - Classificar transação(s)
-  - Body: `{company_id, transactions: [{description, date, value, bank?}]}`
-  - Response: `{results: [{transaction_id, account_code, confidence, needs_review}]}`
-
-### Feedback
-- `POST /api/v1/feedback` - Enviar feedback de correção
-  - Body: `{transaction_id, correct_account_code}`
-  - Atualiza a transação e marca como corrigida
-
-### Health & Docs
-- `GET /health` - Health check
-- `GET /docs` - Swagger UI
-- `GET /redoc` - ReDoc
+Observação: endpoints transacionais e de classificação dependem de API key válida.
 
 ---
 
-## 🧪 Estratégia de Testes
+## 4) Modelos e Schemas (Estado Vigente)
 
-### Testes Unitários
-- `test_ml_engine.py`: Testar `clean_text`, pipeline de ML, classificação
-- `test_models.py`: Testar models SQLAlchemy
+### Banco de dados
 
-### Testes de Integração
-- `test_api.py`: Testar todos os endpoints com `TestClient`
-  - Criação de companies
-  - Ingestão de transações
-  - Classificação
-  - Feedback
-  - Tratamento de erros
+Estruturas atuais em uso:
 
-### Testes Manuais
-- Teste de integração com n8n (HTTP POST local)
-- Verificar persistência no SQLite
-- Validar resultados de classificação
+- Tabela `empresas`
+  - `id`
+  - `nome_empresa`
+  - `api_key`
+  - `cnpj_cpf`
+  - `cod_dominio`
+  - `is_active`
+  - `created_at`
 
----
+- Tabela `transacoes`
+  - `id`
+  - `empresa_id`
+  - `data`
+  - `cod_banco`
+  - `historico`
+  - `valor`
+  - `conta_contabil`
+  - `confidence`
+  - `needs_review`
+  - `is_classified`
+  - `created_at`
+  - `updated_at`
 
-## 🔄 Refatoração da Lógica de ML
+### Schemas da API
 
-### `core/ml_engine.py`
+Além dos schemas de empresa e transação, os schemas de predição já implementados são:
 
-```python
-class ClassificationEngine:
-    def __init__(self, db_session):
-        self.db = db_session
-        self.pipeline = None
-        self.cache = {}  # Cache de modelos por company_id
-    
-    def clean_text(self, text: str) -> str:
-        # Move função clean_text do app.py
-    
-    def train_model(self, company_id: int, min_samples: int = 5):
-        # Busca transações do DB
-        # Filtra por min_samples
-        # Treina pipeline
-        # Salva no cache
-    
-    def classify(self, company_id: int, descriptions: List[str]) -> List[Dict]:
-        # Treina modelo se necessário
-        # Classifica
-        # Retorna resultados com confidence
-```
+1. `PredictInput`
+2. `PredictResult`
+3. `PredictResponse`
 
 ---
 
-## 📊 Notebooks & BI
+## 5) Riscos Críticos e Inconsistências (Prioridade Alta)
 
-### Atualização dos Notebooks
-- Refatorar `analise-contabil-real.ipynb` para usar `core.ml_engine` e `core.database`
-- Criar queries SQL para visualizações no Power BI
+1. `tests/test_api.py` importa `ClassificadorContabil` de `api.routes.classification`, criando acoplamento indevido com a camada de rota.
+   - referência técnica recomendada: importar de `core.ml_engine`.
 
-### Views SQL (opcional)
-```sql
-CREATE VIEW vw_classification_stats AS
-SELECT 
-    company_id,
-    COUNT(*) as total_transactions,
-    SUM(CASE WHEN account_code IS NOT NULL THEN 1 ELSE 0 END) as classified,
-    AVG(confidence) as avg_confidence
-FROM transactions
-GROUP BY company_id;
-```
+2. `test_schema.py` está desatualizado e valida campos que não correspondem aos schemas atuais (`descricao`, `nome`, `cnpj`).
+
+3. `core/ml_engine.py` possui imports pesados não usados no runtime da API (ex.: `matplotlib`, `plotly`, `IPython`, `joblib`), elevando custo de inicialização e risco operacional.
+
+4. Coexistência de dois fluxos funcionais (`/classification` e `/predict`) sem decisão oficial de papel canônico de cada um.
+
+5. Execução de testes com comportamento instável no ambiente local, sem comando padrão formalizado no plano.
 
 ---
 
-## 🚀 Fases de Implementação
+## 6) Backlog Priorizado (Próximas Fases)
 
-### Fase 1: Infrastructure Setup
-- Atualizar `requirements.txt`
-- Criar estrutura de diretórios
-- Configurar SQLAlchemy e banco de dados
+### Fase A - Estabilização técnica
 
-### Fase 2: Database & Models
-- Criar models SQLAlchemy
-- Script de inicialização do banco
-- Migrations (Alembic - opcional)
+1. Corrigir imports e organização dos testes.
+2. Atualizar ou remover `test_schema.py`.
+3. Limpar dependências/imports desnecessários de `core/ml_engine.py`.
+4. Padronizar estratégia de execução de testes no `venv` (documentar comando oficial).
 
-### Fase 3: Core Logic
-- Refatorar lógica de ML para `core/ml_engine.py`
-- Adaptar para trabalhar com DB ao invés de DataFrame
+### Fase B - Consistência de domínio e API
 
-### Fase 4: API Development
-- Criar schemas Pydantic
-- Implementar endpoints
-- Autenticação via API Key
+1. Definir endpoint canônico para predição/classificação (manter ambos com papéis claros ou convergir).
+2. Revisar códigos HTTP e mensagens de erro para consistência de contrato.
+3. Completar validações de escopo por empresa em feedback/classificação.
 
-### Fase 5: Testing & Integration
-- Testes automatizados
-- Integração com n8n
-- Documentação da API
+### Fase C - Integração e operação
 
-### Fase 6: Documentation & Deployment
-- Atualizar README
-- Guia de integração n8n
-- Deploy (se necessário)
+1. Publicar workflow n8n versionado em `n8n_workflows/`.
+2. Definir observabilidade mínima (logs estruturados e métricas básicas).
+3. Planejar migração opcional SQLite -> PostgreSQL com gatilhos de decisão.
 
 ---
 
-## ⚠️ Considerações Importantes
+## 7) Critérios de Aceite (DoD) por Fase
 
-### SQLite vs PostgreSQL
-- **Inicial**: SQLite (`conta.db`) para simplicidade
-- **Produção**: Migrar para PostgreSQL se houver alta concorrência
+Checklist objetivo de conclusão:
 
-### Autenticação
-- **Inicial**: API Key simples
-- **Futuro**: OAuth2 se necessário acesso multiusuário direto
-
-### Cache de Modelos
-- Modelos podem ser treinados por company_id e cacheados em memória
-- Considerar persistência de modelos treinados (joblib) para evitar retreinar sempre
-
-### Compatibilidade Streamlit
-- A aplicação Streamlit pode continuar funcionando conectando direto ao DB
-- Ou pode ser atualizada para consumir a API (opcional)
+1. Testes da API executando de forma reprodutível.
+2. Contratos de endpoint documentados e aderentes ao código.
+3. Riscos críticos endereçados com evidência em código/testes.
+4. Fluxo n8n de referência disponível e versionado.
+5. `README.md` e este plano sincronizados com o estado real do projeto.
 
 ---
 
-## 📝 Checklist de Verificação
+## 8) Cronograma Curto Sugerido
 
-- [ ] API responde corretamente a todos os endpoints
-- [ ] Multi-tenancy funcionando (isolamento por company_id)
-- [ ] Classificação ML retorna resultados corretos
-- [ ] Feedback atualiza transações corretamente
-- [ ] Testes automatizados passando
-- [ ] Integração n8n testada e funcionando
-- [ ] Documentação da API completa (Swagger)
-- [ ] README atualizado com instruções de uso da API
+1. Semana 1: Fase A (estabilização técnica).
+2. Semana 2: Fase B (consistência de domínio e API).
+3. Semana 3: Fase C (integração e operação).
 
 ---
 
-## 🔗 Referências
+## Casos de Teste e Cenários a Registrar no Plano
+
+1. Criar empresa, desativar e reativar.
+2. Criar transações em lote com e sem API key.
+3. Predição unitária e em lote.
+4. Predição com `persist=false` e `persist=true`.
+5. Classificação de pendentes com base em histórico.
+6. Feedback em transação inexistente e em transação válida.
+7. Empresa desativada tentando predizer/classificar.
+
+---
+
+## Assunções e Padrões Adotados
+
+1. Documento mantido em português técnico.
+2. Plano orientado por status real + próximas fases, sem redesign total.
+3. Inconsistências atuais tratadas como riscos críticos com ação explícita.
+4. Referência de "implementado" baseada no estado atual do código local sem mudanças pendentes.
+
+---
+
+## Referências Técnicas
 
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [SQLAlchemy Documentation](https://docs.sqlalchemy.org/)
