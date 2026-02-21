@@ -9,7 +9,7 @@ SERVICES_INFRA := n8n-test ngrok
 SERVICES_ALL := $(SERVICE_API) $(SERVICES_INFRA)
 
 # Declara targets "falsos" para evitar conflito com arquivos de mesmo nome
-.PHONY: build rebuild build-all rebuild-all up up-api up-infra up-build down logs shell clean-cache
+.PHONY: build rebuild build-all rebuild-all up up-api up-infra up-build down logs shell clean-cache test
 
 # Build da imagem da API usando cache (mais rápido no dia a dia)
 build:
@@ -29,6 +29,9 @@ rebuild-all:
 
 # Sobe todos os serviços em background sem forçar rebuild
 up:
+	$(DOCKER_COMPOSE) up -d
+# Subir fazendo teste
+up-with-test: test
 	$(DOCKER_COMPOSE) up -d
 
 # Sobe apenas a API (fluxo mais rápido para desenvolvimento da aplicação)
@@ -58,3 +61,7 @@ shell:
 # Remove cache de build do Docker para liberar espaço e limpar estado
 clean-cache:
 	docker builder prune -f
+
+# Executa os testes do projeto no ambiente virtual local
+test:
+	./venv/bin/python -m pytest -q tests
