@@ -3,7 +3,7 @@ Testes da API de Classificação de Contas Contábeis.
 Testa endpoints de empresas, transações, classificação e feedback.
 """
 
-from api.routes.classification import ClassificadorContabil
+from core.ml_engine import ClassificadorContabil
 
 
 class TestHealth:
@@ -149,7 +149,6 @@ class TestPredict:
 
     def test_predict_batch_success(self, client, empresa_criada, monkeypatch):
         """Testa predição em lote com sucesso."""
-        from api.routes.classification import ClassificadorContabil
 
         monkeypatch.setattr(
             ClassificadorContabil, "train_for_company", self._mock_train_for_company

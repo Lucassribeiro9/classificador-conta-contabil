@@ -159,6 +159,11 @@ Além dos schemas de empresa e transação, os schemas de predição já impleme
 3. `core/ml_engine.py` possui imports pesados não usados no runtime da API (ex.: `matplotlib`, `plotly`, `IPython`, `joblib`), elevando custo de inicialização e risco operacional.
 
 4. Coexistência de dois fluxos funcionais (`/classification` e `/predict`) sem decisão oficial de papel canônico de cada um.
+   - decisão oficial (21/02/2026): manter ambos.
+   - papel de `/classification`: classificar transações pendentes já persistidas (`conta_contabil` nula), em fluxo interno/batch.
+   - papel de `/predict`: inferência sob demanda (unitária/lote) para entrada de payload; com `persist=true` pode registrar a predição como nova transação classificada.
+   - observação de governança: `predict` não substitui `feedback`; `feedback` continua sendo a correção humana da conta contábil atribuída.
+   - risco técnico associado: ambos os fluxos atualmente treinam o modelo por requisição; otimização de reuso/cache de modelo fica no backlog de performance.
 
 5. Execução de testes com comportamento instável no ambiente local, sem comando padrão formalizado no plano.
 
@@ -175,7 +180,8 @@ Além dos schemas de empresa e transação, os schemas de predição já impleme
 
 ### Fase B - Consistência de domínio e API
 
-1. Definir endpoint canônico para predição/classificação (manter ambos com papéis claros ou convergir).
+1. Consolidar e documentar a decisão canônica já tomada:
+   manter ambos os endpoints com papéis distintos e explícitos (`/classification` para pendências internas e `/predict` para inferência sob demanda).
 2. Revisar códigos HTTP e mensagens de erro para consistência de contrato.
 3. Completar validações de escopo por empresa em feedback/classificação.
 
@@ -184,6 +190,8 @@ Além dos schemas de empresa e transação, os schemas de predição já impleme
 1. Publicar workflow n8n versionado em `n8n_workflows/`.
 2. Definir observabilidade mínima (logs estruturados e métricas básicas).
 3. Planejar migração opcional SQLite -> PostgreSQL com gatilhos de decisão.
+4. Definir gatilho canônico dos workflows n8n para classificação contábil:
+   usar `/classification` (pendências já persistidas) ou `/predict` (entrada sob demanda com `persist` opcional), com critérios explícitos de volume, confiança e necessidade de revisão humana.
 
 ---
 
@@ -216,6 +224,24 @@ Checklist objetivo de conclusão:
 5. Classificação de pendentes com base em histórico.
 6. Feedback em transação inexistente e em transação válida.
 7. Empresa desativada tentando predizer/classificar.
+8. Cenário de workflow n8n: decisão de gatilho entre `/classification` e `/predict` com regras de persistência (`persist=true/false`) por confiança.
+
+---
+
+## Matriz de Decisão n8n (Gatilho e Persistência)
+
+| Cenário Operacional | Endpoint Gatilho | `persist` | Ação Pós-Predição |
+|---|---|---|---|
+| Existe backlog de transações já salvas e não classificadas | `/classification` | N/A | Classificar pendências em lote e monitorar volume residual |
+| Entrada nova sob demanda (unitária/lote) com baixa criticidade | `/predict` | `true` quando `confidence >= limiar` | Persistir automaticamente e seguir fluxo normal |
+| Entrada nova sob demanda com criticidade alta ou confiança baixa | `/predict` | `false` | Encaminhar para revisão humana e aplicar `/feedback` após decisão |
+| Operação em homologação/simulação | `/predict` | `false` | Não gravar no banco; validar qualidade do modelo e regras |
+
+Critérios mínimos recomendados para primeira versão:
+
+1. Definir um limiar inicial de auto-persistência (ex.: `confidence >= 0.85`).
+2. Abaixo do limiar, encaminhar para revisão manual e posterior `feedback`.
+3. Reavaliar limiar com métricas reais de acurácia e taxa de retrabalho.
 
 ---
 

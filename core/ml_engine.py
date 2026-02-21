@@ -1,27 +1,17 @@
 # - Bibliotecas para manipulação e análise de dados
 import re
 
-import joblib
-import matplotlib.pyplot as plt
-
 # - Bibliotecas para ML
 import nltk
 from nltk.corpus import stopwords
+
 try:
     nltk.data.find("corpora/stopwords")
 except LookupError:
     nltk.download("stopwords")
 import pandas as pd
-
-# - Bibliotecas para visualização de dados
-import plotly.express as px
-import seaborn as sns
-from IPython.display import Image, Markdown, display
-
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import classification_report, confusion_matrix
-from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sqlalchemy import select
 from sqlalchemy.orm import Session
