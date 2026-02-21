@@ -4,7 +4,7 @@ from typing import Union
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from api import schemas
+from api.schemas import PredictInput, PredictResponse
 from api.dependencies import DB_DEPENDENCY, verify_api_key
 from core.ml_engine import ClassificadorContabil
 from core.models import Empresa, Transacao
@@ -12,19 +12,23 @@ from core.models import Empresa, Transacao
 router = APIRouter()
 
 
-# POST - Busca as transações pendentes de classificação
+# Decisão de domínio:
+# - /classification: processa pendências já persistidas no banco (conta_contabil nula).
+# - /predict: inferência sob demanda para payload externo, com persistência opcional.
+# - /feedback continua sendo o fluxo de correção humana de uma classificação já atribuída.
 @router.post("/companies/{company_id}/classification")
 def trigger_classification(
     company_id: int,
     db: Session = DB_DEPENDENCY,
     empresa: Empresa = Depends(verify_api_key),
 ):
+    """Classifica transações pendentes da empresa já salvas no banco."""
     empresa = db.query(Empresa).filter(Empresa.id == company_id).first()
     if not empresa:
         raise HTTPException(status_code=404, detail="Empresa não encontrada")
-    """Dispara a classificação das transações pendentes"""
     engine_ml = ClassificadorContabil(db)
-    # Treina o modelo com o histórico da empresa
+    # Nota: hoje o modelo é treinado por requisição.
+    # Manter assim por enquanto, com otimização futura via cache/reuso por empresa.
     success_train = engine_ml.train_for_company(company_id)
     if not success_train:
         raise HTTPException(
@@ -61,15 +65,16 @@ def trigger_classification(
 
 @router.post(
     "/companies/{company_id}/predict",
-    response_model=schemas.PredictResponse,
+    response_model=PredictResponse,
 )
 def predict_transactions(
     company_id: int,
-    payload: Union[schemas.PredictInput, list[schemas.PredictInput]],
+    payload: Union[PredictInput, list[PredictInput]],
     persist: bool = Query(False),
     db: Session = DB_DEPENDENCY,
     empresa: Empresa = Depends(verify_api_key),
 ):
+    """Prediz conta contábil para entradas externas; persiste somente se persist=true."""
     empresa = db.query(Empresa).filter(Empresa.id == company_id).first()
     if not empresa:
         raise HTTPException(status_code=404, detail="Empresa não encontrada")
@@ -80,6 +85,7 @@ def predict_transactions(
     inputs_data = [item.model_dump() for item in inputs]
 
     engine_ml = ClassificadorContabil(db)
+    # Mesma observação de performance: treino é feito por request no estado atual.
     success_train = engine_ml.train_for_company(company_id)
     if not success_train:
         raise HTTPException(
@@ -90,6 +96,7 @@ def predict_transactions(
     predictions = engine_ml.predict_inputs(inputs_data)
 
     if persist:
+        # Persistência opcional de predições para transformar inferência em registro transacional.
         persist_rows = []
         for item, prediction in zip(inputs_data, predictions):
             persist_rows.append(
