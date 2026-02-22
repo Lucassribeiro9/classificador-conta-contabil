@@ -9,7 +9,7 @@ SERVICES_INFRA := n8n-test ngrok
 SERVICES_ALL := $(SERVICE_API) $(SERVICES_INFRA)
 
 # Declara targets "falsos" para evitar conflito com arquivos de mesmo nome
-.PHONY: build rebuild build-all rebuild-all up up-api up-infra up-build down logs shell clean-cache test
+.PHONY: build rebuild build-all rebuild-all up up-with-test up-api up-infra up-build down logs shell clean-cache test migrate-create migrate-up migrate-down migrate-current
 
 # Build da imagem da API usando cache (mais rápido no dia a dia)
 build:
@@ -65,3 +65,19 @@ clean-cache:
 # Executa os testes do projeto no ambiente virtual local
 test:
 	./venv/bin/python -m pytest -q tests
+
+# Cria migration nova (uso: make migrate-create MSG="add is_active")
+migrate-create:
+	./venv/bin/alembic revision --autogenerate -m "$(MSG)"
+
+# Aplica todas as migrations pendentes
+migrate-up:
+	./venv/bin/alembic upgrade head
+
+# Volta 1 migration (ou defina REV=-1 / <revision_id>)
+migrate-down:
+	./venv/bin/alembic downgrade $(or $(REV),-1)
+
+# Mostra revisão atual aplicada no banco
+migrate-current:
+	./venv/bin/alembic current
