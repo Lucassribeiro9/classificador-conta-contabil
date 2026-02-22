@@ -182,3 +182,8 @@ ipython_config.py
 # Docker e n8n
 n8n_data
 n8n_workflows
+
+# Alembic: versionar scripts de migration
+!alembic/
+!alembic/versions/
+!alembic/versions/*.py
