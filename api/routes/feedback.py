@@ -19,7 +19,8 @@ def submit_feedback(
     db_transaction = db.query(Transacao).filter(Transacao.id == transaction_id).first()
     if not db_transaction:
         raise HTTPException(status_code=404, detail="Transação não encontrada")
-
+    if db_transaction.empresa_id != empresa.id:
+        raise HTTPException(status_code=403, detail="Transação pertence a outra empresa")
     db_transaction.conta_contabil = feedback.conta_contabil
     db.commit()
     db.refresh(db_transaction)
