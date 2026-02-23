@@ -1,0 +1,22 @@
+[
+  {
+    "endpoint": "/predict",
+    "runs": 30,
+    "success": 30,
+    "errors": 0,
+    "mean_ms": 76.89,
+    "p50_ms": 60.07,
+    "p95_ms": 132.64,
+    "max_ms": 195.43
+  },
+  {
+    "endpoint": "/classification",
+    "runs": 30,
+    "success": 30,
+    "errors": 0,
+    "mean_ms": 162.28,
+    "p50_ms": 150.57,
+    "p95_ms": 252.02,
+    "max_ms": 382.07
+  }
+]
