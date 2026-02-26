@@ -43,7 +43,7 @@ class Empresa(Base):
 
     # Cadastro de Pessoa Jurídica ou Física
     cnpj_cpf: Mapped[str] = mapped_column(
-        String(15), unique=True, index=True, nullable=False
+        String(14), unique=True, index=True, nullable=False
     )
 
     # Código identificador interno do sistema Domínio

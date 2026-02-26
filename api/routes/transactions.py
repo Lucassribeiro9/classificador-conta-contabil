@@ -1,11 +1,11 @@
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from api import schemas
-from api.dependencies import DB_DEPENDENCY, get_db, verify_api_key
-from core import models
+from api.dependencies import DB_DEPENDENCY, verify_company
+from core.models import Empresa, Transacao
 
 # Instanciando o router
 router = APIRouter()
@@ -19,18 +19,14 @@ def create_transactions_batch(
     company_id: int,
     transactions_in: List[schemas.TransacaoCreate],
     db: Session = DB_DEPENDENCY,
-    empresa: models.Empresa = Depends(verify_api_key),
+    _empresa: Empresa = Depends(verify_company),
 ):
     """Criando transações em lote"""
-    empresa = db.query(models.Empresa).filter(models.Empresa.id == company_id).first()
-    if not empresa:
-        raise HTTPException(status_code=404, detail="Empresa não encontrada")
+
     data_transactions = [transaction.model_dump() for transaction in transactions_in]
     for transaction in data_transactions:
         transaction["empresa_id"] = company_id
-    new_transactions = [
-        models.Transacao(**transaction) for transaction in data_transactions
-    ]
+    new_transactions = [Transacao(**transaction) for transaction in data_transactions]
     db.add_all(new_transactions)
     db.commit()
     for transaction in new_transactions:
@@ -47,15 +43,13 @@ def list_transactions(
     skip: int = 0,
     limit: int = 100,
     db: Session = DB_DEPENDENCY,
-    empresa: models.Empresa = Depends(verify_api_key),
+    _empresa: Empresa = Depends(verify_company),
 ):
     """Listando transações de uma empresa"""
-    empresa = db.query(models.Empresa).filter(models.Empresa.id == company_id).first()
-    if not empresa:
-        raise HTTPException(status_code=404, detail="Empresa não encontrada")
+
     transactions = (
-        db.query(models.Transacao)
-        .filter(models.Transacao.empresa_id == company_id)
+        db.query(Transacao)
+        .filter(Transacao.empresa_id == company_id)
         .offset(skip)
         .limit(limit)
         .all()
@@ -72,23 +66,20 @@ def list_transactions_for_review(
     company_id: int,
     limit: int = 100,
     db: Session = DB_DEPENDENCY,
-    empresa: models.Empresa = Depends(verify_api_key),
+    _empresa: Empresa = Depends(verify_company),
 ):
     """Retorna transações que precisam de revisão manual (needs_review=True).
     As transações são ordenadas por confidence (menor primeiro) para priorizar
     as que o modelo tem menos certeza.
     """
-    empresa = db.query(models.Empresa).filter(models.Empresa.id == company_id).first()
-    if not empresa:
-        raise HTTPException(status_code=404, detail="Empresa não encontrada")
 
     transactions = (
-        db.query(models.Transacao)
+        db.query(Transacao)
         .filter(
-            models.Transacao.empresa_id == company_id,
-            models.Transacao.needs_review == True,
+            Transacao.empresa_id == company_id,
+            Transacao.needs_review == True,
         )
-        .order_by(models.Transacao.confidence.asc())  # Menor confiança primeiro
+        .order_by(Transacao.confidence.asc())  # Menor confiança primeiro
         .limit(limit)
         .all()
     )
