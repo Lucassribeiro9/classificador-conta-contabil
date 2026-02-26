@@ -22,12 +22,14 @@ Use esta seção para controle de execução contínua.
 - [x] Estrutura base em `api/`, `core/` e `tests`
 - [x] Modelos SQLAlchemy `Empresa` e `Transacao`
 - [x] Autenticação por `X-API-Key`
+- [x] Isolamento multi-tenant por `company_id` + `X-API-Key` em `transactions`, `classification` e `predict`
 - [x] Endpoints de empresas, transações, classificação e feedback
 - [x] Endpoint `/companies/{company_id}/predict` com suporte unitário/lote
 - [x] Query param `persist` no fluxo de predição
 - [x] Health check em `/health`
 - [x] Documentação automática via FastAPI (`/docs` e `/redoc`)
 - [x] Suíte de testes de API existente em `tests/test_api.py`
+- [x] Testes cross-company para `transactions`, `classification` e `predict`
 - [x] Plano atualizado para refletir estado real + backlog por risco
 
 ### Itens pendentes (priorizados)
@@ -43,7 +45,7 @@ Use esta seção para controle de execução contínua.
 
 - [ ] Definir estratégia oficial para coexistência/convergência entre `/classification` e `/predict`
 - [ ] Revisar códigos HTTP e mensagens de erro para consistência de contrato
-- [ ] Completar validações de escopo por empresa em feedback/classificação
+- [x] Completar validações de escopo por empresa (`transactions`, `classification`, `predict` e `feedback`) - concluído na issue #18
 
 #### Fase C - Integração e operação
 
@@ -183,7 +185,7 @@ Além dos schemas de empresa e transação, os schemas de predição já impleme
 1. Consolidar e documentar a decisão canônica já tomada:
    manter ambos os endpoints com papéis distintos e explícitos (`/classification` para pendências internas e `/predict` para inferência sob demanda).
 2. Revisar códigos HTTP e mensagens de erro para consistência de contrato.
-3. Completar validações de escopo por empresa em feedback/classificação.
+3. Validar e manter cobertura de regressão para escopo por empresa (`transactions`, `classification`, `predict` e `feedback`) após novas mudanças de contrato.
 
 ### Fase C - Integração e operação
 
