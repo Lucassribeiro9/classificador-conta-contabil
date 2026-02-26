@@ -466,3 +466,26 @@ class TestClassificationAuth:
             headers={"X-API-Key": "invalid_key"},
         )
         assert response.status_code == 403
+
+class TestMultiTenantScope:
+    # Teste com função de helper
+    @staticmethod
+    def _create_company(client, suffix: str,cod_dominio: int):
+        payload = {
+            "nome_empresa": f"EMPRESA {suffix} LTDA",
+            "cnpj_cpf": f"08455780001{suffix}",
+            "cod_dominio": cod_dominio,
+        }
+        response = client.post("/api/v1/companies", json=payload)
+        assert response.status_code == 200
+        return response.json()
+    
+    def test_transactions_cross_company_forbidden(self, client, empresa_criada, transacao_data):
+        empresa_a = empresa_criada
+        empresa_b = self._create_company(client, "B", 1000)
+        response = client.post(
+            f"/api/v1/companies/{empresa_b['id']}/transactions",
+            json=[transacao_data],
+            headers={"X-API-Key": empresa_a["api_key"]},
+        )
+        assert response.status_code == 403
