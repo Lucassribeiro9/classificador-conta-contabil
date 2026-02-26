@@ -48,7 +48,7 @@ def verify_company(
     """
     route_company = db.query(Empresa).filter(Empresa.id == company_id).first()
     if not route_company:
-        raise HTTPException(status_code=404, detail="Empresa nao encontrada")
+        raise HTTPException(status_code=404, detail="Empresa não encontrada")
     if route_company.id != empresa.id:
         raise HTTPException(status_code=403, detail="Acesso negado")
     return route_company
