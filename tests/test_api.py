@@ -3,7 +3,6 @@ Testes da API de Classificação de Contas Contábeis.
 Testa endpoints de empresas, transações, classificação e feedback.
 """
 
-from core.ml_engine import ClassificadorContabil
 
 
 class TestHealth:
@@ -100,6 +99,18 @@ class TestPredict:
     """Testes do endpoint de predição."""
 
     @staticmethod
+    def _patch_ml(monkeypatch): # helper para mockar ML nos testes de predição
+        from core.ml_engine import ClassificadorContabil
+        monkeypatch.setattr(
+            ClassificadorContabil,
+            "train_for_company",
+            TestPredict._mock_train_for_company,
+        )
+        monkeypatch.setattr(
+            ClassificadorContabil, "predict_inputs", TestPredict._mock_predict_inputs
+        )
+
+    @staticmethod
     def _mock_train_for_company(self, company_id):
         return True
 
@@ -121,13 +132,7 @@ class TestPredict:
 
     def test_predict_single_success(self, client, empresa_criada, monkeypatch):
         """Testa predição unitária com sucesso."""
-
-        monkeypatch.setattr(
-            ClassificadorContabil, "train_for_company", self._mock_train_for_company
-        )
-        monkeypatch.setattr(
-            ClassificadorContabil, "predict_inputs", self._mock_predict_inputs
-        )
+        self._patch_ml(monkeypatch)
 
         company_id = empresa_criada["id"]
         api_key = empresa_criada["api_key"]
@@ -150,12 +155,7 @@ class TestPredict:
     def test_predict_batch_success(self, client, empresa_criada, monkeypatch):
         """Testa predição em lote com sucesso."""
 
-        monkeypatch.setattr(
-            ClassificadorContabil, "train_for_company", self._mock_train_for_company
-        )
-        monkeypatch.setattr(
-            ClassificadorContabil, "predict_inputs", self._mock_predict_inputs
-        )
+        self._patch_ml(monkeypatch)
 
         company_id = empresa_criada["id"]
         api_key = empresa_criada["api_key"]
@@ -179,12 +179,7 @@ class TestPredict:
     def test_predict_company_not_found(self, client, empresa_criada, monkeypatch):
         """Testa erro de empresa inexistente."""
 
-        monkeypatch.setattr(
-            ClassificadorContabil, "train_for_company", self._mock_train_for_company
-        )
-        monkeypatch.setattr(
-            ClassificadorContabil, "predict_inputs", self._mock_predict_inputs
-        )
+        self._patch_ml(monkeypatch)
 
         api_key = empresa_criada["api_key"]
         response = client.post(
@@ -208,12 +203,7 @@ class TestPredict:
     def test_predict_company_inactive(self, client, empresa_criada, monkeypatch):
         """Testa erro para empresa desativada."""
 
-        monkeypatch.setattr(
-            ClassificadorContabil, "train_for_company", self._mock_train_for_company
-        )
-        monkeypatch.setattr(
-            ClassificadorContabil, "predict_inputs", self._mock_predict_inputs
-        )
+        self._patch_ml(monkeypatch)
 
         company_id = empresa_criada["id"]
         api_key = empresa_criada["api_key"]
@@ -232,12 +222,7 @@ class TestPredict:
     ):
         """Testa que persist=false não cria transação."""
 
-        monkeypatch.setattr(
-            ClassificadorContabil, "train_for_company", self._mock_train_for_company
-        )
-        monkeypatch.setattr(
-            ClassificadorContabil, "predict_inputs", self._mock_predict_inputs
-        )
+        self._patch_ml(monkeypatch)
 
         company_id = empresa_criada["id"]
         api_key = empresa_criada["api_key"]
@@ -262,12 +247,7 @@ class TestPredict:
     ):
         """Testa que persist=true cria transação classificada."""
 
-        monkeypatch.setattr(
-            ClassificadorContabil, "train_for_company", self._mock_train_for_company
-        )
-        monkeypatch.setattr(
-            ClassificadorContabil, "predict_inputs", self._mock_predict_inputs
-        )
+        self._patch_ml(monkeypatch)
 
         company_id = empresa_criada["id"]
         api_key = empresa_criada["api_key"]
@@ -376,21 +356,25 @@ class TestFeedbackAuth:
         )
         assert response.status_code == 403
 
+
 class TestFeedbackScope:
     """Testes por empresa no endpoint de feedback."""
+
     def test_feedback_same_company(self, client, empresa_criada):
         """Empresa da transação consegue aplicar feedback"""
         company_id = empresa_criada["id"]
         api_key = empresa_criada["api_key"]
         # payload de transação
-        transaction_payload = [{
-            "data": "2022-01-01",
-            "cod_banco": 341,
-            "historico": "Pagamento fornecedor",
-            "empresa_id": company_id,
-            "valor": 100.0,
-            "conta_contabil": None
-        }]
+        transaction_payload = [
+            {
+                "data": "2022-01-01",
+                "cod_banco": 341,
+                "historico": "Pagamento fornecedor",
+                "empresa_id": company_id,
+                "valor": 100.0,
+                "conta_contabil": None,
+            }
+        ]
         create_response = client.post(
             f"/api/v1/companies/{company_id}/transactions",
             json=transaction_payload,
@@ -407,11 +391,11 @@ class TestFeedbackScope:
         assert feedback_response.status_code == 200
         assert feedback_response.json()["id"] == transaction_id
         assert feedback_response.json()["conta_contabil"] == 1234
-    
+
     def test_feedback_cross_company(self, client, empresa_criada):
         """Empresa x não pode atualizar transação de empresa y"""
         empresa_criada_x = empresa_criada
-        
+
         # Empresa y
         empresa_y_payload = {
             "nome_empresa": "EMPRESA Y LTDA",
@@ -424,16 +408,18 @@ class TestFeedbackScope:
         )
         assert empresa_y_response.status_code == 200
         empresa_y = empresa_y_response.json()
-        
+
         # Cria transação de empresa y
-        transaction_payload = [{
-            "data": "2022-01-01",
-            "cod_banco": 341,
-            "historico": "Pagamento fornecedor",
-            "empresa_id": empresa_y["id"],
-            "valor": 100.0,
-            "conta_contabil": None
-        }]
+        transaction_payload = [
+            {
+                "data": "2022-01-01",
+                "cod_banco": 341,
+                "historico": "Pagamento fornecedor",
+                "empresa_id": empresa_y["id"],
+                "valor": 100.0,
+                "conta_contabil": None,
+            }
+        ]
         create_response = client.post(
             f"/api/v1/companies/{empresa_y['id']}/transactions",
             json=transaction_payload,
@@ -449,6 +435,8 @@ class TestFeedbackScope:
         )
         assert feedback_response.status_code == 403
         assert "outra empresa" in feedback_response.json()["detail"].lower()
+
+
 class TestClassificationAuth:
     """Testes de autenticação no endpoint de classificação."""
 
@@ -467,10 +455,11 @@ class TestClassificationAuth:
         )
         assert response.status_code == 403
 
+
 class TestMultiTenantScope:
     # Teste com função de helper
     @staticmethod
-    def _create_company(client, suffix: str,cod_dominio: int):
+    def _create_company(client, suffix: str, cod_dominio: int):
         payload = {
             "nome_empresa": f"EMPRESA {suffix} LTDA",
             "cnpj_cpf": f"08455780001{suffix}",
@@ -479,8 +468,10 @@ class TestMultiTenantScope:
         response = client.post("/api/v1/companies", json=payload)
         assert response.status_code == 200
         return response.json()
-    
-    def test_transactions_cross_company_forbidden(self, client, empresa_criada, transacao_data):
+
+    def test_transactions_cross_company_forbidden(
+        self, client, empresa_criada, transacao_data
+    ):
         empresa_a = empresa_criada
         empresa_b = self._create_company(client, "B", 1000)
         response = client.post(
