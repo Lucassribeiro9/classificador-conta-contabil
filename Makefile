@@ -72,7 +72,7 @@ migrate-create:
 
 # Aplica todas as migrations pendentes
 migrate-up:
-	./venv/bin/alembic upgrade head
+	./venv/bin/python -m alembic upgrade head
 
 # Volta 1 migration (ou defina REV=-1 / <revision_id>)
 migrate-down:
