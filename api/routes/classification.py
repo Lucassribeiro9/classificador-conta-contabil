@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from api.schemas import PredictInput, PredictResponse
-from api.dependencies import DB_DEPENDENCY, verify_api_key
+from api.dependencies import DB_DEPENDENCY, verify_company
 from core.ml_engine import ClassificadorContabil
 from core.models import Empresa, Transacao
 
@@ -20,12 +20,10 @@ router = APIRouter()
 def trigger_classification(
     company_id: int,
     db: Session = DB_DEPENDENCY,
-    empresa: Empresa = Depends(verify_api_key),
+    _empresa: Empresa = Depends(verify_company),
 ):
     """Classifica transações pendentes da empresa já salvas no banco."""
-    empresa = db.query(Empresa).filter(Empresa.id == company_id).first()
-    if not empresa:
-        raise HTTPException(status_code=404, detail="Empresa não encontrada")
+
     engine_ml = ClassificadorContabil(db)
     # Nota: hoje o modelo é treinado por requisição.
     # Manter assim por enquanto, com otimização futura via cache/reuso por empresa.
@@ -72,12 +70,10 @@ def predict_transactions(
     payload: Union[PredictInput, list[PredictInput]],
     persist: bool = Query(False),
     db: Session = DB_DEPENDENCY,
-    empresa: Empresa = Depends(verify_api_key),
+    empresa: Empresa = Depends(verify_company),
 ):
     """Prediz conta contábil para entradas externas; persiste somente se persist=true."""
-    empresa = db.query(Empresa).filter(Empresa.id == company_id).first()
-    if not empresa:
-        raise HTTPException(status_code=404, detail="Empresa não encontrada")
+
     if not empresa.is_active:
         raise HTTPException(status_code=400, detail="Empresa está desativada")
 
