@@ -4,10 +4,7 @@ from sqlalchemy.orm import Session
 
 from api.dependencies import get_db
 from api.routes import classification, companies, feedback, transactions
-from core import models, database
 
-# Cria tabelas no banco se não existirem
-models.Base.metadata.create_all(bind=database.engine)
 
 app = FastAPI(title="Classificador contábil")
 
