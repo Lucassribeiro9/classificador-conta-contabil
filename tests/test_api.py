@@ -37,12 +37,53 @@ class TestCompanies:
         assert "api_key" in data
         assert data["api_key"].startswith("sk_")
 
+    def test_create_company_with_mask_normalizes_document(self, client):
+        """Testa criação com máscara e persistência normalizada."""
+        payload = {
+            "nome_empresa": "Empresa Máscara LTDA",
+            "cnpj_cpf": "12.345.678/0001-90",
+            "cod_dominio": 1010,
+        }
+        response = client.post("/api/v1/companies", json=payload)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["cnpj_cpf"] == "12345678000190"
+
     def test_create_company_duplicate_cnpj(self, client, empresa_data):
         """Testa que não é possível criar empresa com CNPJ duplicado."""
         client.post("/api/v1/companies", json=empresa_data)
         response = client.post("/api/v1/companies", json=empresa_data)
         assert response.status_code == 400
-        assert "CNPJ já cadastrado" in response.json()["detail"]
+        assert "Documento já cadastrado" in response.json()["detail"]
+
+    def test_create_company_duplicate_document_masked_unmasked(self, client):
+        """Testa duplicidade de documento com e sem máscara."""
+        payload_masked = {
+            "nome_empresa": "Empresa A LTDA",
+            "cnpj_cpf": "12.345.678/0001-90",
+            "cod_dominio": 1011,
+        }
+        payload_unmasked = {
+            "nome_empresa": "Empresa B LTDA",
+            "cnpj_cpf": "12345678000190",
+            "cod_dominio": 1012,
+        }
+        first_response = client.post("/api/v1/companies", json=payload_masked)
+        assert first_response.status_code == 200
+
+        second_response = client.post("/api/v1/companies", json=payload_unmasked)
+        assert second_response.status_code == 400
+        assert "Documento já cadastrado" in second_response.json()["detail"]
+
+    def test_create_company_invalid_document_size(self, client):
+        """Testa erro de validação para cnpj_cpf com tamanho inválido."""
+        payload = {
+            "nome_empresa": "Empresa Inválida LTDA",
+            "cnpj_cpf": "12.345.678/0001",
+            "cod_dominio": 1013,
+        }
+        response = client.post("/api/v1/companies", json=payload)
+        assert response.status_code == 422
 
     def test_list_companies(self, client, empresa_criada):
         """Testa listagem de empresas."""
@@ -399,7 +440,7 @@ class TestFeedbackScope:
         # Empresa y
         empresa_y_payload = {
             "nome_empresa": "EMPRESA Y LTDA",
-            "cnpj_cpf": "0845578000199",
+            "cnpj_cpf": "08455780000199",
             "cod_dominio": 8001,
         }
         empresa_y_response = client.post(

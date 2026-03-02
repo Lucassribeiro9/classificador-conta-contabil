@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 # Os parametros passados nos modelos devem ser iguais aos do banco de dados
 
@@ -44,7 +44,13 @@ class EmpresaBase(BaseModel):
     cod_dominio: int
     is_active: bool = True
 
-
+    @field_validator("cnpj_cpf")
+    @classmethod
+    def validate_cnpj_cpf(cls, value: str) -> str:
+        normalized = "".join(char for char in value if char.isdigit())
+        if len(normalized) not in (11, 14):
+            raise ValueError("CNPJ/CPF deve conter 11 ou 14 dígitos")
+        return normalized
 class EmpresaCreate(EmpresaBase):
     pass
 
