@@ -23,7 +23,7 @@ def create_company(company: EmpresaCreate, db: Session = DB_DEPENDENCY):
         .first()
     )
     if db_company:
-        raise HTTPException(status_code=400, detail="CNPJ já cadastrado")
+        raise HTTPException(status_code=400, detail="Documento já cadastrado")
     # Criação do cadastro usando o modelo definido
     data_company = company.model_dump()
     data_company["api_key"] = f"sk_{secrets.token_hex(16)}"
