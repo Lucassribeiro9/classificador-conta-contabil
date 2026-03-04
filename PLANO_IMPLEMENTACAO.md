@@ -31,32 +31,41 @@ Use esta seção para controle de execução contínua.
 - [x] Suíte de testes de API existente em `tests/test_api.py`
 - [x] Testes cross-company para `transactions`, `classification` e `predict`
 - [x] Plano atualizado para refletir estado real + backlog por risco
+- [x] Completar validações de escopo por empresa (`transactions`, `classification`, `predict` e `feedback`) — concluído na issue #18
+- [x] Limpar imports/dependências não usadas em `core/ml_engine.py` — resolvido; imports pesados (`matplotlib`, `plotly`, `IPython`, `joblib`) já removidos
+- [x] Corrigir imports e organização dos testes — `test_api.py` não importa mais `ClassificadorContabil` da camada de rota
+- [x] Atualizar ou remover `test_schema.py` — arquivo já valida os schemas atuais (`EmpresaCreate`, `TransacaoCreate`) corretamente
 
 ### Itens pendentes (priorizados)
 
 #### Fase A - Estabilização técnica
 
-- [ ] Corrigir imports e organização dos testes
-- [ ] Atualizar ou remover `test_schema.py`
-- [ ] Limpar imports/dependências não usadas em `core/ml_engine.py`
-- [ ] Definir e documentar comando padrão de testes no `venv`
+- [ ] Documentar comando padrão de testes para Windows (`Makefile` usa `./venv/bin/python`, incompatível com Windows)
+- [ ] Migrar `declarative_base` de `sqlalchemy.ext.declarative` (depreciado) para `sqlalchemy.orm.DeclarativeBase`
+- [ ] Substituir `print()` por `logging` estruturado em `classification.py`, `feedback.py` e `ml_engine.py`
 
 #### Fase B - Consistência de domínio e API
 
-- [ ] Definir estratégia oficial para coexistência/convergência entre `/classification` e `/predict`
-- [ ] Revisar códigos HTTP e mensagens de erro para consistência de contrato
-- [x] Completar validações de escopo por empresa (`transactions`, `classification`, `predict` e `feedback`) - concluído na issue #18
+- [ ] Documentar decisão canônica `/classification` vs `/predict` para integradores (decisão já tomada, falta documentar)
+- [ ] Revisar códigos HTTP e mensagens de erro para consistência de contrato (ex.: 500 para "dados insuficientes" deveria ser 422/400; mensagens misturando pt/en)
+- [ ] Validar empresa ativa no endpoint `/feedback` (aceita feedback mesmo com empresa desativada)
+- [ ] Adicionar `response_model` ao endpoint `/classification` (único endpoint sem schema de resposta)
+- [ ] Avaliar proteção dos endpoints de empresa (`POST`, `GET`, `DELETE`) com autenticação admin
 
 #### Fase C - Integração e operação
 
 - [ ] Publicar workflow n8n versionado em `n8n_workflows/`
 - [ ] Definir padrão mínimo de observabilidade (logs estruturados + métricas)
 - [ ] Planejar migração opcional SQLite -> PostgreSQL com critérios objetivos
+- [ ] Definir gatilho canônico n8n para classificação com critérios de confiança
+- [ ] Criar `.env.example` com variáveis de ambiente necessárias (`DATABASE_URL`, `NGROK_AUTH_TOKEN`, `WEBHOOK_URL`)
 
-#### Governança e documentação
+#### Fase D - Documentação e governança
 
-- [ ] Sincronizar `README.md` com o estado real da API
+- [ ] Sincronizar `README.md` com o estado real da API (ainda descreve apenas Streamlit)
+- [ ] Adicionar docstrings nos endpoints de `companies.py` e `transactions.py` para Swagger
 - [ ] Validar checklist de DoD por fase com evidências (teste, código, documentação)
+- [ ] Sincronizar este plano com riscos resolvidos e novas pendências
 
 ---
 
@@ -153,12 +162,14 @@ Além dos schemas de empresa e transação, os schemas de predição já impleme
 
 ## 5) Riscos Críticos e Inconsistências (Prioridade Alta)
 
-1. `tests/test_api.py` importa `ClassificadorContabil` de `api.routes.classification`, criando acoplamento indevido com a camada de rota.
-   - referência técnica recomendada: importar de `core.ml_engine`.
+1. ~~`tests/test_api.py` importa `ClassificadorContabil` de `api.routes.classification`, criando acoplamento indevido com a camada de rota.~~
+   - ✅ **Resolvido** — `test_api.py` usa monkeypatch para mock do classificador; importação direta de `core.ml_engine` nos testes unitários (`test_ml_engine.py`) está correta.
 
-2. `test_schema.py` está desatualizado e valida campos que não correspondem aos schemas atuais (`descricao`, `nome`, `cnpj`).
+2. ~~`test_schema.py` está desatualizado e valida campos que não correspondem aos schemas atuais (`descricao`, `nome`, `cnpj`).~~
+   - ✅ **Resolvido** — `test_schema.py` valida `EmpresaCreate` e `TransacaoCreate` com os campos atuais corretamente.
 
-3. `core/ml_engine.py` possui imports pesados não usados no runtime da API (ex.: `matplotlib`, `plotly`, `IPython`, `joblib`), elevando custo de inicialização e risco operacional.
+3. ~~`core/ml_engine.py` possui imports pesados não usados no runtime da API (ex.: `matplotlib`, `plotly`, `IPython`, `joblib`), elevando custo de inicialização e risco operacional.~~
+   - ✅ **Resolvido** — imports pesados removidos; arquivo contém apenas dependências essenciais (`nltk`, `pandas`, `sklearn`, `sqlalchemy`).
 
 4. Coexistência de dois fluxos funcionais (`/classification` e `/predict`) sem decisão oficial de papel canônico de cada um.
    - decisão oficial (21/02/2026): manter ambos.
@@ -166,8 +177,18 @@ Além dos schemas de empresa e transação, os schemas de predição já impleme
    - papel de `/predict`: inferência sob demanda (unitária/lote) para entrada de payload; com `persist=true` pode registrar a predição como nova transação classificada.
    - observação de governança: `predict` não substitui `feedback`; `feedback` continua sendo a correção humana da conta contábil atribuída.
    - risco técnico associado: ambos os fluxos atualmente treinam o modelo por requisição; otimização de reuso/cache de modelo fica no backlog de performance.
+   - **pendência**: documentar essa decisão no `README.md` e nos docstrings dos endpoints para integradores.
 
-5. Execução de testes com comportamento instável no ambiente local, sem comando padrão formalizado no plano.
+5. ~~Execução de testes com comportamento instável no ambiente local, sem comando padrão formalizado no plano.~~
+   - ⚠️ **Parcialmente resolvido** — `Makefile` tem target `test`, mas usa path Linux. Pendência: documentar comando para Windows.
+
+6. **(NOVO)** Endpoint `/feedback` não valida se a empresa está ativa antes de aceitar correção.
+
+7. **(NOVO)** Endpoints de empresa (`POST /companies`, `GET /companies`, `DELETE /companies/{id}`) não exigem autenticação.
+
+8. **(NOVO)** `core/database.py` usa `declarative_base()` de `sqlalchemy.ext.declarative` (depreciado no SQLAlchemy 2.x).
+
+9. **(NOVO)** Uso de `print()` em produção onde deveria haver `logging` estruturado (`classification.py`, `feedback.py`, `ml_engine.py`).
 
 ---
 
@@ -175,17 +196,21 @@ Além dos schemas de empresa e transação, os schemas de predição já impleme
 
 ### Fase A - Estabilização técnica
 
-1. Corrigir imports e organização dos testes.
-2. Atualizar ou remover `test_schema.py`.
-3. Limpar dependências/imports desnecessários de `core/ml_engine.py`.
-4. Padronizar estratégia de execução de testes no `venv` (documentar comando oficial).
+1. ~~Corrigir imports e organização dos testes.~~ ✅ Resolvido.
+2. ~~Atualizar ou remover `test_schema.py`.~~ ✅ Resolvido — schemas validados corretamente.
+3. ~~Limpar dependências/imports desnecessários de `core/ml_engine.py`.~~ ✅ Resolvido.
+4. Documentar comando de testes para Windows (complementar `Makefile` com instrução cross-platform).
+5. **(NOVO)** Migrar `declarative_base` para `sqlalchemy.orm.DeclarativeBase` (API depreciada).
+6. **(NOVO)** Substituir `print()` por `logging` estruturado nos módulos de produção.
 
 ### Fase B - Consistência de domínio e API
 
-1. Consolidar e documentar a decisão canônica já tomada:
-   manter ambos os endpoints com papéis distintos e explícitos (`/classification` para pendências internas e `/predict` para inferência sob demanda).
+1. Documentar decisão canônica `/classification` vs `/predict` para integradores no `README.md` e docstrings.
 2. Revisar códigos HTTP e mensagens de erro para consistência de contrato.
-3. Validar e manter cobertura de regressão para escopo por empresa (`transactions`, `classification`, `predict` e `feedback`) após novas mudanças de contrato.
+3. ~~Validar e manter cobertura de regressão para escopo por empresa.~~ ✅ Resolvido na issue #18.
+4. **(NOVO)** Validar empresa ativa no endpoint `/feedback`.
+5. **(NOVO)** Adicionar `response_model` ao endpoint `/classification`.
+6. **(NOVO)** Avaliar proteção dos endpoints de empresa com autenticação admin.
 
 ### Fase C - Integração e operação
 
@@ -194,6 +219,14 @@ Além dos schemas de empresa e transação, os schemas de predição já impleme
 3. Planejar migração opcional SQLite -> PostgreSQL com gatilhos de decisão.
 4. Definir gatilho canônico dos workflows n8n para classificação contábil:
    usar `/classification` (pendências já persistidas) ou `/predict` (entrada sob demanda com `persist` opcional), com critérios explícitos de volume, confiança e necessidade de revisão humana.
+5. **(NOVO)** Criar `.env.example` com variáveis de ambiente necessárias.
+
+### Fase D - Documentação e governança
+
+1. Sincronizar `README.md` com o estado real da API (atualmente descreve apenas Streamlit).
+2. **(NOVO)** Adicionar docstrings nos endpoints de `companies.py` e `transactions.py` para Swagger.
+3. Validar checklist de DoD por fase com evidências (teste, código, documentação).
+4. **(NOVO)** Manter sincronização contínua deste plano com o código.
 
 ---
 
@@ -232,12 +265,12 @@ Checklist objetivo de conclusão:
 
 ## Matriz de Decisão n8n (Gatilho e Persistência)
 
-| Cenário Operacional | Endpoint Gatilho | `persist` | Ação Pós-Predição |
-|---|---|---|---|
-| Existe backlog de transações já salvas e não classificadas | `/classification` | N/A | Classificar pendências em lote e monitorar volume residual |
-| Entrada nova sob demanda (unitária/lote) com baixa criticidade | `/predict` | `true` quando `confidence >= limiar` | Persistir automaticamente e seguir fluxo normal |
-| Entrada nova sob demanda com criticidade alta ou confiança baixa | `/predict` | `false` | Encaminhar para revisão humana e aplicar `/feedback` após decisão |
-| Operação em homologação/simulação | `/predict` | `false` | Não gravar no banco; validar qualidade do modelo e regras |
+| Cenário Operacional                                              | Endpoint Gatilho  | `persist`                            | Ação Pós-Predição                                                 |
+| ---------------------------------------------------------------- | ----------------- | ------------------------------------ | ----------------------------------------------------------------- |
+| Existe backlog de transações já salvas e não classificadas       | `/classification` | N/A                                  | Classificar pendências em lote e monitorar volume residual        |
+| Entrada nova sob demanda (unitária/lote) com baixa criticidade   | `/predict`        | `true` quando `confidence >= limiar` | Persistir automaticamente e seguir fluxo normal                   |
+| Entrada nova sob demanda com criticidade alta ou confiança baixa | `/predict`        | `false`                              | Encaminhar para revisão humana e aplicar `/feedback` após decisão |
+| Operação em homologação/simulação                                | `/predict`        | `false`                              | Não gravar no banco; validar qualidade do modelo e regras         |
 
 Critérios mínimos recomendados para primeira versão:
 
