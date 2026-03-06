@@ -477,7 +477,39 @@ class TestFeedbackScope:
         assert feedback_response.status_code == 403
         assert "outra empresa" in feedback_response.json()["detail"].lower()
 
+    def test_feedback_company_inactive(self, client, empresa_criada):
+        company_id = empresa_criada["id"]
+        api_key = empresa_criada["api_key"]
+        transaction_payload = [
+            {
+                "data": "2022-01-01",
+                "cod_banco": 341,
+                "historico": "Pagamento fornecedor",
+                "empresa_id": company_id,
+                "valor": 100.0,
+                "conta_contabil": None,
+            }
+        ]
+        create_response = client.post(
+            f"/api/v1/companies/{company_id}/transactions",
+            json=transaction_payload,
+            headers={"X-API-Key": api_key},
+        )
+        assert create_response.status_code == 200
+        transaction_id = create_response.json()[0]["id"]
+        
+        deactivate_response = client.patch(
+            f"/api/v1/companies/{company_id}/deactivate",
+        )
+        assert deactivate_response.status_code == 200
 
+        feedback_response = client.patch(
+            f"/api/v1/transactions/{transaction_id}/feedback",
+            json={"conta_contabil": 1234},
+            headers={"X-API-Key": api_key},
+        )
+        assert feedback_response.status_code == 400
+        assert "Empresa está desativada" in feedback_response.json()["detail"]
 class TestClassificationAuth:
     """Testes de autenticação no endpoint de classificação."""
 

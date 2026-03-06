@@ -24,6 +24,8 @@ def submit_feedback(
         raise HTTPException(status_code=404, detail="Transação não encontrada")
     if db_transaction.empresa_id != empresa.id:
         raise HTTPException(status_code=403, detail="Transação pertence a outra empresa")
+    if not empresa.is_active:
+        raise HTTPException(status_code=400, detail="Empresa está desativada")
     db_transaction.conta_contabil = feedback.conta_contabil
     db.commit()
     db.refresh(db_transaction)
