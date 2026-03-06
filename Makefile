@@ -66,6 +66,9 @@ clean-cache:
 test:
 	./venv/bin/python -m pytest -q tests
 
+# Executa testes no ambiente Windows
+test-win:
+	.\venv\Scripts\python -m pytest -q tests
 # Cria migration nova (uso: make migrate-create MSG="add is_active")
 migrate-create:
 	./venv/bin/alembic revision --autogenerate -m "$(MSG)"
