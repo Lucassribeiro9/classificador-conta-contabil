@@ -1,3 +1,4 @@
+import logging
 from datetime import date
 from typing import Union
 
@@ -10,6 +11,7 @@ from core.ml_engine import ClassificadorContabil
 from core.models import Empresa, Transacao
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # Decisão de domínio:
@@ -46,7 +48,10 @@ def trigger_classification(
     if not pendentes:
         return {"message": "Nenhuma transação pendente encontrada"}
     ids_for_process = [t.id for t in pendentes]
-    print(f"--- Classificando {len(ids_for_process)} transações...")
+    logger.info(
+        "Classificando transacoes pendentes",
+        extra={"company_id": company_id, "total_transacoes": len(ids_for_process)},
+    )
     # Executa o classificador
     try:
         resultados = engine_ml.classify_transactions(company_id, ids_for_process)
