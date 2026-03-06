@@ -83,6 +83,81 @@ class TestCompanies:
             "cod_dominio": 1013,
         }
         response = client.post("/api/v1/companies", json=payload)
+        assert response.status_code == 422   
+    
+    def test_create_company_batch_success(self, client):
+        payload = [
+        {
+            "nome_empresa": "Empresa Batch A",
+            "cnpj_cpf": "12.345.678/0001-90",
+            "cod_dominio": 3101,
+        },
+        {
+            "nome_empresa": "Empresa Batch B",
+            "cnpj_cpf": "98765432100",
+            "cod_dominio": 3102,
+        },
+    ]
+
+        response = client.post("/api/v1/companies/batch", json=payload)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 2
+        assert data[0]["cnpj_cpf"] == "12345678000190"
+        assert data[1]["cnpj_cpf"] == "98765432100"
+
+
+    def test_create_company_batch_duplicate_inside_batch(self, client):
+        payload = [
+        {
+            "nome_empresa": "Empresa Batch Dup 1",
+            "cnpj_cpf": "12.345.678/0001-90",
+            "cod_dominio": 3201,
+        },
+        {
+            "nome_empresa": "Empresa Batch Dup 2",
+            "cnpj_cpf": "12345678000190",
+            "cod_dominio": 3202,
+        },
+        ]
+
+        response = client.post("/api/v1/companies/batch", json=payload)
+        assert response.status_code == 400
+        assert "Documento já cadastrado" in response.json()["detail"]
+
+
+    def test_create_company_batch_duplicate_against_db(self, client):
+        existing = {
+        "nome_empresa": "Empresa Existente",
+        "cnpj_cpf": "12.345.678/0001-90",
+        "cod_dominio": 3301,
+        }
+        create_response = client.post("/api/v1/companies", json=existing)
+        assert create_response.status_code == 200
+
+        payload = [
+            {
+            "nome_empresa": "Empresa Batch C",
+            "cnpj_cpf": "12345678000190",
+            "cod_dominio": 3302,
+            }
+        ]
+
+        response = client.post("/api/v1/companies/batch", json=payload)
+        assert response.status_code == 400
+        assert "Documento já cadastrado" in response.json()["detail"]
+
+
+    def test_create_company_batch_invalid_document_returns_422(self, client):
+        payload = [
+        {
+            "nome_empresa": "Empresa Batch Inválida",
+            "cnpj_cpf": "12.345.678/0001",
+            "cod_dominio": 3401,
+        }
+        ]
+
+        response = client.post("/api/v1/companies/batch", json=payload)
         assert response.status_code == 422
 
     def test_list_companies(self, client, empresa_criada):
