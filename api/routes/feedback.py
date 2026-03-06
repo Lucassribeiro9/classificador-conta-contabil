@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -6,6 +8,7 @@ from api.dependencies import DB_DEPENDENCY, verify_api_key
 from core.models import Empresa, Transacao
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.patch("/transactions/{transaction_id}/feedback")
@@ -25,8 +28,13 @@ def submit_feedback(
     db.commit()
     db.refresh(db_transaction)
 
-    print(
-        f"Transação {transaction_id} atualizada com conta contábil {feedback.conta_contabil}"
+    logger.info(
+        "Feedback aplicado na transacao",
+        extra={
+            "transaction_id": transaction_id,
+            "conta_contabil": feedback.conta_contabil,
+            "empresa_id": empresa.id,
+        },
     )
 
     return db_transaction
