@@ -1,10 +1,14 @@
 from fastapi import Depends, Header, HTTPException
 from sqlalchemy.orm import Session
-
+from core.config import settings
 from core.models import Empresa
 from core.database import SessionLocal
 
-
+def require_admin_token(x_admin_token: str | None = Header(default=None, alias="X-Admin-Token")):
+    if not x_admin_token:
+        raise HTTPException(status_code=401, detail="Admin token ausente")
+    if x_admin_token != settings.ADMIN_TOKEN:
+        raise HTTPException(status_code=403, detail="Admin token inválido")    
 def get_db():
     db = SessionLocal()
     try:

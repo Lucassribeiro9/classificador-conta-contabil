@@ -1,10 +1,10 @@
 import secrets
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from api.dependencies import DB_DEPENDENCY
+from api.dependencies import DB_DEPENDENCY, require_admin_token
 from api.schemas import Empresa as EmpresaSchema, EmpresaCreate
 from core import models 
 
@@ -26,7 +26,7 @@ def _find_duplicates(values: list[str]) -> set[str]:
 # POST - Criar/Adicionar empresa
 @router.post("/companies", response_model=EmpresaSchema)
 
-def create_company(company: EmpresaCreate, db: Session = DB_DEPENDENCY):
+def create_company(company: EmpresaCreate, _admin=Depends(require_admin_token), db: Session = DB_DEPENDENCY):
     # Criar empresa no banco de dados e gera uma api key única
     db_company = (
         db.query(models.Empresa)
@@ -47,7 +47,7 @@ def create_company(company: EmpresaCreate, db: Session = DB_DEPENDENCY):
 
 # POST - Criar/Adicionar empresas em lote
 @router.post("/companies/batch", response_model=list[EmpresaSchema])
-def create_companies_batch(companies: list[EmpresaCreate], db: Session = DB_DEPENDENCY):
+def create_companies_batch(companies: list[EmpresaCreate], _admin=Depends(require_admin_token), db: Session = DB_DEPENDENCY):
     """
     Cria uma lista de empresas no banco de dados. Se houver algum documento duplicado, ou algum documento
     já cadastrado, a API irá retornar um erro HTTP 400 com a lista de documentos duplicados ou já cadastrados.
@@ -86,7 +86,7 @@ def create_companies_batch(companies: list[EmpresaCreate], db: Session = DB_DEPE
     return new_companies
 # GET - Listar todas
 @router.get("/companies", response_model=list[EmpresaSchema])
-def get_companies(db: Session = DB_DEPENDENCY):
+def get_companies(_admin=Depends(require_admin_token), db: Session = DB_DEPENDENCY):
     return db.query(models.Empresa).all()
 
 
@@ -100,7 +100,7 @@ def get_company(company_id: int, db: Session = DB_DEPENDENCY):
 
 # DELETE - Deletar empresa e suas transações (possível apenas para o root)
 @router.delete("/companies/{company_id}", status_code=204)
-def delete_company(company_id: int, db: Session = DB_DEPENDENCY):
+def delete_company(company_id: int, _admin=Depends(require_admin_token), db: Session = DB_DEPENDENCY):
     company = db.query(models.Empresa).filter(models.Empresa.id == company_id).first()
     if not company:
         raise HTTPException(status_code=404, detail="Empresa não encontrada")

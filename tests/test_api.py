@@ -27,9 +27,9 @@ class TestHealth:
 class TestCompanies:
     """Testes dos endpoints de empresas."""
 
-    def test_create_company(self, client, empresa_data):
+    def test_create_company(self, client, empresa_data, admin_headers):
         """Testa criação de empresa."""
-        response = client.post("/api/v1/companies", json=empresa_data)
+        response = client.post("/api/v1/companies", json=empresa_data, headers=admin_headers)
         assert response.status_code == 200
         data = response.json()
         assert data["nome_empresa"] == empresa_data["nome_empresa"]
@@ -37,26 +37,26 @@ class TestCompanies:
         assert "api_key" in data
         assert data["api_key"].startswith("sk_")
 
-    def test_create_company_with_mask_normalizes_document(self, client):
+    def test_create_company_with_mask_normalizes_document(self, client, admin_headers):
         """Testa criação com máscara e persistência normalizada."""
         payload = {
             "nome_empresa": "Empresa Máscara LTDA",
             "cnpj_cpf": "12.345.678/0001-90",
             "cod_dominio": 1010,
         }
-        response = client.post("/api/v1/companies", json=payload)
+        response = client.post("/api/v1/companies", json=payload, headers=admin_headers)
         assert response.status_code == 200
         data = response.json()
         assert data["cnpj_cpf"] == "12345678000190"
 
-    def test_create_company_duplicate_cnpj(self, client, empresa_data):
+    def test_create_company_duplicate_cnpj(self, client, empresa_data, admin_headers):
         """Testa que não é possível criar empresa com CNPJ duplicado."""
-        client.post("/api/v1/companies", json=empresa_data)
-        response = client.post("/api/v1/companies", json=empresa_data)
+        client.post("/api/v1/companies", json=empresa_data, headers=admin_headers)
+        response = client.post("/api/v1/companies", json=empresa_data, headers=admin_headers)
         assert response.status_code == 400
         assert "Documento já cadastrado" in response.json()["detail"]
 
-    def test_create_company_duplicate_document_masked_unmasked(self, client):
+    def test_create_company_duplicate_document_masked_unmasked(self, client, admin_headers):
         """Testa duplicidade de documento com e sem máscara."""
         payload_masked = {
             "nome_empresa": "Empresa A LTDA",
@@ -68,24 +68,24 @@ class TestCompanies:
             "cnpj_cpf": "12345678000190",
             "cod_dominio": 1012,
         }
-        first_response = client.post("/api/v1/companies", json=payload_masked)
+        first_response = client.post("/api/v1/companies", json=payload_masked, headers=admin_headers)
         assert first_response.status_code == 200
 
-        second_response = client.post("/api/v1/companies", json=payload_unmasked)
+        second_response = client.post("/api/v1/companies", json=payload_unmasked, headers=admin_headers)
         assert second_response.status_code == 400
         assert "Documento já cadastrado" in second_response.json()["detail"]
 
-    def test_create_company_invalid_document_size(self, client):
+    def test_create_company_invalid_document_size(self, client, admin_headers):
         """Testa erro de validação para cnpj_cpf com tamanho inválido."""
         payload = {
             "nome_empresa": "Empresa Inválida LTDA",
             "cnpj_cpf": "12.345.678/0001",
             "cod_dominio": 1013,
         }
-        response = client.post("/api/v1/companies", json=payload)
+        response = client.post("/api/v1/companies", json=payload, headers=admin_headers)
         assert response.status_code == 422   
     
-    def test_create_company_batch_success(self, client):
+    def test_create_company_batch_success(self, client, admin_headers):
         payload = [
         {
             "nome_empresa": "Empresa Batch A",
@@ -99,7 +99,7 @@ class TestCompanies:
         },
     ]
 
-        response = client.post("/api/v1/companies/batch", json=payload)
+        response = client.post("/api/v1/companies/batch", json=payload, headers=admin_headers)
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 2
@@ -107,7 +107,7 @@ class TestCompanies:
         assert data[1]["cnpj_cpf"] == "98765432100"
 
 
-    def test_create_company_batch_duplicate_inside_batch(self, client):
+    def test_create_company_batch_duplicate_inside_batch(self, client, admin_headers):
         payload = [
         {
             "nome_empresa": "Empresa Batch Dup 1",
@@ -121,18 +121,18 @@ class TestCompanies:
         },
         ]
 
-        response = client.post("/api/v1/companies/batch", json=payload)
+        response = client.post("/api/v1/companies/batch", json=payload, headers=admin_headers)
         assert response.status_code == 400
         assert "Documento já cadastrado" in response.json()["detail"]
 
 
-    def test_create_company_batch_duplicate_against_db(self, client):
+    def test_create_company_batch_duplicate_against_db(self, client, admin_headers):
         existing = {
         "nome_empresa": "Empresa Existente",
         "cnpj_cpf": "12.345.678/0001-90",
         "cod_dominio": 3301,
         }
-        create_response = client.post("/api/v1/companies", json=existing)
+        create_response = client.post("/api/v1/companies", json=existing, headers=admin_headers)
         assert create_response.status_code == 200
 
         payload = [
@@ -143,12 +143,12 @@ class TestCompanies:
             }
         ]
 
-        response = client.post("/api/v1/companies/batch", json=payload)
+        response = client.post("/api/v1/companies/batch", json=payload, headers=admin_headers)
         assert response.status_code == 400
         assert "Documento já cadastrado" in response.json()["detail"]
 
 
-    def test_create_company_batch_invalid_document_returns_422(self, client):
+    def test_create_company_batch_invalid_document_returns_422(self, client, admin_headers):
         payload = [
         {
             "nome_empresa": "Empresa Batch Inválida",
@@ -157,17 +157,44 @@ class TestCompanies:
         }
         ]
 
-        response = client.post("/api/v1/companies/batch", json=payload)
+        response = client.post("/api/v1/companies/batch", json=payload, headers=admin_headers)
         assert response.status_code == 422
+    def test_create_company_without_admin_token(self, client, empresa_data):
+        """Testa que criar empresa sem token de admin retorna erro."""
+        response = client.post("/api/v1/companies", json=empresa_data)
+        assert response.status_code == 401
+        assert "Admin token ausente" in response.json()["detail"]
+    def test_create_company_with_invalid_admin_token(self, client, empresa_data):
+        """Testa que criar empresa com token de admin inválido retorna erro."""
+        response = client.post(
+            "/api/v1/companies",
+            json=empresa_data,
+            headers={"X-Admin-Token": "invalid token"},
+        )
+        assert response.status_code == 403
 
-    def test_list_companies(self, client, empresa_criada):
+    def test_list_companies(self, client, empresa_criada, admin_headers):
         """Testa listagem de empresas."""
-        response = client.get("/api/v1/companies")
+        response = client.get("/api/v1/companies", headers=admin_headers)
         assert response.status_code == 200
         data = response.json()
         assert len(data) >= 1
         assert data[0]["nome_empresa"] == empresa_criada["nome_empresa"]
 
+    def test_list_companies_without_admin_token(self, client):
+        """Testa que listar empresas sem token de admin retorna erro."""
+        response = client.get("/api/v1/companies")
+        assert response.status_code == 401
+    
+    def test_list_companies_with_invalid_admin_token(self, client):
+        """Testa que listar empresas com token de admin inválido retorna erro."""
+        response = client.get(
+            "/api/v1/companies",
+            headers={"X-Admin-Token": "invalid_token"},
+        )
+        assert response.status_code == 403    
+
+    
     def test_get_company_by_id(self, client, empresa_criada):
         """Testa busca de empresa por ID."""
         company_id = empresa_criada["id"]
@@ -209,6 +236,38 @@ class TestCompanies:
         response = client.patch(f"/api/v1/companies/{company_id}/activate")
         assert response.status_code == 400
         assert "Empresa já está ativa" in response.json()["detail"]
+
+    def test_delete_company_without_admin_token(self, client, empresa_criada):
+        """Testa que deletar empresa sem token de admin retorna erro."""
+        company_id = empresa_criada["id"]
+        response = client.delete(f"/api/v1/companies/{company_id}")
+        assert response.status_code == 401
+        assert "Admin token ausente" in response.json()["detail"]
+
+
+    def test_delete_company_with_invalid_admin_token(self, client, empresa_criada):
+        """Testa que deletar empresa com token de admin inválido retorna erro."""
+        company_id = empresa_criada["id"]
+        response = client.delete(
+            f"/api/v1/companies/{company_id}",
+            headers={"X-Admin-Token": "invalid_token"},
+        )
+        assert response.status_code == 403
+        assert "Admin token inválido" in response.json()["detail"]
+
+
+    def test_delete_company_with_valid_admin_token(self, client, empresa_criada, admin_headers):
+        """Testa deleção de empresa com token admin válido."""
+        company_id = empresa_criada["id"]
+        response = client.delete(
+            f"/api/v1/companies/{company_id}",
+            headers=admin_headers,
+        )
+        assert response.status_code == 204
+
+        # confirma que a empresa foi removida
+        get_response = client.get(f"/api/v1/companies/{company_id}")
+        assert get_response.status_code == 404
 
 
 class TestPredict:
@@ -508,7 +567,7 @@ class TestFeedbackScope:
         assert feedback_response.json()["id"] == transaction_id
         assert feedback_response.json()["conta_contabil"] == 1234
 
-    def test_feedback_cross_company(self, client, empresa_criada):
+    def test_feedback_cross_company(self, client, empresa_criada, admin_headers):
         """Empresa x não pode atualizar transação de empresa y"""
         empresa_criada_x = empresa_criada
 
@@ -520,7 +579,7 @@ class TestFeedbackScope:
         }
         empresa_y_response = client.post(
             "/api/v1/companies",
-            json=empresa_y_payload,
+            json=empresa_y_payload, headers=admin_headers
         )
         assert empresa_y_response.status_code == 200
         empresa_y = empresa_y_response.json()
@@ -539,7 +598,7 @@ class TestFeedbackScope:
         create_response = client.post(
             f"/api/v1/companies/{empresa_y['id']}/transactions",
             json=transaction_payload,
-            headers={"X-API-Key": empresa_y["api_key"]},
+            headers={"X-API-Key": empresa_y["api_key"]}
         )
         assert create_response.status_code == 200
         transaction_id = create_response.json()[0]["id"]
@@ -607,21 +666,21 @@ class TestClassificationAuth:
 class TestMultiTenantScope:
     # Teste com função de helper
     @staticmethod
-    def _create_company(client, suffix: str, cod_dominio: int):
+    def _create_company(client, suffix: str, cod_dominio: int, admin_headers):
         payload = {
             "nome_empresa": f"EMPRESA {suffix} LTDA",
             "cnpj_cpf": f"08455780001{suffix}",
             "cod_dominio": cod_dominio,
         }
-        response = client.post("/api/v1/companies", json=payload)
+        response = client.post("/api/v1/companies", json=payload, headers=admin_headers)
         assert response.status_code == 200
         return response.json()
 
     def test_transactions_cross_company_forbidden(
-        self, client, empresa_criada, transacao_data
+        self, client, empresa_criada, transacao_data, admin_headers
     ):
         empresa_a = empresa_criada
-        empresa_b = self._create_company(client, "B", 1000)
+        empresa_b = self._create_company(client, "B", 1000, admin_headers)
         response = client.post(
             f"/api/v1/companies/{empresa_b['id']}/transactions",
             json=[transacao_data],
