@@ -34,7 +34,7 @@ def create_company(company: EmpresaCreate, _admin=Depends(require_admin_token), 
         .first()
     )
     if db_company:
-        raise HTTPException(status_code=400, detail="Documento já cadastrado")
+        raise HTTPException(status_code=409, detail="Documento já cadastrado")
     # Criação do cadastro usando o modelo definido
     data_company = company.model_dump()
     data_company["api_key"] = f"sk_{secrets.token_hex(16)}"
@@ -58,14 +58,14 @@ def create_companies_batch(companies: list[EmpresaCreate], _admin=Depends(requir
     duplicated_docs = _find_duplicates(docs)
     if duplicated_docs:
         raise HTTPException(
-            status_code=400, detail=f"Documento já cadastrado: {duplicated_docs}"
+            status_code=409, detail=f"Documento já cadastrado: {duplicated_docs}"
         )
     existing_docs = {
         row[0]
         for row in db.query(models.Empresa.cnpj_cpf).filter(models.Empresa.cnpj_cpf.in_(docs)).all()
     }
     if existing_docs:
-        raise HTTPException(status_code=400, detail=f"Documento já cadastrado: {existing_docs}")
+        raise HTTPException(status_code=409, detail=f"Documento já cadastrado: {existing_docs}")
     # Criação do cadastro usando o modelo definido
     new_companies = []
     for company in companies:
@@ -77,7 +77,7 @@ def create_companies_batch(companies: list[EmpresaCreate], _admin=Depends(requir
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=400, detail="Documento já cadastrado")
+        raise HTTPException(status_code=409, detail="Documento já cadastrado")
     except Exception:
         db.rollback()
         raise HTTPException(status_code=500, detail="Erro ao criar empresas")
@@ -115,7 +115,7 @@ def deactivate_company(company_id: int, db: Session = DB_DEPENDENCY):
     if not company:
         raise HTTPException(status_code=404, detail="Empresa não encontrada")
     if not company.is_active:
-        raise HTTPException(status_code=400, detail="Empresa já está desativada")
+        raise HTTPException(status_code=403, detail="Empresa já está desativada")
     company.is_active = False
     db.commit()
     db.refresh(company)
@@ -128,7 +128,7 @@ def activate_company(company_id: int, db: Session = DB_DEPENDENCY):
     if not company:
         raise HTTPException(status_code=404, detail="Empresa não encontrada")
     if company.is_active:
-        raise HTTPException(status_code=400, detail="Empresa já está ativa")
+        raise HTTPException(status_code=403, detail="Empresa já está ativa")
     company.is_active = True
     db.commit()
     db.refresh(company)

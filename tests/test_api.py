@@ -53,7 +53,7 @@ class TestCompanies:
         """Testa que não é possível criar empresa com CNPJ duplicado."""
         client.post("/api/v1/companies", json=empresa_data, headers=admin_headers)
         response = client.post("/api/v1/companies", json=empresa_data, headers=admin_headers)
-        assert response.status_code == 400
+        assert response.status_code == 409
         assert "Documento já cadastrado" in response.json()["detail"]
 
     def test_create_company_duplicate_document_masked_unmasked(self, client, admin_headers):
@@ -72,7 +72,7 @@ class TestCompanies:
         assert first_response.status_code == 200
 
         second_response = client.post("/api/v1/companies", json=payload_unmasked, headers=admin_headers)
-        assert second_response.status_code == 400
+        assert second_response.status_code == 409
         assert "Documento já cadastrado" in second_response.json()["detail"]
 
     def test_create_company_invalid_document_size(self, client, admin_headers):
@@ -122,7 +122,7 @@ class TestCompanies:
         ]
 
         response = client.post("/api/v1/companies/batch", json=payload, headers=admin_headers)
-        assert response.status_code == 400
+        assert response.status_code == 409
         assert "Documento já cadastrado" in response.json()["detail"]
 
 
@@ -144,7 +144,7 @@ class TestCompanies:
         ]
 
         response = client.post("/api/v1/companies/batch", json=payload, headers=admin_headers)
-        assert response.status_code == 400
+        assert response.status_code == 409
         assert "Documento já cadastrado" in response.json()["detail"]
 
 
@@ -227,14 +227,14 @@ class TestCompanies:
         company_id = empresa_criada["id"]
         client.patch(f"/api/v1/companies/{company_id}/deactivate")
         response = client.patch(f"/api/v1/companies/{company_id}/deactivate")
-        assert response.status_code == 400
+        assert response.status_code == 403
         assert "Empresa já está desativada" in response.json()["detail"]
 
     def test_activate_company_already_active(self, client, empresa_criada):
         """Testa erro ao ativar empresa já ativa."""
         company_id = empresa_criada["id"]
         response = client.patch(f"/api/v1/companies/{company_id}/activate")
-        assert response.status_code == 400
+        assert response.status_code == 403
         assert "Empresa já está ativa" in response.json()["detail"]
 
     def test_delete_company_without_admin_token(self, client, empresa_criada):
@@ -457,7 +457,7 @@ class TestTransactionsAuth:
             f"/api/v1/companies/{company_id}/transactions",
             json=transacao_data,
         )
-        assert response.status_code == 422  # Validation error - header obrigatório
+        assert response.status_code == 401  # Validation error - header obrigatório
 
     def test_create_transactions_with_invalid_api_key(
         self, client, empresa_criada, transacao_data
@@ -470,7 +470,7 @@ class TestTransactionsAuth:
             headers={"X-API-Key": "invalid_key"},
         )
         assert response.status_code == 403
-        assert "Invalid API Key" in response.json()["detail"]
+        assert "API Key inválida" in response.json()["detail"]
 
     def test_create_transactions_with_valid_api_key(
         self, client, empresa_criada, transacao_data
@@ -497,7 +497,7 @@ class TestTransactionsAuth:
         """Testa que listar transações sem API key retorna erro."""
         company_id = empresa_criada["id"]
         response = client.get(f"/api/v1/companies/{company_id}/transactions")
-        assert response.status_code == 422
+        assert response.status_code == 401
 
     def test_list_transactions_with_valid_api_key(self, client, empresa_criada):
         """Testa listagem de transações com API key válida."""
@@ -520,7 +520,7 @@ class TestFeedbackAuth:
             "/api/v1/transactions/1/feedback",
             json={"conta_contabil": 1234},
         )
-        assert response.status_code == 422
+        assert response.status_code == 401
 
     def test_feedback_with_invalid_api_key(self, client):
         """Testa que feedback com API key inválida retorna erro 403."""
@@ -651,7 +651,7 @@ class TestClassificationAuth:
         """Testa que classificação sem API key retorna erro."""
         company_id = empresa_criada["id"]
         response = client.post(f"/api/v1/companies/{company_id}/classification")
-        assert response.status_code == 422
+        assert response.status_code == 401
 
     def test_classification_with_invalid_api_key(self, client, empresa_criada):
         """Testa que classificação com API key inválida retorna erro 403."""
@@ -662,6 +662,14 @@ class TestClassificationAuth:
         )
         assert response.status_code == 403
 
+    def test_classification_with_insufficient_data(self, client, empresa_criada):
+        """Testa que classificação com dados insuficientes retorna erro 422."""
+        company_id = empresa_criada["id"]
+        response = client.post(
+            f"/api/v1/companies/{company_id}/classification",
+            headers={"X-API-Key": empresa_criada["api_key"]},
+        )
+        assert response.status_code == 422
 
 class TestMultiTenantScope:
     # Teste com função de helper
