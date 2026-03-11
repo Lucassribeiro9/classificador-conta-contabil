@@ -144,7 +144,7 @@ class TestCompanies:
         ]
 
         response = client.post("/api/v1/companies/batch", json=payload, headers=admin_headers)
-        assert response.status_code == 400
+        assert response.status_code == 409
         assert "Documento já cadastrado" in response.json()["detail"]
 
 
