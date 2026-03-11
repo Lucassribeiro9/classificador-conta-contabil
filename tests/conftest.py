@@ -12,6 +12,7 @@ from sqlalchemy.pool import StaticPool
 from api.dependencies import get_db
 from api.main import app
 from core.database import Base
+from core.config import settings
 
 
 # Cria banco de dados SQLite em memória para testes
@@ -52,7 +53,24 @@ def client(setup_db):
         yield test_client
     app.dependency_overrides.clear()
 
-
+@pytest.fixture(scope="session")
+def admin_token():
+    """Configura os testes do token de admin para as sessões requeridas.
+    Gera um token de admin para autenticação nos testes."""
+    return "test-admin-token"
+@pytest.fixture(scope="function", autouse=True)
+def override_admin_token(admin_token):
+    """Sobrescreve a dependência de token de admin para usar o token de teste."""
+    previous = settings.ADMIN_TOKEN
+    settings.ADMIN_TOKEN = admin_token
+    try:
+        yield
+    finally:
+        settings.ADMIN_TOKEN = previous
+@pytest.fixture
+def admin_headers(admin_token):
+    """Headers de autenticação para admin."""
+    return {"X-Admin-Token": admin_token}
 @pytest.fixture
 def empresa_data():
     """Dados padrão para criar uma empresa de teste."""
@@ -64,9 +82,9 @@ def empresa_data():
 
 
 @pytest.fixture
-def empresa_criada(client, empresa_data):
+def empresa_criada(client, empresa_data, admin_headers):
     """Cria e retorna uma empresa para uso nos testes."""
-    response = client.post("/api/v1/companies", json=empresa_data)
+    response = client.post("/api/v1/companies", json=empresa_data, headers=admin_headers)
     assert response.status_code == 200
     return response.json()
 
