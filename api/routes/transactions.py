@@ -21,7 +21,12 @@ def create_transactions_batch(
     db: Session = DB_DEPENDENCY,
     _empresa: Empresa = Depends(verify_company),
 ):
-    """Criando transações em lote"""
+    """Cria transações em lote para uma empresa específica.
+
+    A empresa é validada por `verify_company`, garantindo:
+    - escopo correto por `company_id`;
+    - empresa ativa e API key compatível com o contexto da requisição.
+    """
 
     data_transactions = [transaction.model_dump() for transaction in transactions_in]
     for transaction in data_transactions:
@@ -45,7 +50,12 @@ def list_transactions(
     db: Session = DB_DEPENDENCY,
     _empresa: Empresa = Depends(verify_company),
 ):
-    """Listando transações de uma empresa"""
+    """Lista transações da empresa com paginação simples.
+
+    Parâmetros:
+    - `skip`: deslocamento inicial da lista;
+    - `limit`: quantidade máxima retornada.
+    """
 
     transactions = (
         db.query(Transacao)
@@ -68,9 +78,14 @@ def list_transactions_for_review(
     db: Session = DB_DEPENDENCY,
     _empresa: Empresa = Depends(verify_company),
 ):
-    """Retorna transações que precisam de revisão manual (needs_review=True).
-    As transações são ordenadas por confidence (menor primeiro) para priorizar
-    as que o modelo tem menos certeza.
+    """Retorna transações marcadas para revisão manual.
+
+    Critério:
+    - `needs_review=True`.
+
+    Ordenação:
+    - confiança crescente (`confidence` menor primeiro), priorizando
+      itens em que o modelo está menos confiante.
     """
 
     transactions = (

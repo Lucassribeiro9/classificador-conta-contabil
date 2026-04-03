@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from api.dependencies import DB_DEPENDENCY, require_admin_token
 from api.schemas import Empresa as EmpresaSchema, EmpresaCreate
-from core import models 
+from core import models
 
 # Instanciando o router
 router = APIRouter()
@@ -25,8 +25,13 @@ def _find_duplicates(values: list[str]) -> set[str]:
 
 # POST - Criar/Adicionar empresa
 @router.post("/companies", response_model=EmpresaSchema)
-
 def create_company(company: EmpresaCreate, _admin=Depends(require_admin_token), db: Session = DB_DEPENDENCY):
+    """Cria uma empresa e gera uma API key única.
+
+    Requer autenticação administrativa via `X-Admin-Token`.
+    Retorna `409` quando o documento da empresa já está cadastrado.
+    """
+
     # Criar empresa no banco de dados e gera uma api key única
     db_company = (
         db.query(models.Empresa)
@@ -49,10 +54,13 @@ def create_company(company: EmpresaCreate, _admin=Depends(require_admin_token), 
 @router.post("/companies/batch", response_model=list[EmpresaSchema])
 def create_companies_batch(companies: list[EmpresaCreate], _admin=Depends(require_admin_token), db: Session = DB_DEPENDENCY):
     """
-    Cria uma lista de empresas no banco de dados. Se houver algum documento duplicado, ou algum documento
-    já cadastrado, a API irá retornar um erro HTTP 400 com a lista de documentos duplicados ou já cadastrados.
-    Se houver algum erro inesperado, a API irá retornar um erro HTTP 500 com uma mensagem de erro genérica.
-    Se a criação for bem-sucedida, a API irá retornar a lista de empresas criadas com suas respectivas chaves API.
+    Cria várias empresas em lote com geração de API key para cada item.
+
+    Regras:
+    - valida duplicidades no payload recebido;
+    - valida documentos já existentes no banco;
+    - retorna `409` para conflitos de documento;
+    - retorna `500` para erro inesperado de persistência.
     """
     docs = [company.cnpj_cpf for company in companies]
     duplicated_docs = _find_duplicates(docs)
@@ -87,12 +95,20 @@ def create_companies_batch(companies: list[EmpresaCreate], _admin=Depends(requir
 # GET - Listar todas
 @router.get("/companies", response_model=list[EmpresaSchema])
 def get_companies(_admin=Depends(require_admin_token), db: Session = DB_DEPENDENCY):
+    """Lista todas as empresas cadastradas.
+
+    Requer autenticação administrativa via `X-Admin-Token`.
+    """
     return db.query(models.Empresa).all()
 
 
 # GET - Listar empresa por ID
 @router.get("/companies/{company_id}", response_model=EmpresaSchema)
 def get_company(company_id: int, db: Session = DB_DEPENDENCY):
+    """Busca uma empresa pelo identificador.
+
+    Retorna `404` quando a empresa não é encontrada.
+    """
     company = db.query(models.Empresa).filter(models.Empresa.id == company_id).first()
     if not company:
         raise HTTPException(status_code=404, detail="Empresa não encontrada")
@@ -101,6 +117,11 @@ def get_company(company_id: int, db: Session = DB_DEPENDENCY):
 # DELETE - Deletar empresa e suas transações (possível apenas para o root)
 @router.delete("/companies/{company_id}", status_code=204)
 def delete_company(company_id: int, _admin=Depends(require_admin_token), db: Session = DB_DEPENDENCY):
+    """Remove uma empresa e seus registros relacionados.
+
+    Requer autenticação administrativa via `X-Admin-Token`.
+    Retorna `404` quando a empresa não existe.
+    """
     company = db.query(models.Empresa).filter(models.Empresa.id == company_id).first()
     if not company:
         raise HTTPException(status_code=404, detail="Empresa não encontrada")
@@ -111,6 +132,12 @@ def delete_company(company_id: int, _admin=Depends(require_admin_token), db: Ses
 # PATCH - Desativar empresa
 @router.patch("/companies/{company_id}/deactivate", response_model=EmpresaSchema)
 def deactivate_company(company_id: int, db: Session = DB_DEPENDENCY):
+    """Desativa uma empresa para bloquear uso dos endpoints transacionais.
+
+    Retorna:
+    - `404` se a empresa não existir;
+    - `403` se a empresa já estiver desativada.
+    """
     company = db.query(models.Empresa).filter(models.Empresa.id == company_id).first()
     if not company:
         raise HTTPException(status_code=404, detail="Empresa não encontrada")
@@ -124,6 +151,12 @@ def deactivate_company(company_id: int, db: Session = DB_DEPENDENCY):
 # PATCH - Ativar empresa
 @router.patch("/companies/{company_id}/activate", response_model=EmpresaSchema)
 def activate_company(company_id: int, db: Session = DB_DEPENDENCY):
+    """Reativa uma empresa previamente desativada.
+
+    Retorna:
+    - `404` se a empresa não existir;
+    - `403` se a empresa já estiver ativa.
+    """
     company = db.query(models.Empresa).filter(models.Empresa.id == company_id).first()
     if not company:
         raise HTTPException(status_code=404, detail="Empresa não encontrada")
