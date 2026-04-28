@@ -511,6 +511,120 @@ class TestTransactionsAuth:
         assert isinstance(response.json(), list)
 
 
+class TestTransactionsDeleteBatch:
+    """Testes de exclusão em lote de transações."""
+
+    def test_delete_batch_requires_admin_token(
+        self, client, empresa_criada, transacao_data
+    ):
+        company_id = empresa_criada["id"]
+        api_key = empresa_criada["api_key"]
+
+        create_response = client.post(
+            f"/api/v1/companies/{company_id}/transactions",
+            json=transacao_data,
+            headers={"X-API-Key": api_key},
+        )
+        assert create_response.status_code == 200
+
+        response = client.delete(
+            f"/api/v1/companies/{company_id}/transactions",
+            headers={"X-API-Key": api_key},
+        )
+        assert response.status_code == 401
+        assert "Admin token ausente" in response.json()["detail"]
+
+    def test_delete_batch_requires_api_key(
+        self, client, empresa_criada, transacao_data, admin_headers
+    ):
+        company_id = empresa_criada["id"]
+        api_key = empresa_criada["api_key"]
+
+        create_response = client.post(
+            f"/api/v1/companies/{company_id}/transactions",
+            json=transacao_data,
+            headers={"X-API-Key": api_key},
+        )
+        assert create_response.status_code == 200
+
+        response = client.delete(
+            f"/api/v1/companies/{company_id}/transactions",
+            headers=admin_headers,
+        )
+        assert response.status_code == 401
+        assert "API Key ausente" in response.json()["detail"]
+
+    def test_delete_batch_forbidden_with_api_key_from_another_company(
+        self, client, empresa_criada, transacao_data, admin_headers
+    ):
+        company_id = empresa_criada["id"]
+        api_key = empresa_criada["api_key"]
+
+        create_response = client.post(
+            f"/api/v1/companies/{company_id}/transactions",
+            json=transacao_data,
+            headers={"X-API-Key": api_key},
+        )
+        assert create_response.status_code == 200
+
+        empresa_y_payload = {
+            "nome_empresa": "EMPRESA Y DELETE LTDA",
+            "cnpj_cpf": "08455780000299",
+            "cod_dominio": 8011,
+        }
+        empresa_y_response = client.post(
+            "/api/v1/companies", json=empresa_y_payload, headers=admin_headers
+        )
+        assert empresa_y_response.status_code == 200
+        api_key_outra_empresa = empresa_y_response.json()["api_key"]
+
+        response = client.delete(
+            f"/api/v1/companies/{company_id}/transactions",
+            headers={
+                "X-Admin-Token": admin_headers["X-Admin-Token"],
+                "X-API-Key": api_key_outra_empresa,
+            },
+        )
+        assert response.status_code == 403
+        assert "Acesso negado" in response.json()["detail"]
+
+    def test_delete_batch_success_returns_deleted_items(
+        self, client, empresa_criada, transacao_data, admin_headers
+    ):
+        company_id = empresa_criada["id"]
+        api_key = empresa_criada["api_key"]
+
+        create_response = client.post(
+            f"/api/v1/companies/{company_id}/transactions",
+            json=transacao_data,
+            headers={"X-API-Key": api_key},
+        )
+        assert create_response.status_code == 200
+        created_transactions = create_response.json()
+
+        response = client.delete(
+            f"/api/v1/companies/{company_id}/transactions",
+            headers={
+                "X-Admin-Token": admin_headers["X-Admin-Token"],
+                "X-API-Key": api_key,
+            },
+        )
+        assert response.status_code == 200
+        deleted_transactions = response.json()
+        assert len(deleted_transactions) == len(created_transactions)
+        assert {item["id"] for item in deleted_transactions} == {
+            item["id"] for item in created_transactions
+        }
+
+        list_response = client.get(
+            f"/api/v1/companies/{company_id}/transactions",
+            headers={"X-API-Key": api_key},
+        )
+        assert list_response.status_code == 200
+        assert list_response.json() == []
+
+    
+
 class TestFeedbackAuth:
     """Testes de autenticação no endpoint de feedback."""
 
