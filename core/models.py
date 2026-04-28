@@ -11,6 +11,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -69,7 +70,18 @@ class Transacao(Base):
     """
 
     __tablename__ = "transacoes"
-
+    # Constraint para evitar duplicidade de transações idênticas para a mesma empresa (opcional, pode ser ajustada conforme regras de negócio)
+    __table_args__ = (
+        UniqueConstraint(
+            "empresa_id",
+            "data",
+            "historico",
+            "valor",
+            "conta_contabil",
+            "cod_banco",
+            name="uq_transacao_unica",
+        ),
+    )
     # Identificador único da transação
     id: Mapped[int] = mapped_column(primary_key=True)
 

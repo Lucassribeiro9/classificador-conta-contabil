@@ -4,7 +4,6 @@ Testa endpoints de empresas, transações, classificação e feedback.
 """
 
 
-
 class TestHealth:
     """Testes do endpoint de health check."""
 
@@ -510,6 +509,89 @@ class TestTransactionsAuth:
         assert response.status_code == 200
         assert isinstance(response.json(), list)
 
+    def test_create_transactions_duplicate_against_db_returns_409(
+        self, client, empresa_criada, transacao_data
+    ):
+        """Testa que transação duplicada no banco retorna conflito."""
+        company_id = empresa_criada["id"]
+        api_key = empresa_criada["api_key"]
+
+        first_response = client.post(
+            f"/api/v1/companies/{company_id}/transactions",
+            json=transacao_data,
+            headers={"X-API-Key": api_key},
+        )
+        assert first_response.status_code == 200
+
+        second_response = client.post(
+            f"/api/v1/companies/{company_id}/transactions",
+            json=transacao_data,
+            headers={"X-API-Key": api_key},
+        )
+        assert second_response.status_code == 409
+        assert (
+            "Transação duplicada para os mesmos dados de empresa, data, histórico, valor, conta e banco"
+            in second_response.json()["detail"]
+        )
+
+    def test_create_transactions_duplicate_inside_payload_returns_409(
+        self, client, empresa_criada, transacao_data
+    ):
+        """Testa que duplicidade no mesmo payload é bloqueada."""
+        company_id = empresa_criada["id"]
+        api_key = empresa_criada["api_key"]
+
+        duplicated_payload = [transacao_data[0], transacao_data[0]]
+
+        response = client.post(
+            f"/api/v1/companies/{company_id}/transactions",
+            json=duplicated_payload,
+            headers={"X-API-Key": api_key},
+        )
+        assert response.status_code == 409
+        assert (
+            "Transação duplicada para os mesmos dados de empresa, data, histórico, valor, conta e banco"
+            in response.json()["detail"]
+        )
+
+    def test_create_transactions_with_different_conta_contabil_returns_200(
+        self, client, empresa_criada, transacao_data
+    ):
+        """Permite transações com mesma base, mas conta contábil diferente."""
+        company_id = empresa_criada["id"]
+        api_key = empresa_criada["api_key"]
+
+        payload = [dict(transacao_data[0]), dict(transacao_data[0])]
+        payload[0]["conta_contabil"] = None
+        payload[1]["conta_contabil"] = 1234
+
+        response = client.post(
+            f"/api/v1/companies/{company_id}/transactions",
+            json=payload,
+            headers={"X-API-Key": api_key},
+        )
+        assert response.status_code == 200
+        assert len(response.json()) == 2
+
+    def test_create_transactions_with_different_cod_banco_returns_200(
+        self, client, empresa_criada, transacao_data
+    ):
+        """Permite transações com mesma base, mas banco diferente."""
+        company_id = empresa_criada["id"]
+        api_key = empresa_criada["api_key"]
+
+        payload = [dict(transacao_data[0]), dict(transacao_data[0])]
+        payload[0]["cod_banco"] = None
+        payload[1]["cod_banco"] = 341
+
+        response = client.post(
+            f"/api/v1/companies/{company_id}/transactions",
+            json=payload,
+            headers={"X-API-Key": api_key},
+        )
+        assert response.status_code == 200
+        assert len(response.json()) == 2
+
 
 class TestTransactionsDeleteBatch:
     """Testes de exclusão em lote de transações."""
@@ -623,7 +705,6 @@ class TestTransactionsDeleteBatch:
         assert list_response.status_code == 200
         assert list_response.json() == []
 
-    
 
 class TestFeedbackAuth:
     """Testes de autenticação no endpoint de feedback."""

@@ -1,6 +1,8 @@
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
 from api import schemas
@@ -9,6 +11,41 @@ from core.models import Empresa, Transacao
 
 # Instanciando o router
 router = APIRouter()
+_DUPLICATE_DETAIL = (
+    "Transação duplicada para os mesmos dados de empresa, data, histórico, valor, conta e banco"
+)
+
+
+def _transaction_signature(transaction_data: dict) -> tuple:
+    return (
+        transaction_data["empresa_id"],
+        transaction_data["data"],
+        transaction_data["historico"],
+        transaction_data["valor"],
+        transaction_data["conta_contabil"],
+        transaction_data["cod_banco"],
+    )
+
+
+def _duplicate_filter(company_id: int, transaction_data: dict):
+    conta_filter = (
+        Transacao.conta_contabil.is_(None)
+        if transaction_data["conta_contabil"] is None
+        else Transacao.conta_contabil == transaction_data["conta_contabil"]
+    )
+    banco_filter = (
+        Transacao.cod_banco.is_(None)
+        if transaction_data["cod_banco"] is None
+        else Transacao.cod_banco == transaction_data["cod_banco"]
+    )
+    return and_(
+        Transacao.empresa_id == company_id,
+        Transacao.data == transaction_data["data"],
+        Transacao.historico == transaction_data["historico"],
+        Transacao.valor == transaction_data["valor"],
+        conta_filter,
+        banco_filter,
+    )
 
 
 # POST - Criar/Adicionar transações em lote
@@ -31,9 +68,33 @@ def create_transactions_batch(
     data_transactions = [transaction.model_dump() for transaction in transactions_in]
     for transaction in data_transactions:
         transaction["empresa_id"] = company_id
+    seen_signatures = set()
+    for transaction in data_transactions:
+        signature = _transaction_signature(transaction)
+        if signature in seen_signatures:
+            raise HTTPException(status_code=409, detail=_DUPLICATE_DETAIL)
+        seen_signatures.add(signature)
+
+    for transaction in data_transactions:
+        duplicate_exists = (
+            db.query(Transacao)
+            .filter(_duplicate_filter(company_id=company_id, transaction_data=transaction))
+            .first()
+            is not None
+        )
+        if duplicate_exists:
+            raise HTTPException(status_code=409, detail=_DUPLICATE_DETAIL)
+
     new_transactions = [Transacao(**transaction) for transaction in data_transactions]
     db.add_all(new_transactions)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=_DUPLICATE_DETAIL,
+        )
     for transaction in new_transactions:
         db.refresh(transaction)
     return new_transactions
