@@ -1,10 +1,10 @@
 from typing import List
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from api import schemas
-from api.dependencies import DB_DEPENDENCY, verify_company
+from api.dependencies import DB_DEPENDENCY, verify_company, require_admin_token
 from core.models import Empresa, Transacao
 
 # Instanciando o router
@@ -99,3 +99,55 @@ def list_transactions_for_review(
         .all()
     )
     return transactions
+
+# DELETE - Deletar transação por ID
+@router.delete("/companies/{company_id}/transactions/{transaction_id}", status_code=204)
+def delete_transaction(
+    company_id: int,
+    transaction_id: int,
+    db: Session = DB_DEPENDENCY,
+    _empresa: Empresa = Depends(verify_company),
+):
+    """Remove uma transação específica por ID.
+
+    Retorna `404` se a transação não existir ou não pertencer à empresa.
+    Em sucesso, retorna `204 No Content`.
+    """
+    transaction = (
+        db.query(Transacao)
+        .filter(Transacao.id == transaction_id, Transacao.empresa_id == company_id)
+        .first()
+    )
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transação não encontrada")
+    db.delete(transaction)
+    db.commit()
+
+
+# DELETE - Deletar transações em lote de uma empresa (possível apenas para o root).
+@router.delete(
+    "/companies/{company_id}/transactions", response_model=List[schemas.Transacao]
+)
+def delete_transactions_batch(
+    company_id: int,
+    _admin=Depends(require_admin_token),
+    db: Session = DB_DEPENDENCY,
+    _empresa: Empresa = Depends(verify_company),
+):
+    """Remove em lote as transações de uma empresa.
+
+    Possível apenas para o root. Caso a empresa não exista, retorna `404`.
+    Em sucesso, retorna `200 OK` com a lista de transações removidas.
+    """
+    company = db.query(Empresa).filter(Empresa.id == company_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Empresa não encontrada")
+
+    transactions = (
+        db.query(Transacao).filter(Transacao.empresa_id == company_id).all()
+    )
+    deleted_transactions = [schemas.Transacao.model_validate(transaction) for transaction in transactions]
+    for transaction in transactions:
+        db.delete(transaction)
+    db.commit()
+    return deleted_transactions
