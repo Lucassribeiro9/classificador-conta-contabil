@@ -187,3 +187,6 @@ n8n_workflows
 !alembic/
 !alembic/versions/
 !alembic/versions/*.py
+
+# AI
+.codex
