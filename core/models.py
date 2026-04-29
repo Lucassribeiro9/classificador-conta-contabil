@@ -8,10 +8,11 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
-    UniqueConstraint,
+    func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -70,18 +71,6 @@ class Transacao(Base):
     """
 
     __tablename__ = "transacoes"
-    # Constraint para evitar duplicidade de transações idênticas para a mesma empresa (opcional, pode ser ajustada conforme regras de negócio)
-    __table_args__ = (
-        UniqueConstraint(
-            "empresa_id",
-            "data",
-            "historico",
-            "valor",
-            "conta_contabil",
-            "cod_banco",
-            name="uq_transacao_unica",
-        ),
-    )
     # Identificador único da transação
     id: Mapped[int] = mapped_column(primary_key=True)
 
@@ -122,3 +111,15 @@ class Transacao(Base):
 
     # Relacionamento Many-to-One: Referência para o objeto Empresa pai
     empresa: Mapped["Empresa"] = relationship("Empresa", back_populates="transacoes")
+
+
+Index(
+    "uq_transacao_dedup",
+    Transacao.empresa_id,
+    Transacao.data,
+    Transacao.historico,
+    Transacao.valor,
+    func.coalesce(Transacao.conta_contabil, -1),
+    func.coalesce(Transacao.cod_banco, -1),
+    unique=True,
+)

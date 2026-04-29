@@ -21,6 +21,30 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     op.execute(
         """
+        DELETE FROM transacoes
+        WHERE id IN (
+          SELECT id
+          FROM (
+            SELECT
+              id,
+              ROW_NUMBER() OVER (
+                PARTITION BY
+                  empresa_id,
+                  data,
+                  historico,
+                  valor,
+                  COALESCE(conta_contabil, -1),
+                  COALESCE(cod_banco, -1)
+                ORDER BY id
+              ) AS duplicate_rank
+            FROM transacoes
+          )
+          WHERE duplicate_rank > 1
+        )
+        """
+    )
+    op.execute(
+        """
         CREATE UNIQUE INDEX IF NOT EXISTS uq_transacao_dedup
         ON transacoes (
           empresa_id,
