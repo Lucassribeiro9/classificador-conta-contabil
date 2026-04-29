@@ -509,6 +509,118 @@ class TestTransactionsAuth:
         assert response.status_code == 200
         assert isinstance(response.json(), list)
 
+    def test_list_transactions_paginated_returns_metadata(self, client, empresa_criada):
+        """Testa paginação explícita com metadados para integrações."""
+        company_id = empresa_criada["id"]
+        api_key = empresa_criada["api_key"]
+        payload = [
+            {
+                "data": "2026-01-15",
+                "cod_banco": 341,
+                "historico": f"Transação paginada {index}",
+                "valor": float(index + 1),
+                "conta_contabil": None,
+                "empresa_id": company_id,
+            }
+            for index in range(105)
+        ]
+
+        create_response = client.post(
+            f"/api/v1/companies/{company_id}/transactions",
+            json=payload,
+            headers={"X-API-Key": api_key},
+        )
+        assert create_response.status_code == 200
+
+        first_page = client.get(
+            f"/api/v1/companies/{company_id}/transactions",
+            params={"paginated": True, "page": 1, "limit": 100},
+            headers={"X-API-Key": api_key},
+        )
+        assert first_page.status_code == 200
+        first_page_data = first_page.json()
+        assert first_page_data["total"] == 105
+        assert first_page_data["page"] == 1
+        assert first_page_data["limit"] == 100
+        assert first_page_data["has_next"] is True
+        assert len(first_page_data["items"]) == 100
+
+        second_page = client.get(
+            f"/api/v1/companies/{company_id}/transactions",
+            params={"paginated": True, "page": 2, "limit": 100},
+            headers={"X-API-Key": api_key},
+        )
+        assert second_page.status_code == 200
+        second_page_data = second_page.json()
+        assert second_page_data["total"] == 105
+        assert second_page_data["has_next"] is False
+        assert len(second_page_data["items"]) == 5
+
+    def test_list_transactions_filters_by_period_bank_and_account(
+        self, client, empresa_criada
+    ):
+        """Testa filtros úteis para comparar planilha e banco."""
+        company_id = empresa_criada["id"]
+        api_key = empresa_criada["api_key"]
+        payload = [
+            {
+                "data": "2026-01-10",
+                "cod_banco": 341,
+                "historico": "Dentro do filtro",
+                "valor": 100.0,
+                "conta_contabil": 1234,
+                "empresa_id": company_id,
+            },
+            {
+                "data": "2026-02-10",
+                "cod_banco": 341,
+                "historico": "Fora por data",
+                "valor": 200.0,
+                "conta_contabil": 1234,
+                "empresa_id": company_id,
+            },
+            {
+                "data": "2026-01-10",
+                "cod_banco": 33,
+                "historico": "Fora por banco",
+                "valor": 300.0,
+                "conta_contabil": 1234,
+                "empresa_id": company_id,
+            },
+            {
+                "data": "2026-01-10",
+                "cod_banco": 341,
+                "historico": "Fora por conta",
+                "valor": 400.0,
+                "conta_contabil": 5678,
+                "empresa_id": company_id,
+            },
+        ]
+
+        create_response = client.post(
+            f"/api/v1/companies/{company_id}/transactions",
+            json=payload,
+            headers={"X-API-Key": api_key},
+        )
+        assert create_response.status_code == 200
+
+        response = client.get(
+            f"/api/v1/companies/{company_id}/transactions",
+            params={
+                "paginated": True,
+                "data_inicio": "2026-01-01",
+                "data_fim": "2026-01-31",
+                "cod_banco": 341,
+                "conta_contabil": 1234,
+            },
+            headers={"X-API-Key": api_key},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 1
+        assert data["items"][0]["historico"] == "Dentro do filtro"
+
     def test_create_transactions_duplicate_against_db_returns_409(
         self, client, empresa_criada, transacao_data
     ):
