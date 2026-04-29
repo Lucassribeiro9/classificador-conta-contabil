@@ -1,6 +1,7 @@
-from typing import List
+from datetime import date
+from typing import List, Union
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
@@ -102,29 +103,58 @@ def create_transactions_batch(
 
 # GET - Listar transações de uma empresa
 @router.get(
-    "/companies/{company_id}/transactions", response_model=List[schemas.Transacao]
+    "/companies/{company_id}/transactions",
+    response_model=Union[List[schemas.Transacao], schemas.TransacaoListResponse],
 )
 def list_transactions(
     company_id: int,
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, ge=0, description="Deslocamento usado na resposta em lista"),
+    page: int = Query(1, ge=1, description="Página usada quando paginated=true"),
+    limit: int = Query(100, ge=1, le=500, description="Quantidade máxima por resposta"),
+    paginated: bool = Query(
+        False,
+        description="Quando true, retorna items, total, page, limit e has_next",
+    ),
+    data_inicio: date | None = Query(None, description="Data inicial do filtro. YYYY-MM-DD"),
+    data_fim: date | None = Query(None, description="Data final do filtro. YYYY-MM-DD"),
+    cod_banco: int | None = Query(None, description="Filtra por código do banco"),
+    conta_contabil: int | None = Query(None, description="Filtra por conta contábil"),
     db: Session = DB_DEPENDENCY,
     _empresa: Empresa = Depends(verify_company),
 ):
-    """Lista transações da empresa com paginação simples.
+    """Lista transações da empresa com paginação e filtros operacionais.
 
     Parâmetros:
-    - `skip`: deslocamento inicial da lista;
-    - `limit`: quantidade máxima retornada.
+    - `skip`: deslocamento inicial para clientes legados que consomem array simples;
+    - `page`: número da página quando `paginated=true`;
+    - `limit`: quantidade máxima retornada por resposta;
+    - `paginated`: retorna metadados de paginação quando verdadeiro;
+    - `data_inicio` e `data_fim`: restringem o período consultado;
+    - `cod_banco` e `conta_contabil`: restringem a comparação por campos-chave.
     """
 
-    transactions = (
-        db.query(Transacao)
-        .filter(Transacao.empresa_id == company_id)
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
+    filters = [Transacao.empresa_id == company_id]
+    if data_inicio is not None:
+        filters.append(Transacao.data >= data_inicio)
+    if data_fim is not None:
+        filters.append(Transacao.data <= data_fim)
+    if cod_banco is not None:
+        filters.append(Transacao.cod_banco == cod_banco)
+    if conta_contabil is not None:
+        filters.append(Transacao.conta_contabil == conta_contabil)
+
+    query = db.query(Transacao).filter(*filters).order_by(Transacao.id.asc())
+    offset = (page - 1) * limit if paginated else skip
+    transactions = query.offset(offset).limit(limit).all()
+    if paginated:
+        total = query.order_by(None).count()
+        return schemas.TransacaoListResponse(
+            items=transactions,
+            total=total,
+            page=page,
+            limit=limit,
+            has_next=offset + len(transactions) < total,
+        )
     return transactions
 
 

@@ -37,6 +37,14 @@ class Transacao(TransacaoBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class TransacaoListResponse(BaseModel):
+    items: list[Transacao]
+    total: int
+    page: int
+    limit: int
+    has_next: bool
+
+
 # Schema para empresa
 class EmpresaBase(BaseModel):
     nome_empresa: str
