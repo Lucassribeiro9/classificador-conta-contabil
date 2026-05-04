@@ -5,6 +5,17 @@ from pydantic import BaseModel, ConfigDict, field_validator
 
 # Os parametros passados nos modelos devem ser iguais aos do banco de dados
 
+
+def normalize_optional_int(value):
+    if value is None:
+        return None
+    if isinstance(value, str) and value.strip() in ("", "0"):
+        return None
+    if value == 0:
+        return None
+    return value
+
+
 # Atualizar a conta contábil caso o usuário tenha feito um feedback
 class FeedbackUpdate(BaseModel):
     conta_contabil: int
@@ -18,6 +29,11 @@ class TransacaoBase(BaseModel):
     valor: float
     conta_contabil: Optional[int] = None
     empresa_id: int
+
+    @field_validator("cod_banco", "conta_contabil", mode="before")
+    @classmethod
+    def normalize_empty_optional_numbers(cls, value):
+        return normalize_optional_int(value)
 
 
 class TransacaoCreate(TransacaoBase):
@@ -75,6 +91,11 @@ class Empresa(EmpresaBase):
 class PredictInput(BaseModel):
     historico: str
     cod_banco: Optional[int] = None
+
+    @field_validator("cod_banco", mode="before")
+    @classmethod
+    def normalize_empty_cod_banco(cls, value):
+        return normalize_optional_int(value)
 
 
 class PredictResult(BaseModel):
