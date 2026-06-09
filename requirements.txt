@@ -105,6 +105,7 @@ pydantic==2.12.5
 pydantic-settings==2.12.0
 pydantic_core==2.41.5
 pydeck==0.9.1
+psycopg==3.2.13
 Pygments==2.19.2
 pyparsing==3.2.5
 pytest==8.4.2
