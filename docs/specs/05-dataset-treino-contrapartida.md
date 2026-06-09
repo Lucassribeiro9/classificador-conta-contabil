@@ -1,0 +1,115 @@
+# Spec: Dataset de Treino para Contrapartida Financeira
+
+## Objetivo
+
+Gerar dataset de treino a partir de lancamentos normalizados cujo bloco de origem seja banco, caixa ou aplicacao financeira. O alvo inicial do modelo sera a conta de contrapartida.
+
+Sucesso significa que o dataset evita ambiguidade do razao completo e fornece exemplos consistentes para o ML prever o outro lado de movimentos financeiros.
+
+## Tech Stack
+
+- SQLAlchemy para consulta dos lancamentos normalizados.
+- Pandas para transformacao tabular quando necessario.
+- scikit-learn para consumo posterior pelo classificador.
+- Pytest para regras de filtro e target.
+
+## Comandos
+
+- Testes: `.\venv\Scripts\python.exe -m pytest -q tests`
+- API local: `.\venv\Scripts\python.exe -m uvicorn api.main:app --reload`
+
+## Project Structure
+
+- `core/`: builder de dataset de treino.
+- `core/models.py`: campos necessarios em contas e lancamentos normalizados.
+- `core/ml_engine.py`: uso futuro do dataset no classificador.
+- `tests/`: testes de filtro, target e features.
+
+## Code Style
+
+Builder de dataset deve ser separado do treino do modelo. Ele deve retornar estrutura explicita de features e target.
+
+Exemplo de linha esperada:
+
+```python
+{
+    "features": "pagto boleto sul america saude origem_10046 direcao_credito",
+    "target_conta_contrapartida": 50057,
+}
+```
+
+Exemplo de metadados esperados:
+
+```python
+{
+    "empresa_id": 1,
+    "total_linhas": 120,
+    "total_descartes": 3,
+    "contagem_por_target": {50057: 14, 10722: 40},
+    "treinavel": True,
+}
+```
+
+## Testing Strategy
+
+- Testar que apenas origens banco/caixa/aplicacao entram no dataset.
+- Testar que contas nao financeiras ficam fora como origem.
+- Testar que a contrapartida e o target.
+- Testar que historico, origem e direcao compoem as features iniciais.
+- Testar que linhas sem contrapartida valida ficam fora ou marcadas conforme decisao da spec de razao.
+- Testar dataset vazio ou insuficiente.
+- Testar que origem financeira vem da flag persistida no catalogo.
+- Testar que target precisa ser conta analitica existente.
+- Testar que valor bruto nao entra nas features da primeira versao.
+- Testar que metadados retornam total, descartes e contagem por target.
+
+## Boundaries
+
+- Sempre: usar contrapartida como target inicial.
+- Sempre: preservar empresa como escopo do dataset.
+- Sempre: evitar misturar lancamentos de empresas diferentes.
+- Sempre: usar a flag persistida do catalogo para identificar origem financeira.
+- Sempre: usar apenas lancamentos normalizados validos.
+- Sempre: usar apenas contas analiticas existentes como target.
+- Sempre: retornar metadados do dataset.
+- Perguntar antes: usar qualquer bloco do razao como treino.
+- Perguntar antes: incluir contas sinteticas como target.
+- Perguntar antes: usar valor monetario bruto como feature.
+- Nunca: treinar com conta de origem como alvo quando a origem e banco/caixa.
+- Nunca: recalcular heuristica financeira no builder ignorando a flag persistida.
+- Nunca: misturar empresas no dataset inicial.
+
+## Success Criteria
+
+- Dataset e gerado por empresa.
+- Apenas origens financeiras entram no dataset inicial.
+- Target e contrapartida contabil.
+- Features refletem historico e contexto minimo.
+- Features iniciais nao usam valor monetario bruto.
+- Builder retorna metadados de linhas, descartes e contagem por target.
+- Testes cobrem filtros, target e isolamento por empresa.
+
+## Decisoes Aprovadas
+
+- O dataset sera gerado por empresa.
+- Origem financeira sera definida pela flag persistida no catalogo, como `is_financial_origin`.
+- A heuristica de banco/caixa/aplicacao pertence a spec de plano de contas, nao ao builder.
+- O dataset usara apenas lancamentos normalizados validos.
+- O dataset usara apenas origem financeira.
+- O alvo sera `conta_contrapartida`.
+- O alvo deve existir no catalogo e ser conta analitica (`tipo = A`).
+- Contas sinteticas nao podem ser target.
+- Features iniciais serao `historico_normalizado`, `conta_origem` e `direcao`.
+- Codigo da conta de origem pode entrar como token textual.
+- Valor monetario bruto nao entra como feature na primeira versao.
+- O builder pode retornar dataset insuficiente; o ML decide se treina.
+- Minimo para gerar dataset: pelo menos 1 linha valida.
+- Minimo recomendado para treinar modelo: pelo menos 10 linhas totais e pelo menos 2 classes de contrapartida.
+- O builder retornara metadados: total de linhas, descartes, contagem por target e empresa.
+- Empresas nao serao misturadas no dataset inicial.
+
+## Open Questions
+
+- O nome final da flag financeira sera `is_financial_origin` ou outro definido na spec de plano de contas?
+- O campo `historico_normalizado` sera persistido no lancamento ou calculado no builder?
+- O criterio de treinabilidade ficara no builder como metadado ou apenas no ML?
