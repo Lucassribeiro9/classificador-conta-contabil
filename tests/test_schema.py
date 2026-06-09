@@ -3,7 +3,7 @@ from datetime import date
 import pytest
 from pydantic import ValidationError
 
-from api.schemas import EmpresaCreate, TransacaoCreate
+from api.schemas import EmpresaCreate, PredictInput, TransacaoCreate
 
 
 def test_empresa_create_valida():
@@ -67,6 +67,24 @@ def test_transacao_create_valida_sem_opcionais():
     )
     assert transacao.cod_banco is None
     assert transacao.conta_contabil is None
+
+
+def test_transacao_create_normaliza_zero_e_texto_vazio_para_none():
+    transacao = TransacaoCreate(
+        data=date(2026, 1, 28),
+        cod_banco=0,
+        historico="Compra de material",
+        valor=150.50,
+        conta_contabil=" ",
+        empresa_id=1,
+    )
+    assert transacao.cod_banco is None
+    assert transacao.conta_contabil is None
+
+
+def test_predict_input_normaliza_cod_banco_vazio_para_none():
+    assert PredictInput(historico="Pagamento fornecedor", cod_banco="0").cod_banco is None
+    assert PredictInput(historico="Pagamento fornecedor", cod_banco=" ").cod_banco is None
 
 
 def test_transacao_create_campos_com_tipos_invalidos():

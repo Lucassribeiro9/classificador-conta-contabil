@@ -8,9 +8,11 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
+    func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -69,7 +71,6 @@ class Transacao(Base):
     """
 
     __tablename__ = "transacoes"
-
     # Identificador único da transação
     id: Mapped[int] = mapped_column(primary_key=True)
 
@@ -110,3 +111,27 @@ class Transacao(Base):
 
     # Relacionamento Many-to-One: Referência para o objeto Empresa pai
     empresa: Mapped["Empresa"] = relationship("Empresa", back_populates="transacoes")
+
+# Índice de unicidade para evitar duplicação de transações idênticas
+Index(
+    "uq_transacao_dedup",
+    Transacao.empresa_id,
+    Transacao.data,
+    Transacao.historico,
+    Transacao.valor,
+    func.coalesce(Transacao.conta_contabil, -1),
+    func.coalesce(Transacao.cod_banco, -1),
+    unique=True,
+)
+
+# Índices para otimização de consultas frequentes
+Index("ix_transacoes_empresa_id_id", Transacao.empresa_id, Transacao.id)
+
+Index(
+    "ix_transacoes_empresa_data_banco_conta",
+    Transacao.empresa_id,
+    Transacao.data,
+    Transacao.cod_banco,
+    Transacao.conta_contabil,
+    Transacao.id,
+)

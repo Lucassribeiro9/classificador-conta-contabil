@@ -1,6 +1,5 @@
-# - Bibliotecas para manipulação e análise de dados
 import re
-
+import logging
 # - Bibliotecas para ML
 import nltk
 from nltk.corpus import stopwords
@@ -15,8 +14,9 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-
 from core.models import Transacao
+
+logger = logging.getLogger(__name__)
 
 
 class ClassificadorContabil:
@@ -91,7 +91,10 @@ class ClassificadorContabil:
             )
 
         if len(results) < 10:
-            print("Foram encontradas poucas transações para o treinamento")
+            logger.warning(
+                "Poucas transacoes para treinamento",
+                extra={"empresa_id": empresa_id, "quantidade_transacoes": len(results)},
+            )
             return False
         # Transformar em DataFrame
         df = pd.DataFrame(

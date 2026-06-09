@@ -1,3 +1,4 @@
+import logging
 from datetime import date
 from typing import Union
 
@@ -10,12 +11,31 @@ from core.ml_engine import ClassificadorContabil
 from core.models import Empresa, Transacao
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # Decisão de domínio:
 # - /classification: processa pendências já persistidas no banco (conta_contabil nula).
 # - /predict: inferência sob demanda para payload externo, com persistência opcional.
 # - /feedback continua sendo o fluxo de correção humana de uma classificação já atribuída.
+
+# Helper - Tratamento para dados insuficientes:
+INSUFFICIENT_TRAINING_DATA = "Dados insuficientes para classificação. São necessárias ao menos 10 transações com conta contábil preenchida"
+
+def _train_or_raise(engine_ml: ClassificadorContabil, company_id: int):
+    """
+    Tenta treinar o modelo de classificação para uma empresa.
+    Se a empresa não tiver ao menos 10 transações com conta contábil preenchida,
+    lança uma exceção HTTP 422 com detalhes "Dados insuficientes para classificação".
+    """
+    try:
+        success_train = engine_ml.train_for_company(company_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail=INSUFFICIENT_TRAINING_DATA)
+    if not success_train:
+        raise HTTPException(status_code=422, detail=INSUFFICIENT_TRAINING_DATA)
+
+
 @router.post("/companies/{company_id}/classification")
 def trigger_classification(
     company_id: int,
@@ -25,15 +45,10 @@ def trigger_classification(
     """Classifica transações pendentes da empresa já salvas no banco."""
 
     engine_ml = ClassificadorContabil(db)
+    _train_or_raise(engine_ml, company_id)
     # Nota: hoje o modelo é treinado por requisição.
     # Manter assim por enquanto, com otimização futura via cache/reuso por empresa.
-    success_train = engine_ml.train_for_company(company_id)
-    if not success_train:
-        raise HTTPException(
-            status_code=500,
-            detail="Erro ao treinar o modelo. Dados insuficientes para classificar",
-        )
-
+    
     # Busca ID das transações sem conta
     pendentes = (
         db.query(Transacao)
@@ -46,7 +61,10 @@ def trigger_classification(
     if not pendentes:
         return {"message": "Nenhuma transação pendente encontrada"}
     ids_for_process = [t.id for t in pendentes]
-    print(f"--- Classificando {len(ids_for_process)} transações...")
+    logger.info(
+        "Classificando transacoes pendentes",
+        extra={"company_id": company_id, "total_transacoes": len(ids_for_process)},
+    )
     # Executa o classificador
     try:
         resultados = engine_ml.classify_transactions(company_id, ids_for_process)
@@ -81,14 +99,9 @@ def predict_transactions(
     inputs_data = [item.model_dump() for item in inputs]
 
     engine_ml = ClassificadorContabil(db)
+    _train_or_raise(engine_ml, company_id)
     # Mesma observação de performance: treino é feito por request no estado atual.
-    success_train = engine_ml.train_for_company(company_id)
-    if not success_train:
-        raise HTTPException(
-            status_code=500,
-            detail="Erro ao treinar o modelo. Dados insuficientes para classificar",
-        )
-
+    
     predictions = engine_ml.predict_inputs(inputs_data)
 
     if persist:

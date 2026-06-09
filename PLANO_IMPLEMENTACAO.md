@@ -35,30 +35,34 @@ Use esta seção para controle de execução contínua.
 - [x] Limpar imports/dependências não usadas em `core/ml_engine.py` — resolvido; imports pesados (`matplotlib`, `plotly`, `IPython`, `joblib`) já removidos
 - [x] Corrigir imports e organização dos testes — `test_api.py` não importa mais `ClassificadorContabil` da camada de rota
 - [x] Atualizar ou remover `test_schema.py` — arquivo já valida os schemas atuais (`EmpresaCreate`, `TransacaoCreate`) corretamente
+- [x] Substituir `print()` por `logging` em `classification.py`, `feedback.py` e `ml_engine.py`
+- [x] Validar empresa ativa no endpoint `/feedback` antes de aceitar correção
+- [x] Proteger endpoints administrativos de empresa com `X-Admin-Token` (`POST /companies`, `POST /companies/batch`, `GET /companies`, `DELETE /companies/{company_id}`)
+- [x] Padronizar erro de dados insuficientes para treino/classificação com HTTP `422` em `/classification` e `/predict`
+- [x] Adicionar target `make test-win` no `Makefile`
 
 ### Itens pendentes (priorizados)
 
 #### Fase A - Estabilização técnica
 
-- [ ] Documentar comando padrão de testes para Windows (`Makefile` usa `./venv/bin/python`, incompatível com Windows)
-- [ ] Migrar `declarative_base` de `sqlalchemy.ext.declarative` (depreciado) para `sqlalchemy.orm.DeclarativeBase`
-- [ ] Substituir `print()` por `logging` estruturado em `classification.py`, `feedback.py` e `ml_engine.py`
+- [ ] Documentar no `README.md` execução de testes cross-platform (`make test` e `make test-win`)
+- [x] Migrar `declarative_base` de `sqlalchemy.ext.declarative` (depreciado) para `sqlalchemy.orm.DeclarativeBase`
 
 #### Fase B - Consistência de domínio e API
 
-- [ ] Documentar decisão canônica `/classification` vs `/predict` para integradores (decisão já tomada, falta documentar)
-- [ ] Revisar códigos HTTP e mensagens de erro para consistência de contrato (ex.: 500 para "dados insuficientes" deveria ser 422/400; mensagens misturando pt/en)
-- [ ] Validar empresa ativa no endpoint `/feedback` (aceita feedback mesmo com empresa desativada)
-- [ ] Adicionar `response_model` ao endpoint `/classification` (único endpoint sem schema de resposta)
-- [ ] Avaliar proteção dos endpoints de empresa (`POST`, `GET`, `DELETE`) com autenticação admin
+- [x] Documentar decisão canônica `/classification` vs `/predict` para integradores (decisão já tomada, falta documentar)
+- [x] Revisar mensagens de erro e semântica HTTP para consistência total do contrato (pt-BR + códigos por tipo de falha)
+- [x] Adicionar `response_model` ao endpoint `/classification` (único endpoint sem schema de resposta)
+- [x] Definir política de autenticação para endpoints ainda abertos de empresa (`GET /companies/{company_id}`, `PATCH /companies/{company_id}/deactivate`, `PATCH /companies/{company_id}/activate`)
 
-#### Fase C - Integração e operação
+#### Fase C - Integração n8n (próxima etapa)
 
-- [ ] Publicar workflow n8n versionado em `n8n_workflows/`
-- [ ] Definir padrão mínimo de observabilidade (logs estruturados + métricas)
+- [ ] Definir padrão de versionamento dos workflows em `n8n_workflows/` (nomenclatura, versão e ambiente)
+- [ ] Implementar checklist de fluxos n8n (seção **9**) e exportar JSON versionado
+- [ ] Definir padrão mínimo de observabilidade dos fluxos (logs de execução + tratamento de erro)
+- [ ] Definir gatilho canônico n8n para classificação com critérios de confiança e revisão humana
+- [ ] Criar `.env.example` com variáveis de ambiente necessárias (`DATABASE_URL`, `NGROK_AUTH_TOKEN`, `WEBHOOK_URL`, `ADMIN_TOKEN`)
 - [ ] Planejar migração opcional SQLite -> PostgreSQL com critérios objetivos
-- [ ] Definir gatilho canônico n8n para classificação com critérios de confiança
-- [ ] Criar `.env.example` com variáveis de ambiente necessárias (`DATABASE_URL`, `NGROK_AUTH_TOKEN`, `WEBHOOK_URL`)
 
 #### Fase D - Documentação e governança
 
@@ -180,15 +184,19 @@ Além dos schemas de empresa e transação, os schemas de predição já impleme
    - **pendência**: documentar essa decisão no `README.md` e nos docstrings dos endpoints para integradores.
 
 5. ~~Execução de testes com comportamento instável no ambiente local, sem comando padrão formalizado no plano.~~
-   - ⚠️ **Parcialmente resolvido** — `Makefile` tem target `test`, mas usa path Linux. Pendência: documentar comando para Windows.
+   - ✅ **Evoluiu** — `Makefile` agora possui `test` (Linux) e `test-win` (Windows). Pendência remanescente: documentar no `README.md`.
 
-6. **(NOVO)** Endpoint `/feedback` não valida se a empresa está ativa antes de aceitar correção.
+6. ~~Endpoint `/feedback` não valida se a empresa está ativa antes de aceitar correção.~~
+   - ✅ **Resolvido** — endpoint já bloqueia feedback quando `empresa.is_active` é `False`.
 
-7. **(NOVO)** Endpoints de empresa (`POST /companies`, `GET /companies`, `DELETE /companies/{id}`) não exigem autenticação.
+7. ~~Endpoints de empresa (`POST /companies`, `GET /companies`, `DELETE /companies/{id}`) não exigem autenticação.~~
+   - ✅ **Resolvido** — endpoints administrativos já exigem `X-Admin-Token`.
+   - ⚠️ **Pendência residual** — ainda falta decisão para `GET /companies/{company_id}`, `PATCH /deactivate` e `PATCH /activate`.
 
 8. **(NOVO)** `core/database.py` usa `declarative_base()` de `sqlalchemy.ext.declarative` (depreciado no SQLAlchemy 2.x).
 
-9. **(NOVO)** Uso de `print()` em produção onde deveria haver `logging` estruturado (`classification.py`, `feedback.py`, `ml_engine.py`).
+9. ~~Uso de `print()` em produção onde deveria haver `logging` estruturado (`classification.py`, `feedback.py`, `ml_engine.py`).~~
+   - ✅ **Resolvido** — logging aplicado nos módulos.
 
 ---
 
@@ -199,27 +207,29 @@ Além dos schemas de empresa e transação, os schemas de predição já impleme
 1. ~~Corrigir imports e organização dos testes.~~ ✅ Resolvido.
 2. ~~Atualizar ou remover `test_schema.py`.~~ ✅ Resolvido — schemas validados corretamente.
 3. ~~Limpar dependências/imports desnecessários de `core/ml_engine.py`.~~ ✅ Resolvido.
-4. Documentar comando de testes para Windows (complementar `Makefile` com instrução cross-platform).
-5. **(NOVO)** Migrar `declarative_base` para `sqlalchemy.orm.DeclarativeBase` (API depreciada).
-6. **(NOVO)** Substituir `print()` por `logging` estruturado nos módulos de produção.
+4. ~~Criar comando de testes para Windows.~~ ✅ Resolvido (`make test-win`).
+5. Documentar no `README.md` execução de testes cross-platform.
+6. **(NOVO)** Migrar `declarative_base` para `sqlalchemy.orm.DeclarativeBase` (API depreciada).
 
 ### Fase B - Consistência de domínio e API
 
 1. Documentar decisão canônica `/classification` vs `/predict` para integradores no `README.md` e docstrings.
-2. Revisar códigos HTTP e mensagens de erro para consistência de contrato.
+2. Revisar mensagens de erro e semântica HTTP para consistência de contrato.
 3. ~~Validar e manter cobertura de regressão para escopo por empresa.~~ ✅ Resolvido na issue #18.
-4. **(NOVO)** Validar empresa ativa no endpoint `/feedback`.
+4. ~~Validar empresa ativa no endpoint `/feedback`.~~ ✅ Resolvido.
 5. **(NOVO)** Adicionar `response_model` ao endpoint `/classification`.
-6. **(NOVO)** Avaliar proteção dos endpoints de empresa com autenticação admin.
+6. ~~Proteger endpoints administrativos de empresa com autenticação admin (`POST`, `GET`, `DELETE`).~~ ✅ Resolvido.
+7. **(NOVO)** Definir política de autenticação para endpoints de empresa ainda sem proteção admin.
 
-### Fase C - Integração e operação
+### Fase C - Integração n8n (próxima etapa)
 
-1. Publicar workflow n8n versionado em `n8n_workflows/`.
-2. Definir observabilidade mínima (logs estruturados e métricas básicas).
-3. Planejar migração opcional SQLite -> PostgreSQL com gatilhos de decisão.
+1. Definir padrão de versionamento para export dos workflows (`n8n_workflows/`).
+2. Implementar os fluxos listados na seção **9**.
+3. Definir observabilidade mínima dos fluxos (execução, erro e reprocessamento).
 4. Definir gatilho canônico dos workflows n8n para classificação contábil:
-   usar `/classification` (pendências já persistidas) ou `/predict` (entrada sob demanda com `persist` opcional), com critérios explícitos de volume, confiança e necessidade de revisão humana.
-5. **(NOVO)** Criar `.env.example` com variáveis de ambiente necessárias.
+   usar `/classification` (pendências já persistidas) e `/predict` (entrada sob demanda com `persist` opcional), com critérios explícitos de volume, confiança e necessidade de revisão humana.
+5. Criar `.env.example` com variáveis de ambiente necessárias.
+6. Planejar migração opcional SQLite -> PostgreSQL com gatilhos de decisão.
 
 ### Fase D - Documentação e governança
 
@@ -246,7 +256,7 @@ Checklist objetivo de conclusão:
 
 1. Semana 1: Fase A (estabilização técnica).
 2. Semana 2: Fase B (consistência de domínio e API).
-3. Semana 3: Fase C (integração e operação).
+3. Semana 3 e 4: Fase C (integração n8n com fluxos operacionais).
 
 ---
 
@@ -263,13 +273,53 @@ Checklist objetivo de conclusão:
 
 ---
 
+## 9) Checklist de Fluxos n8n a Desenvolver (Próxima Etapa)
+
+Objetivo desta etapa: operacionalizar a API via automações n8n com fluxo ponta a ponta (entrada, classificação, revisão e feedback).
+
+### Fluxos obrigatórios (MVP)
+
+- [ ] **F01 - Ingestão de transações (batch)**  
+  Receber payload (Webhook/Cron/arquivo), transformar para schema da API e enviar para `POST /api/v1/companies/{company_id}/transactions`.
+- [ ] **F02 - Classificação de pendências (batch)**  
+  Disparar `POST /api/v1/companies/{company_id}/classification` para classificar transações já persistidas com `conta_contabil` nula.
+- [ ] **F03 - Predição sob demanda (sem persistência)**  
+  Expor fluxo de inferência para entradas externas usando `POST /api/v1/companies/{company_id}/predict?persist=false`.
+- [ ] **F04 - Predição com persistência controlada**  
+  Aplicar regra operacional para persistência via `POST /api/v1/companies/{company_id}/predict?persist=true` quando a estratégia do fluxo exigir gravação no banco.
+- [ ] **F05 - Fila de revisão manual**  
+  Consultar `GET /api/v1/companies/{company_id}/transactions/needs_review`, ordenar por menor confiança e publicar para canal de revisão (planilha, e-mail ou fila interna).
+- [ ] **F06 - Aplicação de feedback humano**  
+  Capturar conta corrigida e enviar para `PATCH /api/v1/transactions/{transaction_id}/feedback`.
+- [ ] **F07 - Tratamento de falhas e reprocessamento**  
+  Workflow de erro n8n com retry/backoff, registro da causa e fila de reexecução.
+
+### Fluxos recomendados (pós-MVP)
+
+- [ ] **F08 - Monitoramento de saúde da API**  
+  Verificar `GET /health` periodicamente e alertar indisponibilidade.
+- [ ] **F09 - Provisionamento assistido de empresa (admin)**  
+  Fluxo interno para `POST /api/v1/companies` e gestão segura de `api_key` (uso restrito a ambiente administrativo).
+- [ ] **F10 - Relatório operacional diário**  
+  Consolidar volume ingerido, classificado, pendente de revisão e feedback aplicado.
+
+### Critérios mínimos de aceite para cada fluxo n8n
+
+1. Workflow exportado e versionado em `n8n_workflows/` com nome padronizado (`Fxx_nome_fluxo_v1.json`).
+2. Uso explícito de credenciais via headers (`X-API-Key` e, quando aplicável, `X-Admin-Token`).
+3. Tratamento de erro com tentativa de reprocessamento e saída para análise.
+4. Log mínimo por execução: empresa, endpoint chamado, quantidade processada e status final.
+5. Evidência de teste manual/homologação anexada no PR.
+
+---
+
 ## Matriz de Decisão n8n (Gatilho e Persistência)
 
 | Cenário Operacional                                              | Endpoint Gatilho  | `persist`                            | Ação Pós-Predição                                                 |
 | ---------------------------------------------------------------- | ----------------- | ------------------------------------ | ----------------------------------------------------------------- |
 | Existe backlog de transações já salvas e não classificadas       | `/classification` | N/A                                  | Classificar pendências em lote e monitorar volume residual        |
-| Entrada nova sob demanda (unitária/lote) com baixa criticidade   | `/predict`        | `true` quando `confidence >= limiar` | Persistir automaticamente e seguir fluxo normal                   |
-| Entrada nova sob demanda com criticidade alta ou confiança baixa | `/predict`        | `false`                              | Encaminhar para revisão humana e aplicar `/feedback` após decisão |
+| Entrada nova sob demanda (unitária/lote) com baixa criticidade   | `/predict`        | `true`                               | Persistir automaticamente e seguir fluxo normal                   |
+| Entrada nova sob demanda com criticidade alta                    | `/predict`        | `false`                              | Encaminhar para revisão humana e aplicar `/feedback` após decisão |
 | Operação em homologação/simulação                                | `/predict`        | `false`                              | Não gravar no banco; validar qualidade do modelo e regras         |
 
 Critérios mínimos recomendados para primeira versão:

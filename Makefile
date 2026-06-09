@@ -66,9 +66,12 @@ clean-cache:
 test:
 	./venv/bin/python -m pytest -q tests
 
+# Executa testes no ambiente Windows
+test-win:
+	.\venv\Scripts\python -m pytest -q tests
 # Cria migration nova (uso: make migrate-create MSG="add is_active")
 migrate-create:
-	./venv/bin/alembic revision --autogenerate -m "$(MSG)"
+	./venv/bin/python -m alembic revision --autogenerate -m "$(MSG)"
 
 # Aplica todas as migrations pendentes
 migrate-up:
@@ -76,8 +79,8 @@ migrate-up:
 
 # Volta 1 migration (ou defina REV=-1 / <revision_id>)
 migrate-down:
-	./venv/bin/alembic downgrade $(or $(REV),-1)
+	./venv/bin/python -m alembic downgrade $(or $(REV),-1)
 
 # Mostra revisão atual aplicada no banco
 migrate-current:
-	./venv/bin/alembic current
+	./venv/bin/python -m alembic current
