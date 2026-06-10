@@ -11,8 +11,8 @@ Sucesso significa que usuarios autenticados conseguem operar apenas empresas per
 - FastAPI dependencies para autenticacao e autorizacao.
 - SQLAlchemy para usuarios, papeis e vinculos com empresas.
 - Pydantic para schemas.
-- Hash seguro de senha.
-- JWT bearer com access token para autenticacao inicial da API.
+- Hash seguro de senha com `pwdlib[argon2]`.
+- JWT bearer com access token criado e validado com `PyJWT`.
 - Pytest e FastAPI TestClient para cenarios de API.
 
 ## Comandos
@@ -84,6 +84,12 @@ def import_ledger(
 - A autenticacao inicial sera JWT bearer.
 - A primeira versao usara apenas access token, sem refresh token.
 - O access token tera expiracao de 12 horas.
+- `PyJWT` e `pwdlib[argon2]` sao compativeis com Python 3.12 e FastAPI para esta fase.
+- Tokens JWT serao assinados com `PyJWT` usando `HS256` e segredo vindo de variavel de ambiente.
+- O access token tera formato bearer e claims minimos: `sub` com o identificador do usuario, `role` com o papel global, `type` com valor `access`, `iat` com emissao e `exp` com expiracao.
+- Permissoes por empresa nao serao embutidas no token; devem ser consultadas no banco para evitar autorizacao desatualizada.
+- Hash de senha usara `pwdlib[argon2]` com `PasswordHash.recommended()`, armazenando hashes Argon2id.
+- Refresh token permanece fora desta fase e deve ser tratado em backlog proprio se necessario.
 - Os papeis globais iniciais serao `admin`, `contador` e `operador`.
 - As permissoes por empresa serao `leitura`, `operacao` e `admin_empresa`.
 - Apenas `admin` gerencia usuarios e permissoes na primeira versao.
@@ -95,6 +101,5 @@ def import_ledger(
 
 ## Open Questions
 
-- Qual biblioteca JWT/hash sera usada na implementacao?
 - Reset de senha sera manual por admin ou tera fluxo proprio em backlog?
 - Eventos de login devem entrar ja nesta spec ou ficar na spec de auditoria?
