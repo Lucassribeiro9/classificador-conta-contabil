@@ -28,17 +28,18 @@ def upgrade() -> None:
         sa.Column("email", sa.String(length=255), nullable=False),
         sa.Column("senha_hash", sa.String(length=255), nullable=False),
         sa.Column("papel", sa.String(length=20), nullable=False),
-        sa.Column("is_active", sa.Boolean(), nullable=False),
+        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text('true')),
         sa.Column(
             "created_at",
             sa.DateTime(),
-            server_default=sa.text("CURRENT_TIMESTAMP"),
+            server_default=sa.func.now(),
             nullable=False,
         ),
         sa.Column(
             "updated_at",
             sa.DateTime(),
-            server_default=sa.text("CURRENT_TIMESTAMP"),
+            server_default=sa.func.now(),
+            server_onupdate=sa.func.now(),
             nullable=False,
         ),
         sa.CheckConstraint(
@@ -59,21 +60,22 @@ def upgrade() -> None:
         sa.Column(
             "created_at",
             sa.DateTime(),
-            server_default=sa.text("CURRENT_TIMESTAMP"),
+            server_default=sa.func.now(),
             nullable=False,
         ),
         sa.Column(
             "updated_at",
             sa.DateTime(),
-            server_default=sa.text("CURRENT_TIMESTAMP"),
+            server_default=sa.func.now(),
+            server_onupdate=sa.func.now(),
             nullable=False,
         ),
         sa.CheckConstraint(
             "permissao IN ('leitura', 'operacao', 'admin_empresa')",
             name="ck_usuario_empresa_permissoes_permissao",
         ),
-        sa.ForeignKeyConstraint(["empresa_id"], ["empresas.id"]),
-        sa.ForeignKeyConstraint(["usuario_id"], ["usuarios.id"]),
+        sa.ForeignKeyConstraint(["empresa_id"], ["empresas.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["usuario_id"], ["usuarios.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
