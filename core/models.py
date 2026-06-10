@@ -3,6 +3,7 @@ from typing import Optional
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Column,
     Date,
     DateTime,
@@ -61,6 +62,92 @@ class Empresa(Base):
     # 'cascade' garante que ao deletar uma empresa, suas transações também sejam removidas
     transacoes: Mapped[list["Transacao"]] = relationship(
         "Transacao", back_populates="empresa", cascade="all, delete-orphan"
+    )
+
+    permissoes_usuarios: Mapped[list["UsuarioEmpresaPermissao"]] = relationship(
+        "UsuarioEmpresaPermissao",
+        back_populates="empresa",
+        cascade="all, delete-orphan",
+    )
+
+
+class Usuario(Base):
+    """
+    Representa um usuario interno do escritorio.
+    """
+
+    __tablename__ = "usuarios"
+    __table_args__ = (
+        CheckConstraint(
+            "papel IN ('admin', 'contador', 'operador')",
+            name="ck_usuarios_papel",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    nome: Mapped[str] = mapped_column(String(100), nullable=False)
+    login: Mapped[str] = mapped_column(
+        String(80), unique=True, index=True, nullable=False
+    )
+    email: Mapped[str] = mapped_column(
+        String(255), unique=True, index=True, nullable=False
+    )
+    senha_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    papel: Mapped[str] = mapped_column(String(20), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, onupdate=datetime.now, nullable=False
+    )
+
+    permissoes_empresas: Mapped[list["UsuarioEmpresaPermissao"]] = relationship(
+        "UsuarioEmpresaPermissao",
+        back_populates="usuario",
+        cascade="all, delete-orphan",
+    )
+
+
+class UsuarioEmpresaPermissao(Base):
+    """
+    Vincula um usuario interno a uma empresa com uma permissao operacional.
+    """
+
+    __tablename__ = "usuario_empresa_permissoes"
+    __table_args__ = (
+        CheckConstraint(
+            "permissao IN ('leitura', 'operacao', 'admin_empresa')",
+            name="ck_usuario_empresa_permissoes_permissao",
+        ),
+        Index(
+            "uq_usuario_empresa_permissoes_usuario_empresa",
+            "usuario_id",
+            "empresa_id",
+            unique=True,
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("usuarios.id"), nullable=False
+    )
+    empresa_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("empresas.id"), nullable=False
+    )
+    permissao: Mapped[str] = mapped_column(String(20), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, onupdate=datetime.now, nullable=False
+    )
+
+    usuario: Mapped["Usuario"] = relationship(
+        "Usuario", back_populates="permissoes_empresas"
+    )
+    empresa: Mapped["Empresa"] = relationship(
+        "Empresa", back_populates="permissoes_usuarios"
     )
 
 
