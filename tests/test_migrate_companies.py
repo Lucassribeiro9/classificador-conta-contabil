@@ -163,6 +163,26 @@ def test_migrate_companies_is_idempotent_and_updates_existing_company(tmp_path):
     assert companies[0].is_active is False
 
 
+def test_migrate_companies_second_run_without_changes_does_not_duplicate_or_update(
+    tmp_path,
+):
+    source_url = _create_source_database(tmp_path / "source.db")
+    target_url = _create_target_database(tmp_path / "target.db")
+    _insert_source_company(source_url)
+
+    first_result = migrate_companies(source_url, target_url)
+    second_result = migrate_companies(source_url, target_url)
+
+    with _target_session(target_url) as session:
+        companies = session.query(Empresa).all()
+
+    assert first_result.created == 1
+    assert first_result.updated == 0
+    assert second_result.created == 0
+    assert second_result.updated == 0
+    assert len(companies) == 1
+
+
 def test_migrate_companies_cli_requires_explicit_source_and_target_urls(tmp_path):
     source_url = _create_source_database(tmp_path / "source.db")
     target_url = _create_target_database(tmp_path / "target.db")
@@ -188,6 +208,40 @@ def test_migrate_companies_cli_requires_explicit_source_and_target_urls(tmp_path
 
     assert "created=1, updated=0" in result.stdout
     assert len(companies) == 1
+
+
+def test_migrate_companies_rejects_source_matching_multiple_target_companies(tmp_path):
+    source_url = _create_source_database(tmp_path / "source.db")
+    target_url = _create_target_database(tmp_path / "target.db")
+
+    _insert_source_company(
+        source_url,
+        cnpj_cpf="12345678000199",
+        api_key="api-key-origem",
+        cod_dominio=1001,
+    )
+
+    with _target_session(target_url) as session:
+        session.add(
+            Empresa(
+                nome_empresa="Empresa com CNPJ",
+                cnpj_cpf="12345678000199",
+                api_key="api-key-cnpj",
+                cod_dominio=2001,
+            )
+        )
+        session.add(
+            Empresa(
+                nome_empresa="Empresa com API key",
+                cnpj_cpf="99999999000199",
+                api_key="api-key-origem",
+                cod_dominio=2002,
+            )
+        )
+        session.commit()
+
+    with pytest.raises(CompanyMigrationConflict, match="multiple target companies"):
+        migrate_companies(source_url, target_url)
 
 
 @pytest.mark.parametrize(

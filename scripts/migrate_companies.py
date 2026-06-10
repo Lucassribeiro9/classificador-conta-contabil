@@ -122,6 +122,17 @@ def _apply_company_fields(target: Empresa, source_company: dict[str, Any]) -> No
         target.created_at = source_company["created_at"]
 
 
+def _company_needs_update(target: Empresa, source_company: dict[str, Any]) -> bool:
+    fields = ("nome_empresa", "cnpj_cpf", "api_key", "cod_dominio", "is_active")
+    if any(getattr(target, field) != source_company[field] for field in fields):
+        return True
+
+    if source_company.get("created_at") is not None:
+        return target.created_at != source_company["created_at"]
+
+    return False
+
+
 def migrate_companies(source_sqlite_url: str, target_database_url: str) -> CompanyMigrationResult:
     source_companies = _source_company_rows(source_sqlite_url)
     target_engine = create_engine(target_database_url)
@@ -146,8 +157,9 @@ def migrate_companies(source_sqlite_url: str, target_database_url: str) -> Compa
                 session.add(target_company)
                 created += 1
             else:
-                _apply_company_fields(target_company, source_company)
-                updated += 1
+                if _company_needs_update(target_company, source_company):
+                    _apply_company_fields(target_company, source_company)
+                    updated += 1
 
         session.commit()
 
