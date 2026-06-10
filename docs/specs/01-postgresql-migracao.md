@@ -91,7 +91,8 @@ DATABASE_URL = "postgresql+psycopg://user:password@postgres:5432/classificador"
 - Credenciais de desenvolvimento serao documentadas em `.env.example` com valores ficticios/locais.
 - A estrategia inicial de backup sera manual via `pg_dump`/`pg_restore`, documentada em `docs/postgresql-operacao.md`; automacao, retencao, criptografia, armazenamento externo e teste recorrente de restore ficam como backlog operacional.
 - Testes de integracao com PostgreSQL serao executados por `make test-postgres`, em fluxo separado da suite unitaria.
+- A base ORM usa `sqlalchemy.orm.DeclarativeBase`, mantendo `Base.metadata` como fonte para modelos e Alembic.
 
 ## Open Questions
 
-- A migracao para `sqlalchemy.orm.DeclarativeBase` sera feita junto desta spec ou como issue tecnica separada?
+Nenhuma pergunta aberta nesta spec.
