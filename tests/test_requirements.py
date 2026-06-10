@@ -27,3 +27,11 @@ def test_postgresql_driver_psycopg_v3_declared_without_removing_existing_databas
     assert "sqlalchemy" in requirements
     assert "binary" in requirements["psycopg"].extras
     assert requirements["psycopg"].specifier.contains("3.2.13", prereleases=False)
+
+
+def test_password_hash_pwdlib_argon2_declared_for_auth_bootstrap():
+    requirements = _requirements_by_name()
+
+    assert "pwdlib" in requirements
+    assert "argon2" in requirements["pwdlib"].extras
+    assert requirements["pwdlib"].specifier.contains("0.3.0", prereleases=False)
