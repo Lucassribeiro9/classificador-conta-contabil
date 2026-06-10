@@ -7,7 +7,8 @@ SERVICE_API := api-contabil
 SERVICES_INFRA := n8n-test ngrok
 # Agrupa todos os serviços para comandos de build/rebuild completos
 SERVICES_ALL := $(SERVICE_API) $(SERVICES_INFRA)
-
+# Serviço do banco de dados PostgreSQL (usado para logs e testes)
+SERVICE_DB := postgres
 # Declara targets "falsos" para evitar conflito com arquivos de mesmo nome
 .PHONY: build rebuild build-all rebuild-all up up-with-test up-api up-infra up-build down logs shell clean-cache test migrate-create migrate-up migrate-down migrate-current
 
@@ -42,6 +43,9 @@ up-api:
 up-infra:
 	$(DOCKER_COMPOSE) up -d $(SERVICES_INFRA)
 
+# Sobe a API e o banco de dados (útil para testes e logs)
+up-api-db:
+	$(DOCKER_COMPOSE) up -d $(SERVICE_API) $(SERVICE_DB)
 # Sobe todos os serviços forçando build das imagens
 up-build:
 	$(DOCKER_COMPOSE) up -d --build
