@@ -25,4 +25,5 @@ def test_postgresql_driver_psycopg_v3_declared_without_removing_existing_databas
     assert "psycopg" in requirements
     assert "psycopg2" not in requirements
     assert "sqlalchemy" in requirements
+    assert "binary" in requirements["psycopg"].extras
     assert requirements["psycopg"].specifier.contains("3.2.13", prereleases=False)
