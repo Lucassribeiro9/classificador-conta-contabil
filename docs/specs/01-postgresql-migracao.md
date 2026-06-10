@@ -21,6 +21,7 @@ Sucesso significa que a aplicacao consegue rodar com PostgreSQL via variavel de 
 - Aplicar migrations: `.\venv\Scripts\python.exe -m alembic upgrade head`
 - Revisao atual: `.\venv\Scripts\python.exe -m alembic current`
 - Testes: `.\venv\Scripts\python.exe -m pytest -q tests`
+- Testes de integracao PostgreSQL: `make test-postgres`
 
 ## Project Structure
 
@@ -46,6 +47,7 @@ DATABASE_URL = "postgresql+psycopg://user:password@postgres:5432/classificador"
 - Testar que modelos atuais continuam persistindo em sessao de teste.
 - Validar migrations em ambiente controlado.
 - Manter testes existentes com banco isolado quando apropriado.
+- Manter testes de integracao PostgreSQL em comando dedicado para nao exigir Docker na suite unitaria.
 - Adicionar checagem de configuracao para evitar `check_same_thread` em PostgreSQL.
 
 ## Boundaries
@@ -74,6 +76,7 @@ DATABASE_URL = "postgresql+psycopg://user:password@postgres:5432/classificador"
 - Reexecutar a migracao de empresas nao duplica registros.
 - `.env.example` documenta credenciais locais ficticias e variaveis necessarias.
 - Riscos de backup e migracao estao documentados.
+- Comando dedicado valida migrations e `/health` contra PostgreSQL real sem interferir nos testes unitarios.
 
 ## Decisoes Aprovadas
 
@@ -87,8 +90,8 @@ DATABASE_URL = "postgresql+psycopg://user:password@postgres:5432/classificador"
 - PostgreSQL nao tera porta publica exposta.
 - Credenciais de desenvolvimento serao documentadas em `.env.example` com valores ficticios/locais.
 - A estrategia inicial de backup sera manual via `pg_dump`/`pg_restore`, documentada em `docs/postgresql-operacao.md`; automacao, retencao, criptografia, armazenamento externo e teste recorrente de restore ficam como backlog operacional.
+- Testes de integracao com PostgreSQL serao executados por `make test-postgres`, em fluxo separado da suite unitaria.
 
 ## Open Questions
 
-- Testes de integracao com PostgreSQL entrarao nesta fase ou em backlog posterior?
 - A migracao para `sqlalchemy.orm.DeclarativeBase` sera feita junto desta spec ou como issue tecnica separada?

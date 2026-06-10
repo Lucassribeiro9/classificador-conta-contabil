@@ -27,9 +27,11 @@ env/
 *.bak
 
 # Test and docs not needed in runtime image
-tests/
+tests/*
 test_*.py
 *_test.py
+!tests/integration/
+!tests/integration/**
 README.md
 PLANO_IMPLEMENTACAO.md
 impl_plan.html
