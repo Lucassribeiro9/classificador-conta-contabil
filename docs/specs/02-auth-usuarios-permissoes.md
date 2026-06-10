@@ -20,6 +20,7 @@ Sucesso significa que usuarios autenticados conseguem operar apenas empresas per
 - Testes: `.\venv\Scripts\python.exe -m pytest -q tests`
 - API local: `.\venv\Scripts\python.exe -m uvicorn api.main:app --reload`
 - Migrations: `.\venv\Scripts\python.exe -m alembic upgrade head`
+- Bootstrap do primeiro admin: `.\venv\Scripts\python.exe -m scripts.bootstrap_admin --nome "Admin" --login admin --email admin@example.com`
 
 ## Project Structure
 
