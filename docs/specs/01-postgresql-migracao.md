@@ -80,15 +80,15 @@ DATABASE_URL = "postgresql+psycopg://user:password@postgres:5432/classificador"
 - PostgreSQL sera o banco operacional alvo.
 - SQLite fica como legado e/ou banco de teste quando util.
 - A migracao de dados existentes sera obrigatoria apenas para empresas.
-- Transacoes e classificacoes antigas ficam fora da migracao inicial e podem virar backlog.
+- Transacoes e classificacoes antigas ficam fora da migracao inicial e podem virar backlog conforme `docs/postgresql-operacao.md`.
 - A migracao de empresas sera feita por script SQLite -> PostgreSQL, controlado e idempotente.
 - O driver PostgreSQL sera `psycopg` v3.
 - A API usara `DATABASE_URL` como fonte unica da conexao.
 - PostgreSQL nao tera porta publica exposta.
 - Credenciais de desenvolvimento serao documentadas em `.env.example` com valores ficticios/locais.
+- A estrategia inicial de backup sera manual via `pg_dump`/`pg_restore`, documentada em `docs/postgresql-operacao.md`; automacao, retencao, criptografia, armazenamento externo e teste recorrente de restore ficam como backlog operacional.
 
 ## Open Questions
 
-- Backup sera script local, volume versionado por rotina externa ou ferramenta do servidor?
 - Testes de integracao com PostgreSQL entrarao nesta fase ou em backlog posterior?
 - A migracao para `sqlalchemy.orm.DeclarativeBase` sera feita junto desta spec ou como issue tecnica separada?
