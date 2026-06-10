@@ -1,6 +1,8 @@
 # Comandos facilitadores
 # Usa o plugin moderno do Docker Compose (`docker compose`)
 DOCKER_COMPOSE := docker compose
+# Projeto Docker Compose isolado para testes de integracao PostgreSQL
+DOCKER_COMPOSE_TEST := docker compose -p classificador-conta-contabil-test
 # Nome do serviço principal da API no `docker-compose.yml`
 SERVICE_API := api-contabil
 # Serviços auxiliares de infraestrutura (orquestração e túnel)
@@ -10,7 +12,7 @@ SERVICES_ALL := $(SERVICE_API) $(SERVICES_INFRA)
 # Serviço do banco de dados PostgreSQL (usado para logs e testes)
 SERVICE_DB := postgres
 # Declara targets "falsos" para evitar conflito com arquivos de mesmo nome
-.PHONY: build rebuild build-all rebuild-all up up-with-test up-api up-infra up-build down logs shell clean-cache test migrate-create migrate-up migrate-down migrate-current
+.PHONY: build rebuild build-all rebuild-all up up-with-test up-api up-infra up-build down logs shell clean-cache test test-postgres migrate-create migrate-up migrate-down migrate-current
 
 # Build da imagem da API usando cache (mais rápido no dia a dia)
 build:
@@ -69,6 +71,12 @@ clean-cache:
 # Executa os testes do projeto no ambiente virtual local
 test:
 	./venv/bin/python -m pytest -q tests
+
+# Executa testes de integracao reais contra PostgreSQL na rede Docker
+test-postgres:
+	$(DOCKER_COMPOSE_TEST) up -d --build $(SERVICE_API) $(SERVICE_DB)
+	$(DOCKER_COMPOSE_TEST) run --rm $(SERVICE_API) sh -c "python -m alembic upgrade head && python -m pytest -q -m integration_postgres tests/integration"
+	$(DOCKER_COMPOSE_TEST) down -v
 
 # Executa testes no ambiente Windows
 test-win:
