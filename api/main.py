@@ -3,7 +3,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from api.dependencies import get_db
-from api.routes import auth, classification, companies, feedback, transactions
+from api.routes import auth, classification, companies, feedback, transactions, users
 
 
 app = FastAPI(title="Classificador contábil")
@@ -34,6 +34,7 @@ app.include_router(companies.router, prefix="/api/v1", tags=["Empresas"])
 app.include_router(transactions.router, prefix="/api/v1", tags=["Transações"])
 app.include_router(classification.router, prefix="/api/v1", tags=["Classificação"])
 app.include_router(feedback.router, prefix="/api/v1", tags=["Feedback"])
+app.include_router(users.router, prefix="/api/v1", tags=["Usuários"])
 
 
 @app.get("/")

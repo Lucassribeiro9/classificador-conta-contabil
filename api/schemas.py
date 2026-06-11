@@ -5,6 +5,8 @@ from pydantic import BaseModel, ConfigDict, field_validator
 
 # Os parametros passados nos modelos devem ser iguais aos do banco de dados
 
+ALLOWED_USER_ROLES = {"admin", "contador", "operador"}
+
 
 def normalize_optional_int(value):
     if value is None:
@@ -96,6 +98,33 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in: int
+
+
+class UsuarioCreate(BaseModel):
+    nome: str
+    login: str
+    email: str
+    senha: str
+    papel: str
+
+    @field_validator("papel")
+    @classmethod
+    def validate_papel(cls, value: str) -> str:
+        if value not in ALLOWED_USER_ROLES:
+            raise ValueError("Papel de usuário inválido")
+        return value
+
+
+class UsuarioResponse(BaseModel):
+    id: int
+    nome: str
+    login: str
+    email: str
+    papel: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Schemas para predição

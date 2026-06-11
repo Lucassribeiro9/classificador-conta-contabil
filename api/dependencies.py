@@ -64,6 +64,15 @@ def get_current_user(
     return usuario
 
 
+def require_global_admin(
+    current_user: Usuario = Depends(get_current_user),
+) -> Usuario:
+    """Restringe o acesso a usuarios com papel global de administrador."""
+    if current_user.papel != "admin":
+        raise HTTPException(status_code=403, detail="Acesso restrito a administradores")
+    return current_user
+
+
 def _has_minimum_permission(actual: str, required: str) -> bool:
     return PERMISSION_LEVELS[actual] >= PERMISSION_LEVELS[required]
 
