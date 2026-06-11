@@ -1,4 +1,6 @@
 import jwt
+from collections.abc import Callable
+
 from fastapi import Depends, Header, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import ExpiredSignatureError, InvalidTokenError
@@ -8,6 +10,11 @@ from core.models import Empresa, Usuario
 from core.database import SessionLocal
 
 bearer_scheme = HTTPBearer()
+PERMISSION_LEVELS = {
+    "leitura": 1,
+    "operacao": 2,
+    "admin_empresa": 3,
+}
 
 def require_admin_token(x_admin_token: str | None = Header(default=None, alias="X-Admin-Token")):
     if not x_admin_token:
@@ -55,6 +62,59 @@ def get_current_user(
         raise HTTPException(status_code=403, detail="Usuário inativo")
 
     return usuario
+
+
+def _has_minimum_permission(actual: str, required: str) -> bool:
+    return PERMISSION_LEVELS[actual] >= PERMISSION_LEVELS[required]
+
+
+def require_company_access(required_permission: str) -> Callable:
+    """Cria uma dependencia para validar acesso do usuario atual a uma empresa.
+
+    A permissao minima deve ser uma das permissoes aprovadas na spec:
+    `leitura`, `operacao` ou `admin_empresa`.
+
+    Regras:
+    - usuarios `admin` globais acessam a empresa sem vinculo explicito;
+    - usuarios sem vinculo recebem `403`;
+    - usuarios com permissao abaixo da exigida recebem `403`;
+    - empresa inexistente retorna `404`.
+    """
+    if required_permission not in PERMISSION_LEVELS:
+        raise ValueError("Permissão mínima inválida")
+
+    def dependency(
+        company_id: int,
+        current_user: Usuario = Depends(get_current_user),
+        db: Session = DB_DEPENDENCY,
+    ) -> Empresa:
+        empresa = db.get(Empresa, company_id)
+        if empresa is None:
+            raise HTTPException(status_code=404, detail="Empresa não encontrada")
+
+        if current_user.papel == "admin":
+            return empresa
+
+        permission_link = next(
+            (
+                permission
+                for permission in current_user.permissoes_empresas
+                if permission.empresa_id == company_id
+            ),
+            None,
+        )
+        if permission_link is None:
+            raise HTTPException(status_code=403, detail="Acesso negado")
+
+        if not _has_minimum_permission(
+            actual=permission_link.permissao,
+            required=required_permission,
+        ):
+            raise HTTPException(status_code=403, detail="Permissão insuficiente")
+
+        return empresa
+
+    return dependency
 
 
 def verify_api_key(
