@@ -87,6 +87,17 @@ class Empresa(EmpresaBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class LoginRequest(BaseModel):
+    login: str
+    senha: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+
+
 # Schemas para predição
 class PredictInput(BaseModel):
     historico: str
