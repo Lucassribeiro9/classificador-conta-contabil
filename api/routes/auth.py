@@ -14,6 +14,10 @@ from core.models import Usuario
 
 router = APIRouter(prefix="/auth")
 password_hash = PasswordHash.recommended()
+# Hash dummy pré-computado para evitar vazamento de existência de usuário via timing
+# Geramos um hash de uma senha fixa na carga do módulo e o reutilizamos para
+# comparações quando o usuário não existir.
+PRECOMPUTED_DUMMY_HASH = password_hash.hash("__precomputed_dummy_password__")
 ACCESS_TOKEN_EXPIRES_IN_SECONDS = 12 * 60 * 60
 
 
@@ -63,10 +67,12 @@ def login_for_access_token(
         .filter(or_(Usuario.login == credentials.login, Usuario.email == credentials.login))
         .first()
     )
-    if usuario is None or not password_hash.verify(
-        credentials.senha,
-        usuario.senha_hash if usuario is not None else "",
-    ):
+    # Seleciona o hash a verificar: o hash do usuário quando existir ou
+    # um hash dummy pré-computado quando não existir. Assim sempre chamamos
+    # `password_hash.verify(...)` e evitamos vazamento por timing.
+    hash_to_check = usuario.senha_hash if usuario is not None else PRECOMPUTED_DUMMY_HASH
+    senha_valida = password_hash.verify(credentials.senha, hash_to_check)
+    if usuario is None or not senha_valida:
         raise HTTPException(status_code=401, detail="Credenciais inválidas")
 
     if not usuario.is_active:
