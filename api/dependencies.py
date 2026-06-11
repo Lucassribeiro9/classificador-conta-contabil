@@ -1,8 +1,13 @@
+import jwt
 from fastapi import Depends, Header, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jwt import ExpiredSignatureError, InvalidTokenError
 from sqlalchemy.orm import Session
 from core.config import settings
-from core.models import Empresa
+from core.models import Empresa, Usuario
 from core.database import SessionLocal
+
+bearer_scheme = HTTPBearer()
 
 def require_admin_token(x_admin_token: str | None = Header(default=None, alias="X-Admin-Token")):
     if not x_admin_token:
@@ -18,6 +23,38 @@ def get_db():
 
 
 DB_DEPENDENCY = Depends(get_db)
+
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    db: Session = DB_DEPENDENCY,
+) -> Usuario:
+    try:
+        payload = jwt.decode(
+            credentials.credentials,
+            settings.JWT_SECRET_KEY,
+            algorithms=[settings.JWT_ALGORITHM],
+        )
+    except ExpiredSignatureError as exc:
+        raise HTTPException(status_code=401, detail="Token expirado") from exc
+    except InvalidTokenError as exc:
+        raise HTTPException(status_code=401, detail="Token inválido") from exc
+
+    if payload.get("type") != "access":
+        raise HTTPException(status_code=401, detail="Token inválido")
+
+    try:
+        usuario_id = int(payload["sub"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=401, detail="Token inválido") from exc
+
+    usuario = db.get(Usuario, usuario_id)
+    if usuario is None:
+        raise HTTPException(status_code=401, detail="Token inválido")
+    if not usuario.is_active:
+        raise HTTPException(status_code=403, detail="Usuário inativo")
+
+    return usuario
 
 
 def verify_api_key(

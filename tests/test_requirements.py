@@ -35,3 +35,10 @@ def test_password_hash_pwdlib_argon2_declared_for_auth_bootstrap():
     assert "pwdlib" in requirements
     assert "argon2" in requirements["pwdlib"].extras
     assert requirements["pwdlib"].specifier.contains("0.3.0", prereleases=False)
+
+
+def test_jwt_library_pyjwt_declared_for_auth_dependencies():
+    requirements = _requirements_by_name()
+
+    assert "pyjwt" in requirements
+    assert requirements["pyjwt"].specifier.contains("2.10.1", prereleases=False)

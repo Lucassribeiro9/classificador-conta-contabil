@@ -5,6 +5,8 @@ import os
 class Settings(BaseSettings):
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./data/classificador.db")
     ADMIN_TOKEN: str = os.getenv("ADMIN_TOKEN", "")
+    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "")
+    JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
 
     model_config = SettingsConfigDict(
         env_file=".env", extra="ignore"  # Ignora variáveis de ambiente extras

@@ -108,6 +108,7 @@ pydeck==0.9.1
 pwdlib[argon2]==0.3.0
 psycopg[binary]==3.2.13
 Pygments==2.19.2
+PyJWT==2.10.1
 pyparsing==3.2.5
 pytest==8.4.2
 pytest-timeout==2.4.0
