@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, field_validator
 # Os parametros passados nos modelos devem ser iguais aos do banco de dados
 
 ALLOWED_USER_ROLES = {"admin", "contador", "operador"}
+ALLOWED_COMPANY_PERMISSIONS = {"leitura", "operacao", "admin_empresa"}
 
 
 def normalize_optional_int(value):
@@ -122,6 +123,27 @@ class UsuarioResponse(BaseModel):
     email: str
     papel: str
     is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UsuarioEmpresaPermissaoCreate(BaseModel):
+    permissao: str
+
+    @field_validator("permissao")
+    @classmethod
+    def validate_permissao(cls, value: str) -> str:
+        if value not in ALLOWED_COMPANY_PERMISSIONS:
+            raise ValueError("Permissão inválida")
+        return value
+
+
+class UsuarioEmpresaPermissaoResponse(BaseModel):
+    id: int
+    usuario_id: int
+    empresa_id: int
+    permissao: str
     created_at: datetime
     updated_at: datetime
     model_config = ConfigDict(from_attributes=True)
