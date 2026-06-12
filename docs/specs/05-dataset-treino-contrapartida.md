@@ -58,7 +58,7 @@ Exemplo de metadados esperados:
 - Testar que historico, origem e direcao compoem as features iniciais.
 - Testar que linhas sem contrapartida valida ficam fora ou marcadas conforme decisao da spec de razao.
 - Testar dataset vazio ou insuficiente.
-- Testar que origem financeira vem da flag persistida no catalogo.
+- Testar que origem financeira vem da flag persistida `is_financial_origin` no catalogo.
 - Testar que target precisa ser conta analitica existente.
 - Testar que valor bruto nao entra nas features da primeira versao.
 - Testar que metadados retornam total, descartes e contagem por target.
@@ -68,7 +68,7 @@ Exemplo de metadados esperados:
 - Sempre: usar contrapartida como target inicial.
 - Sempre: preservar empresa como escopo do dataset.
 - Sempre: evitar misturar lancamentos de empresas diferentes.
-- Sempre: usar a flag persistida do catalogo para identificar origem financeira.
+- Sempre: usar a flag persistida `is_financial_origin` do catalogo para identificar origem financeira.
 - Sempre: usar apenas lancamentos normalizados validos.
 - Sempre: usar apenas contas analiticas existentes como target.
 - Sempre: retornar metadados do dataset.
@@ -76,7 +76,7 @@ Exemplo de metadados esperados:
 - Perguntar antes: incluir contas sinteticas como target.
 - Perguntar antes: usar valor monetario bruto como feature.
 - Nunca: treinar com conta de origem como alvo quando a origem e banco/caixa.
-- Nunca: recalcular heuristica financeira no builder ignorando a flag persistida.
+- Nunca: recalcular heuristica financeira no builder ignorando a flag persistida `is_financial_origin`.
 - Nunca: misturar empresas no dataset inicial.
 
 ## Success Criteria
@@ -92,7 +92,7 @@ Exemplo de metadados esperados:
 ## Decisoes Aprovadas
 
 - O dataset sera gerado por empresa.
-- Origem financeira sera definida pela flag persistida no catalogo, como `is_financial_origin`.
+- Origem financeira sera definida pela flag persistida `is_financial_origin` no catalogo.
 - A heuristica de banco/caixa/aplicacao pertence a spec de plano de contas, nao ao builder.
 - O dataset usara apenas lancamentos normalizados validos.
 - O dataset usara apenas origem financeira.
@@ -110,6 +110,5 @@ Exemplo de metadados esperados:
 
 ## Open Questions
 
-- O nome final da flag financeira sera `is_financial_origin` ou outro definido na spec de plano de contas?
 - O campo `historico_normalizado` sera persistido no lancamento ou calculado no builder?
 - O criterio de treinabilidade ficara no builder como metadado ou apenas no ML?
