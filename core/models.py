@@ -151,6 +151,37 @@ class UsuarioEmpresaPermissao(Base):
     )
 
 
+class ContaContabil(Base):
+    """
+    Representa uma conta do catalogo unico do plano de contas do escritorio.
+    """
+
+    __tablename__ = "contas_contabeis"
+    __table_args__ = (
+        CheckConstraint(
+            "tipo IN ('A', 'S')",
+            name="ck_contas_contabeis_tipo",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    codigo: Mapped[int] = mapped_column(Integer, unique=True, index=True, nullable=False)
+    classificacao: Mapped[str] = mapped_column(String(80), nullable=False)
+    nome: Mapped[str] = mapped_column(String(255), nullable=False)
+    tipo: Mapped[str] = mapped_column(String(1), nullable=False)
+    grau: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_financial_origin: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, onupdate=datetime.now, nullable=False
+    )
+
+
 class Transacao(Base):
     """
     Representa uma movimentação financeira de uma empresa.
