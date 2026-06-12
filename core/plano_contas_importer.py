@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from core.models import ContaContabil
+from core.plano_contas_financeiro import infer_is_financial_origin
 
 
 @dataclass(frozen=True)
@@ -80,7 +81,7 @@ def _normalize_conta(raw_conta: dict[str, Any]) -> dict[str, Any] | None:
         "nome": str(raw_conta["nome"]).strip(),
         "tipo": tipo,
         "grau": grau,
-        "is_financial_origin": bool(raw_conta.get("is_financial_origin", False)),
+        "is_financial_origin": _financial_origin_flag(raw_conta),
     }
 
 
@@ -103,3 +104,13 @@ def _apply_changes(conta: ContaContabil, conta_data: dict[str, Any]) -> bool:
 
 def _is_blank(value: Any) -> bool:
     return value is None or str(value).strip() == ""
+
+
+def _financial_origin_flag(raw_conta: dict[str, Any]) -> bool:
+    if "is_financial_origin" in raw_conta:
+        return bool(raw_conta["is_financial_origin"])
+
+    return infer_is_financial_origin(
+        nome=str(raw_conta["nome"]),
+        classificacao=str(raw_conta["classificacao"]),
+    )
