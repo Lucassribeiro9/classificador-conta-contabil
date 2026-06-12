@@ -64,8 +64,8 @@ Exemplo de shape esperado:
 - Sempre: separar parse de persistencia.
 - Sempre: manter contas ausentes em uma nova importacao como ativas por padrao.
 - Sempre: restringir importacao do plano de contas a usuarios `admin`.
-- Sempre: identificar contas de banco/caixa/aplicacao por heuristica inicial e flag persistida.
-- Sempre: permitir que a flag financeira seja revisada futuramente sem alterar os campos oficiais do plano.
+- Sempre: identificar contas de banco/caixa/aplicacao por heuristica inicial e flag persistida `is_financial_origin`.
+- Sempre: permitir que `is_financial_origin` seja revisada futuramente sem alterar os campos oficiais do plano.
 - Perguntar antes: excluir ou inativar contas que sumiram de uma nova importacao.
 - Perguntar antes: permitir edicao manual de conta no catalogo.
 - Nunca: criar catalogo separado por cliente nesta fase.
@@ -79,7 +79,7 @@ Exemplo de shape esperado:
 - Contas analiticas e sinteticas sao distinguiveis.
 - Contas podem ser usadas por vinculos de empresa e dataset.
 - Contas ausentes em nova importacao nao sao inativadas automaticamente.
-- Contas candidatas a origem financeira possuem flag persistida.
+- Contas candidatas a origem financeira possuem a flag persistida `is_financial_origin`.
 - Importacao do plano exige usuario admin.
 - Testes cobrem parser e idempotencia.
 
@@ -94,11 +94,11 @@ Exemplo de shape esperado:
 - Contas ausentes nao serao excluidas nem inativadas automaticamente.
 - A importacao do plano sera restrita a usuarios `admin`.
 - Contas de banco/caixa/aplicacao serao identificadas por heuristica inicial e flag persistida.
+- O nome da flag persistida de origem financeira sera `is_financial_origin`.
 - Campos oficiais do plano (`codigo`, `classificacao`, `nome`, `tipo`, `grau`) nao terao edicao manual na primeira fase.
 - Parser e persistencia permanecem separados.
 
 ## Open Questions
 
-- Qual sera o nome final da flag financeira: `is_financial_origin`, `is_conta_financeira` ou outro?
 - A heuristica financeira usara apenas `nome` e `classificacao`, ou tambem `grau`?
 - A revisao manual da flag financeira entra nesta fase ou apenas em backlog?
