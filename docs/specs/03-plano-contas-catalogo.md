@@ -95,10 +95,10 @@ Exemplo de shape esperado:
 - A importacao do plano sera restrita a usuarios `admin`.
 - Contas de banco/caixa/aplicacao serao identificadas por heuristica inicial e flag persistida.
 - O nome da flag persistida de origem financeira sera `is_financial_origin`.
+- A heuristica inicial de origem financeira usara `nome` e `classificacao`.
 - Campos oficiais do plano (`codigo`, `classificacao`, `nome`, `tipo`, `grau`) nao terao edicao manual na primeira fase.
 - Parser e persistencia permanecem separados.
 
 ## Open Questions
 
-- A heuristica financeira usara apenas `nome` e `classificacao`, ou tambem `grau`?
 - A revisao manual da flag financeira entra nesta fase ou apenas em backlog?
