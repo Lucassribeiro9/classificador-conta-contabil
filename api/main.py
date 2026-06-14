@@ -35,7 +35,16 @@ app.include_router(transactions.router, prefix="/api/v1", tags=["Transações"])
 app.include_router(classification.router, prefix="/api/v1", tags=["Classificação"])
 app.include_router(feedback.router, prefix="/api/v1", tags=["Feedback"])
 app.include_router(users.router, prefix="/api/v1", tags=["Usuários"])
-app.include_router(plano_contas.router, prefix="/api/v1", tags=["Plano de Contas"])
+app.include_router(
+    plano_contas.admin_router,
+    prefix="/api/v1",
+    tags=["Plano de Contas"],
+)
+app.include_router(
+    plano_contas.catalog_router,
+    prefix="/api/v1",
+    tags=["Plano de Contas"],
+)
 
 
 @app.get("/")

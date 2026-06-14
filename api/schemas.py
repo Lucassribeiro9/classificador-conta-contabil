@@ -156,6 +156,20 @@ class ImportacaoPlanoContasResponse(BaseModel):
     invalidas: int
 
 
+class ContaContabilResponse(BaseModel):
+    id: int
+    codigo: int
+    classificacao: str
+    nome: str
+    tipo: str
+    grau: int
+    is_active: bool
+    is_financial_origin: bool
+    created_at: datetime
+    updated_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
 # Schemas para predição
 class PredictInput(BaseModel):
     historico: str
