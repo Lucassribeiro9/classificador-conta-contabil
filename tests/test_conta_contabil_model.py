@@ -83,3 +83,21 @@ def test_conta_contabil_rejects_unknown_type(session):
 
     with pytest.raises(IntegrityError):
         session.commit()
+
+
+def test_conta_contabil_analytic_active_account_is_classificavel():
+    conta = _conta_contabil(tipo="A", is_active=True)
+
+    assert conta.is_classificavel is True
+
+
+def test_conta_contabil_synthetic_account_is_not_classificavel():
+    conta = _conta_contabil(tipo="S", is_active=True)
+
+    assert conta.is_classificavel is False
+
+
+def test_conta_contabil_inactive_account_is_not_classificavel():
+    conta = _conta_contabil(tipo="A", is_active=False)
+
+    assert conta.is_classificavel is False
