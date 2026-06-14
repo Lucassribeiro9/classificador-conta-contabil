@@ -149,6 +149,13 @@ class UsuarioEmpresaPermissaoResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ImportacaoPlanoContasResponse(BaseModel):
+    criadas: int
+    atualizadas: int
+    ignoradas: int
+    invalidas: int
+
+
 # Schemas para predição
 class PredictInput(BaseModel):
     historico: str
