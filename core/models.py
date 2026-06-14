@@ -181,6 +181,11 @@ class ContaContabil(Base):
         DateTime, default=datetime.now, onupdate=datetime.now, nullable=False
     )
 
+    @property
+    def is_classificavel(self) -> bool:
+        """Indica se a conta pode ser usada como alvo de classificacao."""
+        return self.is_active and self.tipo == "A"
+
 
 class Transacao(Base):
     """
