@@ -97,6 +97,29 @@ def normalize_lancamento_razao(lancamento: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def normalize_razao_historico(historico: Any) -> str:
+    return " ".join(str(historico).strip().lower().split())
+
+
+def build_razao_dedup_key(lancamento: dict[str, Any]) -> tuple[Any, ...]:
+    historico_normalizado = lancamento.get("historico_normalizado")
+    if _is_blank_value(historico_normalizado):
+        historico_normalizado = normalize_razao_historico(
+            lancamento.get("historico", "")
+        )
+
+    return (
+        lancamento.get("empresa_id"),
+        lancamento.get("numero_lancamento"),
+        lancamento.get("data"),
+        lancamento.get("conta_origem"),
+        lancamento.get("conta_contrapartida"),
+        lancamento.get("valor"),
+        lancamento.get("direcao"),
+        historico_normalizado,
+    )
+
+
 def _extract_account_block(row: tuple[Any, ...]) -> str | None:
     for index, value in enumerate(row):
         text = _clean_text(value)

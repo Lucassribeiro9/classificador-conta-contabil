@@ -2,8 +2,10 @@ import pytest
 from openpyxl import Workbook
 
 from core.razao_parser import (
+    build_razao_dedup_key,
     RazaoParseError,
     normalize_lancamento_razao,
+    normalize_razao_historico,
     parse_razao_xlsx,
 )
 
@@ -132,3 +134,61 @@ def test_normalize_razao_line_without_debit_or_credit_raises_clear_error():
                 "credito": None,
             }
         )
+
+
+def test_normalize_razao_historico_is_stable_for_case_and_extra_spaces():
+    assert (
+        normalize_razao_historico("  Pagamento   FORNECEDOR  ")
+        == "pagamento fornecedor"
+    )
+
+
+def test_build_razao_dedup_key_is_stable_for_equivalent_history_text():
+    base_lancamento = {
+        "empresa_id": 7,
+        "numero_lancamento": "42",
+        "data": "2026-01-02",
+        "conta_origem": "10046",
+        "conta_contrapartida": "20001",
+        "valor": 250.75,
+        "direcao": "debito",
+        "historico": "Pagamento fornecedor",
+    }
+    equivalent_lancamento = {
+        **base_lancamento,
+        "historico": "  PAGAMENTO   fornecedor  ",
+    }
+
+    assert build_razao_dedup_key(base_lancamento) == build_razao_dedup_key(
+        equivalent_lancamento
+    )
+
+
+@pytest.mark.parametrize(
+    "changed_fields",
+    [
+        {"empresa_id": 8},
+        {"numero_lancamento": "43"},
+        {"data": "2026-01-03"},
+        {"valor": 300.00},
+        {"direcao": "credito"},
+        {"conta_origem": "10047"},
+        {"conta_contrapartida": "20002"},
+    ],
+)
+def test_build_razao_dedup_key_changes_for_composite_key_fields(changed_fields):
+    base_lancamento = {
+        "empresa_id": 7,
+        "numero_lancamento": "42",
+        "data": "2026-01-02",
+        "conta_origem": "10046",
+        "conta_contrapartida": "20001",
+        "valor": 250.75,
+        "direcao": "debito",
+        "historico": "Pagamento fornecedor",
+    }
+    changed_lancamento = {**base_lancamento, **changed_fields}
+
+    assert build_razao_dedup_key(base_lancamento) != build_razao_dedup_key(
+        changed_lancamento
+    )
