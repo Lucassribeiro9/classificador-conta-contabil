@@ -12,6 +12,8 @@ services:
 
       - DATABASE_URL=${DATABASE_URL}
       - ADMIN_TOKEN=${ADMIN_TOKEN}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
     restart: unless-stopped
     command: sh -c "alembic upgrade head && uvicorn api.main:app --host 0.0.0.0 --port 8000"
     depends_on:
