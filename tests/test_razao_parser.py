@@ -1,0 +1,63 @@
+import pytest
+from openpyxl import Workbook
+
+from core.razao_parser import RazaoParseError, parse_razao_xlsx
+
+
+def _write_workbook(path, rows):
+    workbook = Workbook()
+    sheet = workbook.active
+    for row in rows:
+        sheet.append(row)
+    workbook.save(path)
+    workbook.close()
+
+
+def test_parse_razao_detects_account_blocks_and_ignores_report_noise(tmp_path):
+    xlsx_path = tmp_path / "razao.xlsx"
+    _write_workbook(
+        xlsx_path,
+        [
+            ["Livro Razao"],
+            [],
+            ["Conta:", "10046", "BCO. SANTANDER"],
+            ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito"],
+            ["Saldo anterior", None, None, None, 1000, None],
+            [],
+            ["2026-01-02", "42", "Pagamento fornecedor", "20001", 250.75, None],
+            ["Conta:", "20001", "FORNECEDORES"],
+            ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito"],
+            ["2026-01-03", "43", "Baixa fornecedor", "10046", None, 250.75],
+        ],
+    )
+
+    lancamentos = parse_razao_xlsx(xlsx_path)
+
+    assert lancamentos == [
+        {
+            "conta_origem": "10046",
+            "data": "2026-01-02",
+            "numero": "42",
+            "historico": "Pagamento fornecedor",
+            "contrapartida": "20001",
+            "debito": 250.75,
+            "credito": None,
+        },
+        {
+            "conta_origem": "20001",
+            "data": "2026-01-03",
+            "numero": "43",
+            "historico": "Baixa fornecedor",
+            "contrapartida": "10046",
+            "debito": None,
+            "credito": 250.75,
+        },
+    ]
+
+
+def test_parse_razao_rejects_non_xlsx_files(tmp_path):
+    csv_path = tmp_path / "razao.csv"
+    csv_path.write_text("Conta:,10046\n", encoding="utf-8")
+
+    with pytest.raises(RazaoParseError, match="xlsx"):
+        parse_razao_xlsx(csv_path)
