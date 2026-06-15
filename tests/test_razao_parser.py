@@ -1,7 +1,11 @@
 import pytest
 from openpyxl import Workbook
 
-from core.razao_parser import RazaoParseError, parse_razao_xlsx
+from core.razao_parser import (
+    RazaoParseError,
+    normalize_lancamento_razao,
+    parse_razao_xlsx,
+)
 
 
 def _write_workbook(path, rows):
@@ -61,3 +65,70 @@ def test_parse_razao_rejects_non_xlsx_files(tmp_path):
 
     with pytest.raises(RazaoParseError, match="xlsx"):
         parse_razao_xlsx(csv_path)
+
+
+def test_normalize_razao_debit_line_uses_block_account_as_debit_side():
+    lancamento = normalize_lancamento_razao(
+        {
+            "conta_origem": "10046",
+            "data": "2026-01-02",
+            "numero": "42",
+            "historico": "Pagamento fornecedor",
+            "contrapartida": "20001",
+            "debito": 250.75,
+            "credito": None,
+        }
+    )
+
+    assert lancamento == {
+        "conta_origem": "10046",
+        "conta_contrapartida": "20001",
+        "conta_debito": "10046",
+        "conta_credito": "20001",
+        "direcao": "debito",
+        "data": "2026-01-02",
+        "numero": "42",
+        "historico": "Pagamento fornecedor",
+        "valor": 250.75,
+    }
+
+
+def test_normalize_razao_credit_line_uses_counterpart_as_debit_side():
+    lancamento = normalize_lancamento_razao(
+        {
+            "conta_origem": "20001",
+            "data": "2026-01-03",
+            "numero": "43",
+            "historico": "Baixa fornecedor",
+            "contrapartida": "10046",
+            "debito": None,
+            "credito": 250.75,
+        }
+    )
+
+    assert lancamento == {
+        "conta_origem": "20001",
+        "conta_contrapartida": "10046",
+        "conta_debito": "10046",
+        "conta_credito": "20001",
+        "direcao": "credito",
+        "data": "2026-01-03",
+        "numero": "43",
+        "historico": "Baixa fornecedor",
+        "valor": 250.75,
+    }
+
+
+def test_normalize_razao_line_without_debit_or_credit_raises_clear_error():
+    with pytest.raises(RazaoParseError, match="debito ou credito"):
+        normalize_lancamento_razao(
+            {
+                "conta_origem": "10046",
+                "data": "2026-01-04",
+                "numero": "44",
+                "historico": "Lancamento sem valor",
+                "contrapartida": "20001",
+                "debito": None,
+                "credito": None,
+            }
+        )

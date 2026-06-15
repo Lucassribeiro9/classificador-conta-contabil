@@ -60,6 +60,43 @@ def parse_razao_xlsx(path: str | Path) -> list[dict[str, Any]]:
         workbook.close()
 
 
+def normalize_lancamento_razao(lancamento: dict[str, Any]) -> dict[str, Any]:
+    debito = lancamento.get("debito")
+    credito = lancamento.get("credito")
+    contrapartida = lancamento.get("contrapartida")
+    conta_origem = lancamento.get("conta_origem")
+
+    has_debito = not _is_blank_value(debito)
+    has_credito = not _is_blank_value(credito)
+    if has_debito == has_credito:
+        raise RazaoParseError(
+            "Linha do razao deve possuir debito ou credito valido."
+        )
+
+    if has_debito:
+        conta_debito = conta_origem
+        conta_credito = contrapartida
+        direcao = "debito"
+        valor = debito
+    else:
+        conta_debito = contrapartida
+        conta_credito = conta_origem
+        direcao = "credito"
+        valor = credito
+
+    return {
+        "conta_origem": conta_origem,
+        "conta_contrapartida": contrapartida,
+        "conta_debito": conta_debito,
+        "conta_credito": conta_credito,
+        "direcao": direcao,
+        "data": lancamento.get("data"),
+        "numero": lancamento.get("numero"),
+        "historico": lancamento.get("historico"),
+        "valor": valor,
+    }
+
+
 def _extract_account_block(row: tuple[Any, ...]) -> str | None:
     for index, value in enumerate(row):
         text = _clean_text(value)
