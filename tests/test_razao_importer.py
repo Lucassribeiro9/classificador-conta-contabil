@@ -15,7 +15,7 @@ from core.models import (
     LoteImportacaoRazao,
     Usuario,
 )
-from core.razao_importer import import_razao
+from core.razao_importer import RazaoImportError, import_razao
 
 
 @pytest.fixture()
@@ -241,3 +241,134 @@ def test_import_razao_marks_lote_as_failed_when_no_valid_lines(session, tmp_path
     assert lote.total_invalidas == 2
     assert len(lote.warnings_metadata["warnings"]) == 2
     assert session.query(LancamentoRazaoNormalizado).count() == 0
+
+
+def test_import_razao_blocks_same_successfully_imported_file_for_same_company(
+    session,
+    tmp_path,
+):
+    empresa = _empresa()
+    usuario = _usuario()
+    session.add_all([empresa, usuario, _conta(10046), _conta(20001)])
+    session.flush()
+    xlsx_path = tmp_path / "razao-reupload.xlsx"
+    _write_workbook(
+        xlsx_path,
+        [
+            ["Conta:", "10046", "BCO. SANTANDER"],
+            ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito"],
+            ["2026-01-02", "42", "Pagamento fornecedor", "20001", 250.75, None],
+        ],
+    )
+    import_razao(
+        session,
+        xlsx_path,
+        empresa_id=empresa.id,
+        usuario_id=usuario.id,
+        original_filename="razao-reupload.xlsx",
+    )
+
+    with pytest.raises(RazaoImportError, match="Arquivo ja importado"):
+        import_razao(
+            session,
+            xlsx_path,
+            empresa_id=empresa.id,
+            usuario_id=usuario.id,
+            original_filename="razao-reupload.xlsx",
+        )
+
+    assert session.query(LoteImportacaoRazao).count() == 1
+    assert session.query(LancamentoRazaoNormalizado).count() == 1
+
+
+def test_import_razao_allows_same_file_hash_for_another_company(session, tmp_path):
+    empresa_a = _empresa()
+    empresa_b = Empresa(
+        nome_empresa="Outra Empresa Razao LTDA",
+        cnpj_cpf="11222333000144",
+        api_key="api-key-outra-razao",
+        cod_dominio=8802,
+    )
+    usuario = _usuario()
+    session.add_all(
+        [
+            empresa_a,
+            empresa_b,
+            usuario,
+            _conta(10046),
+            _conta(20001),
+        ]
+    )
+    session.flush()
+    xlsx_path = tmp_path / "razao-mesmo-hash-outra-empresa.xlsx"
+    _write_workbook(
+        xlsx_path,
+        [
+            ["Conta:", "10046", "BCO. SANTANDER"],
+            ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito"],
+            ["2026-01-02", "42", "Pagamento fornecedor", "20001", 250.75, None],
+        ],
+    )
+
+    import_razao(
+        session,
+        xlsx_path,
+        empresa_id=empresa_a.id,
+        usuario_id=usuario.id,
+        original_filename="razao.xlsx",
+    )
+    result = import_razao(
+        session,
+        xlsx_path,
+        empresa_id=empresa_b.id,
+        usuario_id=usuario.id,
+        original_filename="razao.xlsx",
+    )
+
+    assert result.status == "completed"
+    assert session.query(LoteImportacaoRazao).count() == 2
+    assert session.query(LancamentoRazaoNormalizado).count() == 2
+
+
+def test_import_razao_allows_different_file_for_same_company(session, tmp_path):
+    empresa = _empresa()
+    usuario = _usuario()
+    session.add_all([empresa, usuario, _conta(10046), _conta(20001)])
+    session.flush()
+    first_path = tmp_path / "razao-1.xlsx"
+    second_path = tmp_path / "razao-2.xlsx"
+    _write_workbook(
+        first_path,
+        [
+            ["Conta:", "10046", "BCO. SANTANDER"],
+            ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito"],
+            ["2026-01-02", "42", "Pagamento fornecedor", "20001", 250.75, None],
+        ],
+    )
+    _write_workbook(
+        second_path,
+        [
+            ["Conta:", "10046", "BCO. SANTANDER"],
+            ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito"],
+            ["2026-01-03", "43", "Outro pagamento", "20001", 99.99, None],
+        ],
+    )
+
+    import_razao(
+        session,
+        first_path,
+        empresa_id=empresa.id,
+        usuario_id=usuario.id,
+        original_filename="razao-1.xlsx",
+    )
+    result = import_razao(
+        session,
+        second_path,
+        empresa_id=empresa.id,
+        usuario_id=usuario.id,
+        original_filename="razao-2.xlsx",
+    )
+
+    assert result.status == "completed"
+    assert session.query(LoteImportacaoRazao).count() == 2
+    assert session.query(LancamentoRazaoNormalizado).count() == 2
