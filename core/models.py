@@ -11,6 +11,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    JSON,
     Numeric,
     String,
     func,
@@ -69,6 +70,16 @@ class Empresa(Base):
         back_populates="empresa",
         cascade="all, delete-orphan",
     )
+    lotes_importacao_razao: Mapped[list["LoteImportacaoRazao"]] = relationship(
+        "LoteImportacaoRazao",
+        back_populates="empresa",
+        cascade="all, delete-orphan",
+    )
+    lancamentos_razao: Mapped[list["LancamentoRazaoNormalizado"]] = relationship(
+        "LancamentoRazaoNormalizado",
+        back_populates="empresa",
+        cascade="all, delete-orphan",
+    )
 
 
 class Usuario(Base):
@@ -106,6 +117,10 @@ class Usuario(Base):
         "UsuarioEmpresaPermissao",
         back_populates="usuario",
         cascade="all, delete-orphan",
+    )
+    lotes_importacao_razao: Mapped[list["LoteImportacaoRazao"]] = relationship(
+        "LoteImportacaoRazao",
+        back_populates="usuario",
     )
 
 
@@ -185,6 +200,95 @@ class ContaContabil(Base):
     def is_classificavel(self) -> bool:
         """Indica se a conta pode ser usada como alvo de classificacao."""
         return self.is_active and self.tipo == "A"
+
+
+class LoteImportacaoRazao(Base):
+    """
+    Representa um lote de importacao do livro-razao de uma empresa.
+    """
+
+    __tablename__ = "lotes_importacao_razao"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('processing', 'completed', 'completed_with_warnings', 'failed')",
+            name="ck_lotes_importacao_razao_status",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("empresas.id"), nullable=False
+    )
+    usuario_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("usuarios.id"), nullable=False
+    )
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    total_linhas: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    total_importadas: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    total_invalidas: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    warnings_metadata: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, onupdate=datetime.now, nullable=False
+    )
+
+    empresa: Mapped["Empresa"] = relationship(
+        "Empresa", back_populates="lotes_importacao_razao"
+    )
+    usuario: Mapped["Usuario"] = relationship(
+        "Usuario", back_populates="lotes_importacao_razao"
+    )
+    lancamentos: Mapped[list["LancamentoRazaoNormalizado"]] = relationship(
+        "LancamentoRazaoNormalizado",
+        back_populates="lote",
+        cascade="all, delete-orphan",
+    )
+
+
+class LancamentoRazaoNormalizado(Base):
+    """
+    Representa uma linha valida do razao normalizada em debito/credito.
+    """
+
+    __tablename__ = "lancamentos_razao_normalizados"
+    __table_args__ = (
+        CheckConstraint(
+            "direcao IN ('debito', 'credito')",
+            name="ck_lancamentos_razao_normalizados_direcao",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    lote_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("lotes_importacao_razao.id"), nullable=False
+    )
+    empresa_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("empresas.id"), nullable=False
+    )
+    numero_lancamento: Mapped[str] = mapped_column(String(50), nullable=False)
+    data: Mapped[datetime] = mapped_column(Date, nullable=False)
+    conta_origem: Mapped[int] = mapped_column(Integer, nullable=False)
+    conta_contrapartida: Mapped[int] = mapped_column(Integer, nullable=False)
+    conta_debito: Mapped[int] = mapped_column(Integer, nullable=False)
+    conta_credito: Mapped[int] = mapped_column(Integer, nullable=False)
+    direcao: Mapped[str] = mapped_column(String(10), nullable=False)
+    historico: Mapped[str] = mapped_column(String, nullable=False)
+    historico_normalizado: Mapped[str] = mapped_column(String, nullable=False)
+    valor: Mapped[float] = mapped_column(Numeric(precision=12, scale=2), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, nullable=False
+    )
+
+    lote: Mapped["LoteImportacaoRazao"] = relationship(
+        "LoteImportacaoRazao", back_populates="lancamentos"
+    )
+    empresa: Mapped["Empresa"] = relationship(
+        "Empresa", back_populates="lancamentos_razao"
+    )
 
 
 class Transacao(Base):
