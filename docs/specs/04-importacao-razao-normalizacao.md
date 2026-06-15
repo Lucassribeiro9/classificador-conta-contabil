@@ -69,6 +69,8 @@ elif credito is not None:
 - Sempre: bloquear reimportacao do mesmo `file_hash` com sucesso para a mesma empresa.
 - Sempre: usar chave composta de deduplicacao por conteudo do lancamento.
 - Sempre: permitir importacao parcial, persistindo linhas validas e registrando warnings para invalidas.
+- Sempre: armazenar warnings de linhas invalidas em metadata JSON do lote na primeira fase.
+- Sempre: usar `completed_with_warnings` como status de lote quando a importacao persistir linhas validas e registrar warnings.
 - Perguntar antes: aceitar layouts muito diferentes do razao lido.
 - Perguntar antes: armazenar o arquivo original completo.
 - Perguntar antes: persistir linhas sem contrapartida como lancamento incompleto.
@@ -94,6 +96,8 @@ elif credito is not None:
 - O plano de contas deve estar importado antes da importacao do razao.
 - A importacao de razao exige permissao `operacao` ou `admin_empresa` na empresa.
 - O lote de importacao armazenara `original_filename`, `file_hash`, usuario, empresa, status, contadores e timestamps.
+- Warnings de linhas invalidas serao armazenados em metadata JSON do lote na primeira fase.
+- O status de lote para importacao parcial sera `completed_with_warnings`.
 - O arquivo original completo nao sera armazenado nesta primeira fase.
 - Se o mesmo `file_hash` ja foi importado com sucesso para a mesma empresa, a reimportacao sera bloqueada.
 - Arquivos diferentes com lancamentos repetidos usarao deduplicacao por chave composta.
@@ -101,12 +105,11 @@ elif credito is not None:
 - Linhas sem contrapartida geram warning e nao sao persistidas como lancamento valido.
 - Contas inexistentes no catalogo geram warning/erro e nao sao persistidas como lancamento valido.
 - A importacao pode ser parcial: linhas validas entram, linhas invalidas ficam registradas em warnings.
+- A decisao de metadata JSON para warnings nao exige armazenar o arquivo original completo.
 - Cada lancamento normalizado preserva conta de origem, contrapartida, conta de debito, conta de credito, direcao, historico, valor, data, numero do lancamento e lote.
 - Parser e persistencia permanecem separados.
 - Contas validas encontradas no razao serao vinculadas automaticamente a empresa.
 
 ## Open Questions
 
-- Warnings de linhas invalidas serao armazenados em tabela propria ou em metadata JSON do lote?
-- O status do lote parcial sera `partial_success`, `completed_with_warnings` ou outro nome?
 - O endpoint de importacao sera sincrono nesta fase ou preparado desde ja para processamento em background?
