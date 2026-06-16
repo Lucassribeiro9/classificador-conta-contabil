@@ -5,6 +5,7 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from core.models import LancamentoRazaoNormalizado, LoteImportacaoRazao
@@ -26,6 +27,10 @@ class ImportacaoRazaoResumo:
     warnings: list[dict[str, Any]]
 
 
+class RazaoImportError(ValueError):
+    """Erro de validacao da importacao do razao."""
+
+
 def import_razao(
     session: Session,
     path: str | Path,
@@ -35,6 +40,8 @@ def import_razao(
     original_filename: str,
 ) -> ImportacaoRazaoResumo:
     file_path = Path(path)
+    file_hash = _file_hash(file_path)
+    _ensure_file_hash_not_successfully_imported(session, empresa_id, file_hash)
     parsed_lancamentos = parse_razao_xlsx(file_path)
     warnings: list[dict[str, Any]] = []
     imported = 0
@@ -43,7 +50,7 @@ def import_razao(
         empresa_id=empresa_id,
         usuario_id=usuario_id,
         original_filename=original_filename,
-        file_hash=_file_hash(file_path),
+        file_hash=file_hash,
         status="processing",
         total_linhas=len(parsed_lancamentos),
         total_importadas=0,
@@ -131,6 +138,26 @@ def _parse_date(value: Any) -> date:
 def _file_hash(path: Path) -> str:
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
     return f"sha256:{digest}"
+
+
+def _ensure_file_hash_not_successfully_imported(
+    session: Session,
+    empresa_id: int,
+    file_hash: str,
+) -> None:
+    existing_lote = session.execute(
+        select(LoteImportacaoRazao).where(
+            LoteImportacaoRazao.empresa_id == empresa_id,
+            LoteImportacaoRazao.file_hash == file_hash,
+            LoteImportacaoRazao.status.in_(
+                ["completed", "completed_with_warnings"]
+            ),
+        )
+    ).scalar_one_or_none()
+    if existing_lote is not None:
+        raise RazaoImportError(
+            "Arquivo ja importado com sucesso para esta empresa."
+        )
 
 
 def _is_blank(value: Any) -> bool:
