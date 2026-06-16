@@ -10,6 +10,7 @@ from sqlalchemy.pool import StaticPool
 from core.database import Base
 from core.models import (
     ContaContabil,
+    EmpresaContaContabil,
     Empresa,
     LancamentoRazaoNormalizado,
     LoteImportacaoRazao,
@@ -372,3 +373,139 @@ def test_import_razao_allows_different_file_for_same_company(session, tmp_path):
     assert result.status == "completed"
     assert session.query(LoteImportacaoRazao).count() == 2
     assert session.query(LancamentoRazaoNormalizado).count() == 2
+
+
+def test_import_razao_links_origin_and_counterpart_accounts_to_company(
+    session,
+    tmp_path,
+):
+    empresa = _empresa()
+    usuario = _usuario()
+    session.add_all([empresa, usuario, _conta(10046), _conta(20001)])
+    session.flush()
+    xlsx_path = tmp_path / "razao-vinculos.xlsx"
+    _write_workbook(
+        xlsx_path,
+        [
+            ["Conta:", "10046", "BCO. SANTANDER"],
+            ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito"],
+            ["2026-01-02", "42", "Pagamento fornecedor", "20001", 250.75, None],
+        ],
+    )
+
+    import_razao(
+        session,
+        xlsx_path,
+        empresa_id=empresa.id,
+        usuario_id=usuario.id,
+        original_filename="razao-vinculos.xlsx",
+    )
+
+    vinculos = (
+        session.query(EmpresaContaContabil)
+        .filter(EmpresaContaContabil.empresa_id == empresa.id)
+        .order_by(EmpresaContaContabil.conta_codigo)
+        .all()
+    )
+    assert [vinculo.conta_codigo for vinculo in vinculos] == [10046, 20001]
+    assert [vinculo.quantidade_lancamentos for vinculo in vinculos] == [1, 1]
+    assert all(vinculo.ultima_utilizacao == date(2026, 1, 2) for vinculo in vinculos)
+
+
+def test_import_razao_updates_existing_account_links_without_duplicates(
+    session,
+    tmp_path,
+):
+    empresa = _empresa()
+    usuario = _usuario()
+    session.add_all([empresa, usuario, _conta(10046), _conta(20001)])
+    session.flush()
+    first_path = tmp_path / "razao-vinculos-1.xlsx"
+    second_path = tmp_path / "razao-vinculos-2.xlsx"
+    rows = [
+        ["Conta:", "10046", "BCO. SANTANDER"],
+        ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito"],
+    ]
+    _write_workbook(
+        first_path,
+        rows + [["2026-01-02", "42", "Pagamento fornecedor", "20001", 250.75, None]],
+    )
+    _write_workbook(
+        second_path,
+        rows + [["2026-01-05", "43", "Pagamento fornecedor", "20001", 99.99, None]],
+    )
+
+    import_razao(
+        session,
+        first_path,
+        empresa_id=empresa.id,
+        usuario_id=usuario.id,
+        original_filename="razao-vinculos-1.xlsx",
+    )
+    import_razao(
+        session,
+        second_path,
+        empresa_id=empresa.id,
+        usuario_id=usuario.id,
+        original_filename="razao-vinculos-2.xlsx",
+    )
+
+    vinculos = (
+        session.query(EmpresaContaContabil)
+        .filter(EmpresaContaContabil.empresa_id == empresa.id)
+        .order_by(EmpresaContaContabil.conta_codigo)
+        .all()
+    )
+    assert [vinculo.conta_codigo for vinculo in vinculos] == [10046, 20001]
+    assert [vinculo.quantidade_lancamentos for vinculo in vinculos] == [2, 2]
+    assert all(vinculo.ultima_utilizacao == date(2026, 1, 5) for vinculo in vinculos)
+
+
+def test_import_razao_account_links_are_isolated_by_company(session, tmp_path):
+    empresa_a = _empresa()
+    empresa_b = Empresa(
+        nome_empresa="Outra Empresa Razao LTDA",
+        cnpj_cpf="11222333000144",
+        api_key="api-key-outra-razao",
+        cod_dominio=8802,
+    )
+    usuario = _usuario()
+    session.add_all([empresa_a, empresa_b, usuario, _conta(10046), _conta(20001)])
+    session.flush()
+    xlsx_path = tmp_path / "razao-vinculos-empresas.xlsx"
+    _write_workbook(
+        xlsx_path,
+        [
+            ["Conta:", "10046", "BCO. SANTANDER"],
+            ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito"],
+            ["2026-01-02", "42", "Pagamento fornecedor", "20001", 250.75, None],
+        ],
+    )
+
+    import_razao(
+        session,
+        xlsx_path,
+        empresa_id=empresa_a.id,
+        usuario_id=usuario.id,
+        original_filename="razao-a.xlsx",
+    )
+    import_razao(
+        session,
+        xlsx_path,
+        empresa_id=empresa_b.id,
+        usuario_id=usuario.id,
+        original_filename="razao-b.xlsx",
+    )
+
+    vinculos_empresa_a = (
+        session.query(EmpresaContaContabil)
+        .filter(EmpresaContaContabil.empresa_id == empresa_a.id)
+        .count()
+    )
+    vinculos_empresa_b = (
+        session.query(EmpresaContaContabil)
+        .filter(EmpresaContaContabil.empresa_id == empresa_b.id)
+        .count()
+    )
+    assert vinculos_empresa_a == 2
+    assert vinculos_empresa_b == 2

@@ -8,7 +8,11 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from core.models import LancamentoRazaoNormalizado, LoteImportacaoRazao
+from core.models import (
+    EmpresaContaContabil,
+    LancamentoRazaoNormalizado,
+    LoteImportacaoRazao,
+)
 from core.razao_catalog_validator import validate_lancamento_razao_contas
 from core.razao_parser import (
     normalize_lancamento_razao,
@@ -82,6 +86,7 @@ def import_razao(
             normalized["historico"]
         )
         session.add(_to_model(lote.id, empresa_id, normalized))
+        _link_contas_to_empresa(session, empresa_id, normalized)
         imported += 1
 
     invalid = len(parsed_lancamentos) - imported
@@ -125,6 +130,38 @@ def _to_model(
         historico_normalizado=str(lancamento["historico_normalizado"]),
         valor=Decimal(str(lancamento["valor"])),
     )
+
+
+def _link_contas_to_empresa(
+    session: Session,
+    empresa_id: int,
+    lancamento: dict[str, Any],
+) -> None:
+    data_lancamento = _parse_date(lancamento["data"])
+    for conta_codigo in {
+        int(lancamento["conta_origem"]),
+        int(lancamento["conta_contrapartida"]),
+    }:
+        vinculo = session.execute(
+            select(EmpresaContaContabil).where(
+                EmpresaContaContabil.empresa_id == empresa_id,
+                EmpresaContaContabil.conta_codigo == conta_codigo,
+            )
+        ).scalar_one_or_none()
+        if vinculo is None:
+            session.add(
+                EmpresaContaContabil(
+                    empresa_id=empresa_id,
+                    conta_codigo=conta_codigo,
+                    quantidade_lancamentos=1,
+                    ultima_utilizacao=data_lancamento,
+                )
+            )
+            continue
+
+        vinculo.quantidade_lancamentos += 1
+        if data_lancamento > vinculo.ultima_utilizacao:
+            vinculo.ultima_utilizacao = data_lancamento
 
 
 def _parse_date(value: Any) -> date:

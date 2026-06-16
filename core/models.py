@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 
 from sqlalchemy import (
@@ -77,6 +77,11 @@ class Empresa(Base):
     )
     lancamentos_razao: Mapped[list["LancamentoRazaoNormalizado"]] = relationship(
         "LancamentoRazaoNormalizado",
+        back_populates="empresa",
+        cascade="all, delete-orphan",
+    )
+    contas_contabeis_usadas: Mapped[list["EmpresaContaContabil"]] = relationship(
+        "EmpresaContaContabil",
         back_populates="empresa",
         cascade="all, delete-orphan",
     )
@@ -200,6 +205,45 @@ class ContaContabil(Base):
     def is_classificavel(self) -> bool:
         """Indica se a conta pode ser usada como alvo de classificacao."""
         return self.is_active and self.tipo == "A"
+
+
+class EmpresaContaContabil(Base):
+    """
+    Vincula uma empresa as contas contabeis encontradas em importacoes validas.
+    """
+
+    __tablename__ = "empresa_contas_contabeis"
+    __table_args__ = (
+        Index(
+            "uq_empresa_contas_contabeis_empresa_conta",
+            "empresa_id",
+            "conta_codigo",
+            unique=True,
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("empresas.id"), nullable=False
+    )
+    conta_codigo: Mapped[int] = mapped_column(
+        Integer, ForeignKey("contas_contabeis.codigo"), nullable=False
+    )
+    quantidade_lancamentos: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
+    ultima_utilizacao: Mapped[date] = mapped_column(Date, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, onupdate=datetime.now, nullable=False
+    )
+
+    empresa: Mapped["Empresa"] = relationship(
+        "Empresa", back_populates="contas_contabeis_usadas"
+    )
+    conta: Mapped["ContaContabil"] = relationship("ContaContabil")
 
 
 class LoteImportacaoRazao(Base):
