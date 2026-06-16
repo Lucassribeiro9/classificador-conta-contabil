@@ -6,6 +6,7 @@ from core.razao_parser import (
     RazaoParseError,
     normalize_lancamento_razao,
     normalize_razao_historico,
+    parse_razao_xlsx_with_metadata,
     parse_razao_xlsx,
 )
 
@@ -161,6 +162,103 @@ def test_parse_razao_accepts_dominio_export_layout_without_entry_number(tmp_path
             "credito": None,
         },
     ]
+
+
+def test_parse_razao_with_metadata_extracts_company_header(tmp_path):
+    xlsx_path = tmp_path / "razao-dominio-metadados.xlsx"
+    _write_workbook(
+        xlsx_path,
+        [
+            ["Empresa:", None, "EMPRESA TESTE LTDA"],
+            ["C.N.P.J.:", None, "12.345.678/0001-90"],
+            ["Período:", None, "01/01/2024 - 31/12/2024"],
+            [],
+            [
+                "Data",
+                None,
+                "Histórico",
+                None,
+                None,
+                None,
+                None,
+                "Cta.C.Part.",
+                "Débito",
+                "Crédito",
+            ],
+            ["Conta:", 10001, "1.1.01.01.01.10001", None, None, "CAIXA"],
+            [
+                "2024-01-31",
+                None,
+                "PAGTO.PRO-LABORE.REF.",
+                None,
+                None,
+                None,
+                None,
+                20951,
+                None,
+                1256.68,
+            ],
+        ],
+    )
+
+    result = parse_razao_xlsx_with_metadata(xlsx_path)
+
+    assert result.metadata.empresa_nome == "EMPRESA TESTE LTDA"
+    assert result.metadata.cnpj_cpf == "12345678000190"
+    assert result.metadata.periodo_inicio == "2024-01-01"
+    assert result.metadata.periodo_fim == "2024-12-31"
+    assert not hasattr(result.metadata, "cod_dominio")
+    assert result.lancamentos == [
+        {
+            "conta_origem": "10001",
+            "data": "2024-01-31",
+            "numero": None,
+            "historico": "PAGTO.PRO-LABORE.REF.",
+            "contrapartida": "20951",
+            "debito": None,
+            "credito": 1256.68,
+        }
+    ]
+
+
+def test_parse_razao_with_metadata_requires_cnpj_header(tmp_path):
+    xlsx_path = tmp_path / "razao-sem-cnpj.xlsx"
+    _write_workbook(
+        xlsx_path,
+        [
+            ["Empresa:", None, "EMPRESA TESTE LTDA"],
+            ["Período:", None, "01/01/2024 - 31/12/2024"],
+            [],
+            [
+                "Data",
+                None,
+                "Histórico",
+                None,
+                None,
+                None,
+                None,
+                "Cta.C.Part.",
+                "Débito",
+                "Crédito",
+            ],
+            ["Conta:", 10001, "1.1.01.01.01.10001", None, None, "CAIXA"],
+            [
+                "2024-01-31",
+                None,
+                "PAGTO.PRO-LABORE.REF.",
+                None,
+                None,
+                None,
+                None,
+                20951,
+                None,
+                1256.68,
+            ],
+        ],
+    )
+
+    with pytest.raises(RazaoParseError, match="cnpj_cpf"):
+        parse_razao_xlsx_with_metadata(xlsx_path)
 
 
 def test_parse_razao_rejects_non_xlsx_files(tmp_path):

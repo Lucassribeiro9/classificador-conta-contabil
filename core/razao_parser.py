@@ -1,4 +1,7 @@
+from dataclasses import dataclass
+from datetime import date, datetime
 from pathlib import Path
+import re
 from typing import Any
 
 from openpyxl import load_workbook
@@ -6,6 +9,20 @@ from openpyxl import load_workbook
 
 class RazaoParseError(ValueError):
     """Erro de validacao do arquivo do livro-razao."""
+
+
+@dataclass(frozen=True)
+class RazaoMetadata:
+    empresa_nome: str
+    cnpj_cpf: str
+    periodo_inicio: str
+    periodo_fim: str
+
+
+@dataclass(frozen=True)
+class RazaoParseResult:
+    metadata: RazaoMetadata
+    lancamentos: list[dict[str, Any]]
 
 
 _REQUIRED_COLUMNS = ("data", "historico", "contrapartida", "debito", "credito")
@@ -22,6 +39,14 @@ _COLUMN_ALIASES = {
 
 
 def parse_razao_xlsx(path: str | Path) -> list[dict[str, Any]]:
+    return _parse_razao_xlsx(path, require_metadata=False).lancamentos
+
+
+def parse_razao_xlsx_with_metadata(path: str | Path) -> RazaoParseResult:
+    return _parse_razao_xlsx(path, require_metadata=True)
+
+
+def _parse_razao_xlsx(path: str | Path, *, require_metadata: bool) -> RazaoParseResult:
     file_path = Path(path)
     if file_path.suffix.lower() != ".xlsx":
         raise RazaoParseError("Arquivo do razao deve estar no formato .xlsx.")
@@ -30,12 +55,25 @@ def parse_razao_xlsx(path: str | Path) -> list[dict[str, Any]]:
     try:
         sheet = workbook.active
         conta_origem: str | None = None
-        header_by_column: dict[str, int] | None = None
+        header_by_column: dict[str, int | None] | None = None
         lancamentos: list[dict[str, Any]] = []
+        empresa_nome: str | None = None
+        cnpj_cpf: str | None = None
+        periodo_inicio: str | None = None
+        periodo_fim: str | None = None
 
         for row in sheet.iter_rows(values_only=True):
             if _is_empty_row(row):
                 continue
+
+            row_metadata = _extract_metadata(row)
+            if row_metadata.get("empresa_nome") is not None:
+                empresa_nome = row_metadata["empresa_nome"]
+            if row_metadata.get("cnpj_cpf") is not None:
+                cnpj_cpf = row_metadata["cnpj_cpf"]
+            if row_metadata.get("periodo_inicio") is not None:
+                periodo_inicio = row_metadata["periodo_inicio"]
+                periodo_fim = row_metadata["periodo_fim"]
 
             conta_bloco = _extract_account_block(row)
             if conta_bloco is not None:
@@ -57,7 +95,14 @@ def parse_razao_xlsx(path: str | Path) -> list[dict[str, Any]]:
             if lancamento is not None:
                 lancamentos.append(lancamento)
 
-        return lancamentos
+        metadata = _build_metadata(
+            empresa_nome,
+            cnpj_cpf,
+            periodo_inicio,
+            periodo_fim,
+            require_metadata=require_metadata,
+        )
+        return RazaoParseResult(metadata=metadata, lancamentos=lancamentos)
     finally:
         workbook.close()
 
@@ -148,6 +193,36 @@ def _first_text_after(row: tuple[Any, ...], index: int) -> str | None:
     return None
 
 
+def _extract_metadata(row: tuple[Any, ...]) -> dict[str, str | None]:
+    metadata: dict[str, str | None] = {}
+    for index, value in enumerate(row):
+        text = _clean_text(value)
+        if not text:
+            continue
+
+        normalized = _normalize_text(text)
+        if normalized in {"empresa:", "empresa"}:
+            metadata["empresa_nome"] = _first_clean_text_after(row, index)
+        elif normalized in {"c.n.p.j.:", "c.n.p.j.", "cnpj:", "cnpj"}:
+            cnpj = _first_clean_text_after(row, index)
+            metadata["cnpj_cpf"] = _only_digits(cnpj)
+        elif normalized in {"periodo:", "periodo"}:
+            periodo = _first_clean_text_after(row, index)
+            inicio, fim = _parse_period_range(periodo)
+            metadata["periodo_inicio"] = inicio
+            metadata["periodo_fim"] = fim
+
+    return metadata
+
+
+def _first_clean_text_after(row: tuple[Any, ...], index: int) -> str | None:
+    for value in row[index + 1 :]:
+        text = _clean_text(value)
+        if text:
+            return text
+    return None
+
+
 def _header_by_column(row: tuple[Any, ...]) -> dict[str, int | None] | None:
     header_by_field: dict[str, int] = {}
     for index, value in enumerate(row):
@@ -194,6 +269,73 @@ def _cell(row: tuple[Any, ...], index: int | None) -> Any:
     if index is None or index >= len(row):
         return None
     return row[index]
+
+
+def _build_metadata(
+    empresa_nome: str | None,
+    cnpj_cpf: str | None,
+    periodo_inicio: str | None,
+    periodo_fim: str | None,
+    *,
+    require_metadata: bool,
+) -> RazaoMetadata:
+    if require_metadata:
+        missing_fields = [
+            field_name
+            for field_name, value in {
+                "empresa_nome": empresa_nome,
+                "cnpj_cpf": cnpj_cpf,
+                "periodo_inicio": periodo_inicio,
+                "periodo_fim": periodo_fim,
+            }.items()
+            if _is_blank_value(value)
+        ]
+        if missing_fields:
+            raise RazaoParseError(
+                "Cabecalho do razao sem metadados obrigatorios: "
+                + ", ".join(missing_fields)
+                + "."
+            )
+
+    return RazaoMetadata(
+        empresa_nome=empresa_nome or "",
+        cnpj_cpf=cnpj_cpf or "",
+        periodo_inicio=periodo_inicio or "",
+        periodo_fim=periodo_fim or "",
+    )
+
+
+def _parse_period_range(value: Any) -> tuple[str | None, str | None]:
+    text = _clean_text(value)
+    if not text or " - " not in text:
+        return None, None
+
+    start_text, end_text = text.split(" - ", 1)
+    return _parse_br_date(start_text), _parse_br_date(end_text)
+
+
+def _parse_br_date(value: Any) -> str | None:
+    text = _clean_text(value)
+    if not text:
+        return None
+    if isinstance(value, datetime):
+        parsed_date = value.date()
+    elif isinstance(value, date):
+        parsed_date = value
+    else:
+        try:
+            day, month, year = text.split("/")
+            parsed_date = date(int(year), int(month), int(day))
+        except ValueError:
+            return None
+    return parsed_date.isoformat()
+
+
+def _only_digits(value: Any) -> str | None:
+    text = _clean_text(value)
+    if not text:
+        return None
+    return re.sub(r"\D", "", text)
 
 
 def _is_balance_row(row: tuple[Any, ...]) -> bool:
