@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from core.models import (
+    Empresa,
     EmpresaContaContabil,
     LancamentoRazaoNormalizado,
     LoteImportacaoRazao,
@@ -18,6 +19,8 @@ from core.razao_parser import (
     normalize_lancamento_razao,
     normalize_razao_historico,
     parse_razao_xlsx,
+    parse_razao_xlsx_with_metadata,
+    RazaoParseError,
 )
 
 
@@ -46,7 +49,10 @@ def import_razao(
     file_path = Path(path)
     file_hash = _file_hash(file_path)
     _ensure_file_hash_not_successfully_imported(session, empresa_id, file_hash)
-    parsed_lancamentos = parse_razao_xlsx(file_path)
+    parsed_lancamentos = _parse_lancamentos_and_validate_company(
+        session,
+        file_path,
+    )
     warnings: list[dict[str, Any]] = []
     imported = 0
 
@@ -109,6 +115,34 @@ def import_razao(
         total_invalidas=lote.total_invalidas,
         warnings=warnings,
     )
+
+
+def _parse_lancamentos_and_validate_company(
+    session: Session,
+    file_path: Path,
+) -> list[dict[str, Any]]:
+    try:
+        parsed = parse_razao_xlsx_with_metadata(file_path)
+    except RazaoParseError as exc:
+        if not str(exc).startswith("Cabecalho do razao sem metadados obrigatorios"):
+            raise
+        return parse_razao_xlsx(file_path)
+
+    _ensure_company_from_metadata_is_active(session, parsed.metadata.cnpj_cpf)
+    return parsed.lancamentos
+
+
+def _ensure_company_from_metadata_is_active(
+    session: Session,
+    cnpj_cpf: str,
+) -> None:
+    empresa = session.execute(
+        select(Empresa).where(Empresa.cnpj_cpf == cnpj_cpf)
+    ).scalar_one_or_none()
+    if empresa is not None and not empresa.is_active:
+        raise RazaoImportError(
+            "empresa do razao esta inativa; reative a empresa antes de importar."
+        )
 
 
 def _to_model(
