@@ -8,11 +8,14 @@ class RazaoParseError(ValueError):
     """Erro de validacao do arquivo do livro-razao."""
 
 
-_REQUIRED_COLUMNS = {
+_REQUIRED_COLUMNS = ("data", "historico", "contrapartida", "debito", "credito")
+_OPTIONAL_COLUMNS = ("numero",)
+_COLUMN_ALIASES = {
     "data": "data",
     "numero": "numero",
     "historico": "historico",
     "contrapartida": "contrapartida",
+    "cta.c.part.": "contrapartida",
     "debito": "debito",
     "credito": "credito",
 }
@@ -37,7 +40,6 @@ def parse_razao_xlsx(path: str | Path) -> list[dict[str, Any]]:
             conta_bloco = _extract_account_block(row)
             if conta_bloco is not None:
                 conta_origem = conta_bloco
-                header_by_column = None
                 continue
 
             maybe_header = _header_by_column(row)
@@ -146,25 +148,26 @@ def _first_text_after(row: tuple[Any, ...], index: int) -> str | None:
     return None
 
 
-def _header_by_column(row: tuple[Any, ...]) -> dict[str, int] | None:
-    normalized_cells = {
-        _normalize_text(value): index
-        for index, value in enumerate(row)
-        if _normalize_text(value)
-    }
-    if not all(column in normalized_cells for column in _REQUIRED_COLUMNS):
+def _header_by_column(row: tuple[Any, ...]) -> dict[str, int | None] | None:
+    header_by_field: dict[str, int] = {}
+    for index, value in enumerate(row):
+        field_name = _COLUMN_ALIASES.get(_normalize_text(value))
+        if field_name is not None:
+            header_by_field[field_name] = index
+
+    if not all(column in header_by_field for column in _REQUIRED_COLUMNS):
         return None
 
     return {
-        field_name: normalized_cells[column_name]
-        for column_name, field_name in _REQUIRED_COLUMNS.items()
+        field_name: header_by_field.get(field_name)
+        for field_name in (*_REQUIRED_COLUMNS, *_OPTIONAL_COLUMNS)
     }
 
 
 def _parse_entry_row(
     row: tuple[Any, ...],
     conta_origem: str,
-    header_by_column: dict[str, int],
+    header_by_column: dict[str, int | None],
 ) -> dict[str, Any] | None:
     data = _cell(row, header_by_column["data"])
     numero = _cell(row, header_by_column["numero"])
@@ -187,8 +190,8 @@ def _parse_entry_row(
     }
 
 
-def _cell(row: tuple[Any, ...], index: int) -> Any:
-    if index >= len(row):
+def _cell(row: tuple[Any, ...], index: int | None) -> Any:
+    if index is None or index >= len(row):
         return None
     return row[index]
 
