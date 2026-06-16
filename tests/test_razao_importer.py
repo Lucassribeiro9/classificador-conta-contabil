@@ -125,6 +125,74 @@ def test_import_razao_persists_valid_lines_and_completes_lote(session, tmp_path)
     assert lancamento.valor == Decimal("250.75")
 
 
+def test_import_razao_blocks_inactive_company_from_file_cnpj(session, tmp_path):
+    empresa = _empresa()
+    empresa.is_active = False
+    usuario = _usuario()
+    session.add_all([empresa, usuario, _conta(10046), _conta(20001)])
+    session.flush()
+    xlsx_path = tmp_path / "razao-empresa-inativa.xlsx"
+    _write_workbook(
+        xlsx_path,
+        [
+            ["Empresa:", None, empresa.nome_empresa],
+            ["C.N.P.J.:", None, "55.666.777/0001-88"],
+            ["Período:", None, "01/01/2026 - 31/12/2026"],
+            [],
+            ["Conta:", "10046", "BCO. SANTANDER"],
+            ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito"],
+            ["2026-01-02", "42", "Pagamento fornecedor", "20001", 250.75, None],
+        ],
+    )
+
+    with pytest.raises(RazaoImportError, match="empresa.*inativa"):
+        import_razao(
+            session,
+            xlsx_path,
+            empresa_id=empresa.id,
+            usuario_id=usuario.id,
+            original_filename="razao-empresa-inativa.xlsx",
+        )
+
+    session.refresh(empresa)
+    assert empresa.is_active is False
+    assert session.query(Empresa).count() == 1
+    assert session.query(LoteImportacaoRazao).count() == 0
+    assert session.query(LancamentoRazaoNormalizado).count() == 0
+
+
+def test_import_razao_allows_active_company_from_file_cnpj(session, tmp_path):
+    empresa = _empresa()
+    usuario = _usuario()
+    session.add_all([empresa, usuario, _conta(10046), _conta(20001)])
+    session.flush()
+    xlsx_path = tmp_path / "razao-empresa-ativa.xlsx"
+    _write_workbook(
+        xlsx_path,
+        [
+            ["Empresa:", None, empresa.nome_empresa],
+            ["C.N.P.J.:", None, "55.666.777/0001-88"],
+            ["Período:", None, "01/01/2026 - 31/12/2026"],
+            [],
+            ["Conta:", "10046", "BCO. SANTANDER"],
+            ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito"],
+            ["2026-01-02", "42", "Pagamento fornecedor", "20001", 250.75, None],
+        ],
+    )
+
+    result = import_razao(
+        session,
+        xlsx_path,
+        empresa_id=empresa.id,
+        usuario_id=usuario.id,
+        original_filename="razao-empresa-ativa.xlsx",
+    )
+
+    assert result.status == "completed"
+    assert session.query(LoteImportacaoRazao).count() == 1
+    assert session.query(LancamentoRazaoNormalizado).count() == 1
+
+
 def test_import_razao_persists_valid_lines_and_records_warnings_for_invalid_ones(
     session,
     tmp_path,
