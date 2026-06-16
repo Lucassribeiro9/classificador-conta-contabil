@@ -156,6 +156,15 @@ class ImportacaoPlanoContasResponse(BaseModel):
     invalidas: int
 
 
+class ImportacaoRazaoResponse(BaseModel):
+    lote_id: int
+    status: str
+    total_linhas: int
+    total_importadas: int
+    total_invalidas: int
+    warnings: list[dict]
+
+
 class ContaContabilResponse(BaseModel):
     id: int
     codigo: int
