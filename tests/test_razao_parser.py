@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from openpyxl import Workbook
 
@@ -18,6 +20,9 @@ def _write_workbook(path, rows):
         sheet.append(row)
     workbook.save(path)
     workbook.close()
+
+
+FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
 
 def test_parse_razao_detects_account_blocks_and_ignores_report_noise(tmp_path):
@@ -58,6 +63,37 @@ def test_parse_razao_detects_account_blocks_and_ignores_report_noise(tmp_path):
             "contrapartida": "10046",
             "debito": None,
             "credito": 250.75,
+        },
+    ]
+
+
+def test_parse_razao_fixture_sanitizada_representa_layout_real_dominio():
+    fixture_path = FIXTURES_DIR / "razao_dominio_layout_sanitizado.xlsx"
+
+    result = parse_razao_xlsx_with_metadata(fixture_path)
+
+    assert result.metadata.empresa_nome == "EMPRESA MODELO LTDA"
+    assert result.metadata.cnpj_cpf == "11222333000181"
+    assert result.metadata.periodo_inicio == "2024-01-01"
+    assert result.metadata.periodo_fim == "2024-12-31"
+    assert result.lancamentos == [
+        {
+            "conta_origem": "10001",
+            "data": "2024-01-31 00:00:00",
+            "numero": None,
+            "historico": "PAGAMENTO FORNECEDOR MODELO",
+            "contrapartida": "20951",
+            "debito": None,
+            "credito": 1256.68,
+        },
+        {
+            "conta_origem": "10001",
+            "data": "2024-02-29 00:00:00",
+            "numero": None,
+            "historico": "RECEBIMENTO CLIENTE MODELO",
+            "contrapartida": "10851",
+            "debito": 500.00,
+            "credito": None,
         },
     ]
 
