@@ -61,6 +61,108 @@ def test_parse_razao_detects_account_blocks_and_ignores_report_noise(tmp_path):
     ]
 
 
+def test_parse_razao_accepts_dominio_export_layout_without_entry_number(tmp_path):
+    xlsx_path = tmp_path / "razao-dominio.xlsx"
+    _write_workbook(
+        xlsx_path,
+        [
+            ["Empresa:", None, "EMPRESA TESTE LTDA"],
+            ["C.N.P.J.:", None, "12.345.678/0001-90"],
+            ["Período:", None, "01/01/2024 - 31/12/2024"],
+            [],
+            ["RAZÃO"],
+            [],
+            [
+                "Data",
+                None,
+                "Histórico",
+                None,
+                None,
+                None,
+                None,
+                "Cta.C.Part.",
+                "Débito",
+                "Crédito",
+                None,
+                "Saldo-Exercício",
+            ],
+            [
+                "Conta:",
+                10001,
+                "1.1.01.01.01.10001",
+                None,
+                None,
+                "CAIXA",
+            ],
+            [
+                None,
+                None,
+                "SALDO ANTERIOR",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                "100D",
+            ],
+            [
+                "2024-01-31",
+                None,
+                "PAGTO.PRO-LABORE.REF.",
+                None,
+                None,
+                None,
+                None,
+                20951,
+                None,
+                1256.68,
+                None,
+                "1156,68C",
+            ],
+            [
+                "2024-02-01",
+                None,
+                "SUPRIMENTO DE CAIXA",
+                None,
+                None,
+                None,
+                None,
+                10046,
+                500.00,
+                None,
+                None,
+                "656,68D",
+            ],
+        ],
+    )
+
+    lancamentos = parse_razao_xlsx(xlsx_path)
+
+    assert lancamentos == [
+        {
+            "conta_origem": "10001",
+            "data": "2024-01-31",
+            "numero": None,
+            "historico": "PAGTO.PRO-LABORE.REF.",
+            "contrapartida": "20951",
+            "debito": None,
+            "credito": 1256.68,
+        },
+        {
+            "conta_origem": "10001",
+            "data": "2024-02-01",
+            "numero": None,
+            "historico": "SUPRIMENTO DE CAIXA",
+            "contrapartida": "10046",
+            "debito": 500.00,
+            "credito": None,
+        },
+    ]
+
+
 def test_parse_razao_rejects_non_xlsx_files(tmp_path):
     csv_path = tmp_path / "razao.csv"
     csv_path.write_text("Conta:,10046\n", encoding="utf-8")
@@ -132,6 +234,21 @@ def test_normalize_razao_line_without_debit_or_credit_raises_clear_error():
                 "contrapartida": "20001",
                 "debito": None,
                 "credito": None,
+            }
+        )
+
+
+def test_normalize_razao_line_with_debit_and_credit_raises_clear_error():
+    with pytest.raises(RazaoParseError, match="debito ou credito"):
+        normalize_lancamento_razao(
+            {
+                "conta_origem": "10046",
+                "data": "2026-01-04",
+                "numero": None,
+                "historico": "Lancamento com dois valores",
+                "contrapartida": "20001",
+                "debito": 10.00,
+                "credito": 10.00,
             }
         )
 
