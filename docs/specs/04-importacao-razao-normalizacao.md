@@ -45,7 +45,11 @@ elif credito is not None:
 
 O arquivo padrao de importacao do Razao deve ser `.xlsx` e pode seguir o
 modelo higienizado `modelo-razao-importacao.xlsx`, documentado em
-`docs/razao-planilha-modelo.md`.
+`docs/razao-planilha-modelo.md`. Arquivos `.xls` ficam fora desta fase.
+
+Relatorios em formato de Razao por blocos devem usar linhas iniciadas por
+`Conta:` para definir a conta de origem das linhas seguintes. A conta do bloco
+permanece ativa ate que outro bloco `Conta:` seja encontrado.
 
 Campos obrigatorios do cabecalho:
 
@@ -84,6 +88,11 @@ participa da regra principal de debito/credito, nao define `valor`, nao define
 
 Se o CNPJ informado no arquivo pertencer a uma empresa inativa, a importacao
 deve ser bloqueada antes de persistir lote ou lancamentos.
+
+Linhas invalidas nao devem ser persistidas como lancamento valido. A importacao
+pode ser parcial: linhas validas entram, linhas invalidas geram warnings no
+lote. Quando houver ao menos uma linha valida e warnings, o status aprovado e
+`completed_with_warnings`.
 
 ## Testing Strategy
 
