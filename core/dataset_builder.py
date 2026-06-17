@@ -3,7 +3,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from core.models import LancamentoRazaoNormalizado
+from core.models import ContaContabil, LancamentoRazaoNormalizado
 
 
 @dataclass(frozen=True)
@@ -28,7 +28,12 @@ def build_dataset_treino_contrapartida(
 
     lancamentos = (
         session.query(LancamentoRazaoNormalizado)
+        .join(
+            ContaContabil,
+            ContaContabil.codigo == LancamentoRazaoNormalizado.conta_origem,
+        )
         .filter(LancamentoRazaoNormalizado.empresa_id == empresa_id)
+        .filter(ContaContabil.is_financial_origin.is_(True))
         .order_by(LancamentoRazaoNormalizado.id.asc())
         .all()
     )
