@@ -29,8 +29,12 @@ def build_dataset_treino_contrapartida(
     conta_origem = aliased(ContaContabil)
     conta_target = aliased(ContaContabil)
 
+    lancamentos_empresa = session.query(LancamentoRazaoNormalizado).filter(
+        LancamentoRazaoNormalizado.empresa_id == empresa_id
+    )
+
     lancamentos_financeiros = (
-        session.query(LancamentoRazaoNormalizado)
+        lancamentos_empresa
         .join(
             conta_origem,
             conta_origem.codigo == LancamentoRazaoNormalizado.conta_origem,
@@ -53,7 +57,7 @@ def build_dataset_treino_contrapartida(
 
     linhas = [_to_dataset_row(lancamento) for lancamento in lancamentos]
     contagem_por_target = _count_targets(linhas)
-    total_descartes = lancamentos_financeiros.count() - len(linhas)
+    total_descartes = lancamentos_empresa.count() - len(linhas)
 
     return DatasetTreinoContrapartida(
         linhas=linhas,

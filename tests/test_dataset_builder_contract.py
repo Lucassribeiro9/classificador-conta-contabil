@@ -432,3 +432,57 @@ def test_dataset_builder_discards_synthetic_and_missing_targets(session):
     assert dataset.metadata["total_linhas"] == 1
     assert dataset.metadata["total_descartes"] == 2
     assert dataset.metadata["contagem_por_target"] == {50057: 1}
+
+
+def test_dataset_builder_metadata_counts_discards_from_filters_and_validations(
+    session,
+):
+    empresa = _empresa()
+    lote = LoteImportacaoRazao(
+        empresa=empresa,
+        usuario=_usuario(),
+        original_filename="razao-metadados.xlsx",
+        file_hash="sha256:metadados-descartes",
+        status="completed",
+    )
+    session.add_all(
+        [
+            _conta(10046, is_financial_origin=True),
+            _conta(90001, is_financial_origin=False),
+            _conta(50057, is_financial_origin=False),
+            _conta(70001, is_financial_origin=False, tipo="S"),
+            _lancamento(lote=lote, empresa=empresa),
+            _lancamento(
+                lote=lote,
+                empresa=empresa,
+                numero_lancamento="43",
+                conta_origem=90001,
+                conta_contrapartida=50057,
+                conta_debito=50057,
+                conta_credito=90001,
+                historico="Origem nao financeira",
+                historico_normalizado="origem nao financeira",
+            ),
+            _lancamento(
+                lote=lote,
+                empresa=empresa,
+                numero_lancamento="44",
+                conta_contrapartida=70001,
+                conta_debito=70001,
+                conta_credito=10046,
+                historico="Target sintetico",
+                historico_normalizado="target sintetico",
+            ),
+        ]
+    )
+    session.commit()
+
+    dataset = build_dataset_treino_contrapartida(session, empresa_id=empresa.id)
+
+    assert dataset.metadata == {
+        "empresa_id": empresa.id,
+        "total_linhas": 1,
+        "total_descartes": 2,
+        "contagem_por_target": {50057: 1},
+        "treinavel": True,
+    }
