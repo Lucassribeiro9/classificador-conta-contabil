@@ -466,6 +466,48 @@ def test_dataset_builder_discards_synthetic_and_missing_targets(session):
     assert dataset.metadata["contagem_por_target"] == {50057: 1}
 
 
+def test_dataset_builder_discards_inactive_target(session):
+    empresa = _empresa()
+    lote = LoteImportacaoRazao(
+        empresa=empresa,
+        usuario=_usuario(),
+        original_filename="razao-target-inativo.xlsx",
+        file_hash="sha256:target-inativo",
+        status="completed",
+    )
+    session.add_all(
+        [
+            _conta(10046, is_financial_origin=True),
+            _conta(50057, is_financial_origin=False),
+            _conta(70001, is_financial_origin=False, is_active=False),
+            _lancamento(lote=lote, empresa=empresa),
+            _lancamento(
+                lote=lote,
+                empresa=empresa,
+                numero_lancamento="43",
+                conta_contrapartida=70001,
+                conta_debito=70001,
+                conta_credito=10046,
+                historico="Target inativo",
+                historico_normalizado="target inativo",
+            ),
+        ]
+    )
+    session.commit()
+
+    dataset = build_dataset_treino_contrapartida(session, empresa_id=empresa.id)
+
+    assert dataset.linhas == [
+        {
+            "features": "recebimento cliente origem_10046 direcao_credito",
+            "target_conta_contrapartida": 50057,
+        }
+    ]
+    assert dataset.metadata["total_linhas"] == 1
+    assert dataset.metadata["total_descartes"] == 1
+    assert dataset.metadata["contagem_por_target"] == {50057: 1}
+
+
 def test_dataset_builder_metadata_counts_discards_from_filters_and_validations(
     session,
 ):
