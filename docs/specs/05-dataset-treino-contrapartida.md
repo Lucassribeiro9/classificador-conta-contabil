@@ -25,6 +25,40 @@ Sucesso significa que o dataset evita ambiguidade do razao completo e fornece ex
 - `core/ml_engine.py`: uso futuro do dataset no classificador.
 - `tests/`: testes de filtro, target e features.
 
+## Contratos de Campos Base
+
+O builder deve usar os nomes finais ja persistidos pelos dominios de plano de
+contas e Razao. Estes nomes sao contrato para as issues funcionais desta spec.
+
+Catalogo de contas (`ContaContabil`):
+
+- `codigo`: identificador unico da conta contabil no catalogo.
+- `tipo`: indica conta analitica (`A`) ou sintetica (`S`).
+- `is_active`: indica se a conta esta ativa.
+- `is_financial_origin`: flag persistida que identifica contas de banco, caixa
+  ou aplicacao financeira. O builder deve consultar esta flag, sem recalcular a
+  heuristica financeira.
+- `is_classificavel`: helper de dominio para validar se a conta pode ser alvo
+  de classificacao; hoje exige conta ativa e `tipo = A`.
+
+Lancamento normalizado do Razao (`LancamentoRazaoNormalizado`):
+
+- `empresa_id`: escopo obrigatorio do dataset.
+- `conta_origem`: conta do bloco do Razao, usada para filtrar origem financeira.
+- `conta_contrapartida`: alvo inicial do dataset.
+- `direcao`: `debito` ou `credito`, usada como contexto da feature.
+- `historico_normalizado`: historico ja persistido pela importacao do Razao,
+  gerado por `normalize_razao_historico`.
+
+Campos minimos do dataset:
+
+- Filtros: `empresa_id`, `conta_origem`, `conta_contrapartida`.
+- Features iniciais: `historico_normalizado`, `conta_origem`, `direcao`.
+- Target: `conta_contrapartida`.
+
+O builder nao deve depender de `valor` bruto na primeira versao e nao deve usar
+conta sintetica, inativa ou inexistente como target.
+
 ## Code Style
 
 Builder de dataset deve ser separado do treino do modelo. Ele deve retornar estrutura explicita de features e target.
@@ -97,7 +131,9 @@ Exemplo de metadados esperados:
 - O dataset usara apenas lancamentos normalizados validos.
 - O dataset usara apenas origem financeira.
 - O alvo sera `conta_contrapartida`.
-- O alvo deve existir no catalogo e ser conta analitica (`tipo = A`).
+- O alvo deve existir no catalogo e ser conta classificavel
+  (`ContaContabil.is_classificavel`), o que exige conta ativa e analitica
+  (`tipo = A`).
 - Contas sinteticas nao podem ser target.
 - Features iniciais serao `historico_normalizado`, `conta_origem` e `direcao`.
 - Codigo da conta de origem pode entrar como token textual.
@@ -110,5 +146,4 @@ Exemplo de metadados esperados:
 
 ## Open Questions
 
-- O campo `historico_normalizado` sera persistido no lancamento ou calculado no builder?
 - O criterio de treinabilidade ficara no builder como metadado ou apenas no ML?
