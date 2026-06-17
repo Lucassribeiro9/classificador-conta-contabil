@@ -9,6 +9,7 @@ from sqlalchemy.pool import StaticPool
 from core.database import Base
 from core.dataset_builder import build_dataset_treino_contrapartida
 from core.models import (
+    ContaContabil,
     Empresa,
     LancamentoRazaoNormalizado,
     LoteImportacaoRazao,
@@ -55,6 +56,23 @@ def _usuario() -> Usuario:
     )
 
 
+def _conta(
+    codigo: int,
+    *,
+    is_financial_origin: bool,
+    nome: str | None = None,
+) -> ContaContabil:
+    return ContaContabil(
+        codigo=codigo,
+        classificacao=f"1.1.1.{codigo}",
+        nome=nome or f"Conta {codigo}",
+        tipo="A",
+        grau=4,
+        is_active=True,
+        is_financial_origin=is_financial_origin,
+    )
+
+
 def _lancamento(
     lote: LoteImportacaoRazao,
     empresa: Empresa,
@@ -87,7 +105,12 @@ def test_dataset_builder_can_be_called_for_known_company(session):
         file_hash="sha256:abc123",
         status="completed",
     )
-    session.add(_lancamento(lote=lote, empresa=empresa))
+    session.add_all(
+        [
+            _conta(10046, is_financial_origin=True),
+            _lancamento(lote=lote, empresa=empresa),
+        ]
+    )
     session.commit()
 
     dataset = build_dataset_treino_contrapartida(session, empresa_id=empresa.id)
@@ -110,7 +133,12 @@ def test_dataset_builder_returns_explicit_lines_and_metadata(session):
         file_hash="sha256:abc123",
         status="completed",
     )
-    session.add(_lancamento(lote=lote, empresa=empresa))
+    session.add_all(
+        [
+            _conta(10046, is_financial_origin=True),
+            _lancamento(lote=lote, empresa=empresa),
+        ]
+    )
     session.commit()
 
     dataset = build_dataset_treino_contrapartida(session, empresa_id=empresa.id)
@@ -167,6 +195,7 @@ def test_dataset_builder_keeps_examples_isolated_by_company(session):
     )
     session.add_all(
         [
+            _conta(10046, is_financial_origin=True),
             _lancamento(lote=lote_a, empresa=empresa_a),
             _lancamento(
                 lote=lote_b,
@@ -195,6 +224,95 @@ def test_dataset_builder_keeps_examples_isolated_by_company(session):
     assert dataset.metadata["contagem_por_target"] == {50057: 1}
 
 
+def test_dataset_builder_uses_persisted_flag_instead_of_textual_heuristic(session):
+    empresa = _empresa()
+    lote = LoteImportacaoRazao(
+        empresa=empresa,
+        usuario=_usuario(),
+        original_filename="razao-fevereiro.xlsx",
+        file_hash="sha256:sem-heuristica-textual",
+        status="completed",
+    )
+    session.add_all(
+        [
+            _conta(
+                10046,
+                is_financial_origin=False,
+                nome="Banco Marcado Como Nao Financeiro",
+            ),
+            _conta(
+                90001,
+                is_financial_origin=True,
+                nome="Conta Generica Marcada Financeira",
+            ),
+            _lancamento(lote=lote, empresa=empresa),
+            _lancamento(
+                lote=lote,
+                empresa=empresa,
+                numero_lancamento="43",
+                conta_origem=90001,
+                conta_contrapartida=70001,
+                conta_debito=70001,
+                conta_credito=90001,
+                historico="Pagamento fornecedor",
+                historico_normalizado="pagamento fornecedor",
+            ),
+        ]
+    )
+    session.commit()
+
+    dataset = build_dataset_treino_contrapartida(session, empresa_id=empresa.id)
+
+    assert dataset.linhas == [
+        {
+            "features": "pagamento fornecedor origem_90001 direcao_credito",
+            "target_conta_contrapartida": 70001,
+        }
+    ]
+    assert dataset.metadata["contagem_por_target"] == {70001: 1}
+
+
 def test_dataset_builder_rejects_missing_company_scope(session):
     with pytest.raises(ValueError, match="empresa_id"):
         build_dataset_treino_contrapartida(session, empresa_id=None)
+
+
+def test_dataset_builder_filters_origin_by_persisted_financial_flag(session):
+    empresa = _empresa()
+    lote = LoteImportacaoRazao(
+        empresa=empresa,
+        usuario=_usuario(),
+        original_filename="razao-janeiro.xlsx",
+        file_hash="sha256:origem-financeira",
+        status="completed",
+    )
+    session.add_all(
+        [
+            _conta(10046, is_financial_origin=True),
+            _conta(90001, is_financial_origin=False),
+            _lancamento(lote=lote, empresa=empresa),
+            _lancamento(
+                lote=lote,
+                empresa=empresa,
+                numero_lancamento="43",
+                conta_origem=90001,
+                conta_contrapartida=70001,
+                conta_debito=70001,
+                conta_credito=90001,
+                historico="Pagamento fornecedor",
+                historico_normalizado="pagamento fornecedor",
+            ),
+        ]
+    )
+    session.commit()
+
+    dataset = build_dataset_treino_contrapartida(session, empresa_id=empresa.id)
+
+    assert dataset.linhas == [
+        {
+            "features": "recebimento cliente origem_10046 direcao_credito",
+            "target_conta_contrapartida": 50057,
+        }
+    ]
+    assert dataset.metadata["total_linhas"] == 1
+    assert dataset.metadata["contagem_por_target"] == {50057: 1}
