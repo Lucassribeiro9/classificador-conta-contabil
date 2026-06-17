@@ -14,6 +14,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from core.dataset_builder import DatasetTreinoContrapartida
 from core.models import Transacao
 
 logger = logging.getLogger(__name__)
@@ -73,11 +74,28 @@ class ClassificadorContabil:
             predictions.append(
                 {
                     "conta_contabil_predita": best_class,
+                    "conta_contrapartida_predita": best_class,
                     "confidence": max_prob,
                     "needs_review": True if max_prob < 0.7 else False,
                 }
             )
         return predictions
+
+    def train_from_dataset(self, dataset: DatasetTreinoContrapartida) -> bool:
+        if not dataset.metadata.get("treinavel", False):
+            logger.warning(
+                "Dataset insuficiente para treinamento",
+                extra={
+                    "empresa_id": dataset.metadata.get("empresa_id"),
+                    "total_linhas": dataset.metadata.get("total_linhas"),
+                    "contagem_por_target": dataset.metadata.get("contagem_por_target"),
+                },
+            )
+            return False
+
+        df = pd.DataFrame(dataset.linhas)
+        self.pipeline.fit(df["features"], df["target_conta_contrapartida"])
+        return True
 
     def train_for_company(self, empresa_id: int):
         # Buscar as transações da empresa e verificar se não são nulas

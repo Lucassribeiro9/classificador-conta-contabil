@@ -5,6 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from core.database import Base
+from core.dataset_builder import DatasetTreinoContrapartida
 from core.ml_engine import ClassificadorContabil
 from core.models import Empresa, Transacao
 
@@ -87,6 +88,43 @@ def test_train_for_company_com_poucos_dados_retorna_false(db_session, empresa):
 
     engine_ml = ClassificadorContabil(db_session)
     assert engine_ml.train_for_company(empresa.id) is False
+
+
+def test_train_from_dataset_contract_trains_classifier(db_session):
+    dataset = DatasetTreinoContrapartida(
+        linhas=[
+            {
+                "features": f"pagamento fornecedor {i} origem_10046 direcao_credito",
+                "target_conta_contrapartida": 50057,
+            }
+            for i in range(5)
+        ]
+        + [
+            {
+                "features": f"recebimento cliente {i} origem_10046 direcao_debito",
+                "target_conta_contrapartida": 70001,
+            }
+            for i in range(5)
+        ],
+        metadata={
+            "empresa_id": 1,
+            "total_linhas": 10,
+            "total_descartes": 0,
+            "contagem_por_target": {50057: 5, 70001: 5},
+            "treinavel": True,
+        },
+    )
+    engine_ml = ClassificadorContabil(db_session)
+
+    assert engine_ml.train_from_dataset(dataset) is True
+    predictions = engine_ml._predict_features(
+        ["pagamento fornecedor aluguel origem_10046 direcao_credito"]
+    )
+
+    assert predictions[0]["conta_contrapartida_predita"] in {50057, 70001}
+    assert predictions[0]["conta_contabil_predita"] == predictions[0][
+        "conta_contrapartida_predita"
+    ]
 
 
 def test_predict_inputs_retorna_estrutura_esperada(db_session, empresa):
