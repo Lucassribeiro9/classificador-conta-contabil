@@ -325,6 +325,63 @@ def test_dataset_builder_filters_origin_by_persisted_financial_flag(session):
     assert dataset.metadata["contagem_por_target"] == {50057: 1}
 
 
+def test_dataset_builder_features_have_deterministic_initial_format(session):
+    empresa = _empresa()
+    lote = LoteImportacaoRazao(
+        empresa=empresa,
+        usuario=_usuario(),
+        original_filename="razao-features.xlsx",
+        file_hash="sha256:features-iniciais",
+        status="completed",
+    )
+    session.add_all(
+        [
+            _conta(10046, is_financial_origin=True),
+            _conta(50057, is_financial_origin=False),
+            _lancamento(
+                lote=lote,
+                empresa=empresa,
+                historico_normalizado="  pagamento pix fornecedor  ",
+                valor=Decimal("9876.54"),
+            ),
+        ]
+    )
+    session.commit()
+
+    dataset = build_dataset_treino_contrapartida(session, empresa_id=empresa.id)
+
+    features = dataset.linhas[0]["features"]
+    assert features == "pagamento pix fornecedor origem_10046 direcao_credito"
+    assert "9876.54" not in features
+
+
+def test_dataset_builder_features_support_minimal_history(session):
+    empresa = _empresa()
+    lote = LoteImportacaoRazao(
+        empresa=empresa,
+        usuario=_usuario(),
+        original_filename="razao-features-minimas.xlsx",
+        file_hash="sha256:features-minimas",
+        status="completed",
+    )
+    session.add_all(
+        [
+            _conta(10046, is_financial_origin=True),
+            _conta(50057, is_financial_origin=False),
+            _lancamento(
+                lote=lote,
+                empresa=empresa,
+                historico_normalizado="",
+            ),
+        ]
+    )
+    session.commit()
+
+    dataset = build_dataset_treino_contrapartida(session, empresa_id=empresa.id)
+
+    assert dataset.linhas[0]["features"] == "origem_10046 direcao_credito"
+
+
 def test_dataset_builder_discards_synthetic_and_missing_targets(session):
     empresa = _empresa()
     lote = LoteImportacaoRazao(

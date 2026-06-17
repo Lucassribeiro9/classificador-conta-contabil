@@ -68,12 +68,14 @@ def build_dataset_treino_contrapartida(
 
 
 def _to_dataset_row(lancamento: LancamentoRazaoNormalizado) -> dict[str, Any]:
+    feature_tokens = [
+        lancamento.historico_normalizado.strip(),
+        f"origem_{lancamento.conta_origem}",
+        f"direcao_{lancamento.direcao}",
+    ]
+
     return {
-        "features": (
-            f"{lancamento.historico_normalizado} "
-            f"origem_{lancamento.conta_origem} "
-            f"direcao_{lancamento.direcao}"
-        ),
+        "features": " ".join(token for token in feature_tokens if token),
         "target_conta_contrapartida": lancamento.conta_contrapartida,
     }
 
