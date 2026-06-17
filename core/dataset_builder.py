@@ -15,7 +15,7 @@ class DatasetTreinoContrapartida:
 def build_dataset_treino_contrapartida(
     session: Session,
     *,
-    empresa_id: int,
+    empresa_id: int | None,
 ) -> DatasetTreinoContrapartida:
     """Monta o contrato inicial do dataset de contrapartida por empresa.
 
@@ -23,6 +23,9 @@ def build_dataset_treino_contrapartida(
     consumo futuro pelo ML. Regras adicionais de elegibilidade entram nas
     proximas issues da spec.
     """
+    if empresa_id is None:
+        raise ValueError("empresa_id e obrigatorio")
+
     lancamentos = (
         session.query(LancamentoRazaoNormalizado)
         .filter(LancamentoRazaoNormalizado.empresa_id == empresa_id)
