@@ -58,6 +58,7 @@ def build_dataset_treino_contrapartida(
     linhas = [_to_dataset_row(lancamento) for lancamento in lancamentos]
     contagem_por_target = _count_targets(linhas)
     total_descartes = lancamentos_empresa.count() - len(linhas)
+    treinavel = len(linhas) >= 10 and len(contagem_por_target) >= 2
 
     return DatasetTreinoContrapartida(
         linhas=linhas,
@@ -66,7 +67,7 @@ def build_dataset_treino_contrapartida(
             "total_linhas": len(linhas),
             "total_descartes": total_descartes,
             "contagem_por_target": contagem_por_target,
-            "treinavel": len(linhas) >= 1,
+            "treinavel": treinavel,
         },
     )
 
