@@ -41,6 +41,50 @@ elif credito is not None:
     conta_credito = conta_bloco
 ```
 
+## Contrato de Layout
+
+O arquivo padrao de importacao do Razao deve ser `.xlsx` e pode seguir o
+modelo higienizado `modelo-razao-importacao.xlsx`, documentado em
+`docs/razao-planilha-modelo.md`.
+
+Campos obrigatorios do cabecalho:
+
+- `Empresa`: nome da empresa exibida no arquivo.
+- `CNPJ`: documento da empresa. A importacao normaliza para digitos e usa o
+  valor para validar a situacao da empresa quando informado no arquivo.
+- `Periodo inicio`: data inicial do Razao.
+- `Periodo fim`: data final do Razao.
+
+Campos obrigatorios dos lancamentos:
+
+- `data`
+- `conta_origem`
+- `historico`
+- `contrapartida`
+- `debito` ou `credito`: exatamente um dos dois deve estar preenchido em cada
+  linha valida.
+
+Campos opcionais dos lancamentos:
+
+- `numero`: numero externo do lancamento quando o relatorio de origem trouxer
+  esta informacao.
+- `conta_origem_classificacao`
+- `conta_origem_nome`
+- `saldo_exercicio_original`
+
+O campo persistido `numero_lancamento` representa o numero externo do
+lancamento vindo da planilha. Ele pode ser nulo quando o layout de origem nao
+fornecer numero de lancamento. O `id` interno do banco identifica o registro
+persistido e nao substitui nem deve ser usado como numero externo do
+lancamento.
+
+`saldo_exercicio_original` e dado auxiliar de conferencia visual. Ele nao
+participa da regra principal de debito/credito, nao define `valor`, nao define
+`direcao` e nao entra na chave de deduplicacao aprovada.
+
+Se o CNPJ informado no arquivo pertencer a uma empresa inativa, a importacao
+deve ser bloqueada antes de persistir lote ou lancamentos.
+
 ## Testing Strategy
 
 - Testar deteccao de bloco `Conta:`.

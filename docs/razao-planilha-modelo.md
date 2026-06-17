@@ -21,7 +21,8 @@ Campos obrigatorios:
 
 Campos opcionais:
 
-- `numero`: preencha somente se o relatorio trouxer numero de lancamento.
+- `numero`: numero externo do lancamento. Pode ficar vazio quando o relatorio
+  nao trouxer esse dado.
 - `conta_origem_classificacao`
 - `conta_origem_nome`
 - `debito`
@@ -32,10 +33,13 @@ Cada linha deve ter `debito` ou `credito` preenchido. Nunca preencha os dois
 na mesma linha.
 
 `saldo_exercicio_original` serve apenas para conferencia visual. Ele nao define
-debito, credito, valor do lancamento nem direcao contabil.
+debito, credito, valor do lancamento, direcao contabil nem chave de
+deduplicacao.
 
 ## Regras importantes
 
-- Nao use o `id` interno do sistema como `numero`.
+- Nao use o `id` interno do sistema como `numero`. O `id` interno identifica o
+  registro persistido; o `numero` representa somente o numero externo do
+  lancamento quando existir no relatorio.
 - Nao informe `cod_dominio`; este modelo nao cria empresa automaticamente.
 - Se o CNPJ pertencer a uma empresa inativa, a importacao deve ser bloqueada.
