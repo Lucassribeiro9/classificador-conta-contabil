@@ -61,14 +61,16 @@ def _conta(
     *,
     is_financial_origin: bool,
     nome: str | None = None,
+    tipo: str = "A",
+    is_active: bool = True,
 ) -> ContaContabil:
     return ContaContabil(
         codigo=codigo,
         classificacao=f"1.1.1.{codigo}",
         nome=nome or f"Conta {codigo}",
-        tipo="A",
+        tipo=tipo,
         grau=4,
-        is_active=True,
+        is_active=is_active,
         is_financial_origin=is_financial_origin,
     )
 
@@ -108,6 +110,7 @@ def test_dataset_builder_can_be_called_for_known_company(session):
     session.add_all(
         [
             _conta(10046, is_financial_origin=True),
+            _conta(50057, is_financial_origin=False),
             _lancamento(lote=lote, empresa=empresa),
         ]
     )
@@ -136,6 +139,7 @@ def test_dataset_builder_returns_explicit_lines_and_metadata(session):
     session.add_all(
         [
             _conta(10046, is_financial_origin=True),
+            _conta(50057, is_financial_origin=False),
             _lancamento(lote=lote, empresa=empresa),
         ]
     )
@@ -196,6 +200,7 @@ def test_dataset_builder_keeps_examples_isolated_by_company(session):
     session.add_all(
         [
             _conta(10046, is_financial_origin=True),
+            _conta(50057, is_financial_origin=False),
             _lancamento(lote=lote_a, empresa=empresa_a),
             _lancamento(
                 lote=lote_b,
@@ -245,6 +250,7 @@ def test_dataset_builder_uses_persisted_flag_instead_of_textual_heuristic(sessio
                 is_financial_origin=True,
                 nome="Conta Generica Marcada Financeira",
             ),
+            _conta(70001, is_financial_origin=False),
             _lancamento(lote=lote, empresa=empresa),
             _lancamento(
                 lote=lote,
@@ -290,6 +296,7 @@ def test_dataset_builder_filters_origin_by_persisted_financial_flag(session):
         [
             _conta(10046, is_financial_origin=True),
             _conta(90001, is_financial_origin=False),
+            _conta(50057, is_financial_origin=False),
             _lancamento(lote=lote, empresa=empresa),
             _lancamento(
                 lote=lote,
@@ -315,4 +322,56 @@ def test_dataset_builder_filters_origin_by_persisted_financial_flag(session):
         }
     ]
     assert dataset.metadata["total_linhas"] == 1
+    assert dataset.metadata["contagem_por_target"] == {50057: 1}
+
+
+def test_dataset_builder_discards_synthetic_and_missing_targets(session):
+    empresa = _empresa()
+    lote = LoteImportacaoRazao(
+        empresa=empresa,
+        usuario=_usuario(),
+        original_filename="razao-targets.xlsx",
+        file_hash="sha256:targets-invalidos",
+        status="completed",
+    )
+    session.add_all(
+        [
+            _conta(10046, is_financial_origin=True),
+            _conta(50057, is_financial_origin=False),
+            _conta(70001, is_financial_origin=False, tipo="S"),
+            _lancamento(lote=lote, empresa=empresa),
+            _lancamento(
+                lote=lote,
+                empresa=empresa,
+                numero_lancamento="43",
+                conta_contrapartida=70001,
+                conta_debito=70001,
+                conta_credito=10046,
+                historico="Lancamento com alvo sintetico",
+                historico_normalizado="lancamento com alvo sintetico",
+            ),
+            _lancamento(
+                lote=lote,
+                empresa=empresa,
+                numero_lancamento="44",
+                conta_contrapartida=88888,
+                conta_debito=88888,
+                conta_credito=10046,
+                historico="Lancamento com alvo inexistente",
+                historico_normalizado="lancamento com alvo inexistente",
+            ),
+        ]
+    )
+    session.commit()
+
+    dataset = build_dataset_treino_contrapartida(session, empresa_id=empresa.id)
+
+    assert dataset.linhas == [
+        {
+            "features": "recebimento cliente origem_10046 direcao_credito",
+            "target_conta_contrapartida": 50057,
+        }
+    ]
+    assert dataset.metadata["total_linhas"] == 1
+    assert dataset.metadata["total_descartes"] == 2
     assert dataset.metadata["contagem_por_target"] == {50057: 1}
