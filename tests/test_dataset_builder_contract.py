@@ -98,6 +98,38 @@ def _lancamento(
     return LancamentoRazaoNormalizado(**data)
 
 
+def _seed_valid_dataset(
+    session,
+    *,
+    empresa: Empresa,
+    total_linhas: int,
+    targets: list[int],
+):
+    lote = LoteImportacaoRazao(
+        empresa=empresa,
+        usuario=_usuario(),
+        original_filename="razao-treinabilidade.xlsx",
+        file_hash=f"sha256:treinabilidade-{total_linhas}-{len(set(targets))}",
+        status="completed",
+    )
+    contas = [_conta(10046, is_financial_origin=True)]
+    contas.extend(_conta(target, is_financial_origin=False) for target in set(targets))
+    lancamentos = [
+        _lancamento(
+            lote=lote,
+            empresa=empresa,
+            numero_lancamento=str(index + 1),
+            conta_contrapartida=targets[index],
+            conta_debito=targets[index],
+            conta_credito=10046,
+            historico=f"Lancamento {index + 1}",
+            historico_normalizado=f"lancamento {index + 1}",
+        )
+        for index in range(total_linhas)
+    ]
+    session.add_all([*contas, *lancamentos])
+
+
 def test_dataset_builder_can_be_called_for_known_company(session):
     empresa = _empresa()
     lote = LoteImportacaoRazao(
@@ -153,7 +185,7 @@ def test_dataset_builder_returns_explicit_lines_and_metadata(session):
         "total_linhas": 1,
         "total_descartes": 0,
         "contagem_por_target": {50057: 1},
-        "treinavel": True,
+        "treinavel": False,
     }
 
 
@@ -484,5 +516,73 @@ def test_dataset_builder_metadata_counts_discards_from_filters_and_validations(
         "total_linhas": 1,
         "total_descartes": 2,
         "contagem_por_target": {50057: 1},
-        "treinavel": True,
+        "treinavel": False,
     }
+
+
+def test_dataset_builder_marks_one_valid_line_as_not_trainable(session):
+    empresa = _empresa()
+    _seed_valid_dataset(
+        session,
+        empresa=empresa,
+        total_linhas=1,
+        targets=[50057],
+    )
+    session.commit()
+
+    dataset = build_dataset_treino_contrapartida(session, empresa_id=empresa.id)
+
+    assert dataset.metadata["total_linhas"] == 1
+    assert dataset.metadata["contagem_por_target"] == {50057: 1}
+    assert dataset.metadata["treinavel"] is False
+
+
+def test_dataset_builder_marks_nine_valid_lines_as_not_trainable(session):
+    empresa = _empresa()
+    _seed_valid_dataset(
+        session,
+        empresa=empresa,
+        total_linhas=9,
+        targets=[50057, 70001, 50057, 70001, 50057, 70001, 50057, 70001, 50057],
+    )
+    session.commit()
+
+    dataset = build_dataset_treino_contrapartida(session, empresa_id=empresa.id)
+
+    assert dataset.metadata["total_linhas"] == 9
+    assert dataset.metadata["contagem_por_target"] == {50057: 5, 70001: 4}
+    assert dataset.metadata["treinavel"] is False
+
+
+def test_dataset_builder_marks_ten_lines_with_one_target_as_not_trainable(session):
+    empresa = _empresa()
+    _seed_valid_dataset(
+        session,
+        empresa=empresa,
+        total_linhas=10,
+        targets=[50057] * 10,
+    )
+    session.commit()
+
+    dataset = build_dataset_treino_contrapartida(session, empresa_id=empresa.id)
+
+    assert dataset.metadata["total_linhas"] == 10
+    assert dataset.metadata["contagem_por_target"] == {50057: 10}
+    assert dataset.metadata["treinavel"] is False
+
+
+def test_dataset_builder_marks_ten_lines_with_two_targets_as_trainable(session):
+    empresa = _empresa()
+    _seed_valid_dataset(
+        session,
+        empresa=empresa,
+        total_linhas=10,
+        targets=[50057, 70001, 50057, 70001, 50057, 70001, 50057, 70001, 50057, 70001],
+    )
+    session.commit()
+
+    dataset = build_dataset_treino_contrapartida(session, empresa_id=empresa.id)
+
+    assert dataset.metadata["total_linhas"] == 10
+    assert dataset.metadata["contagem_por_target"] == {50057: 5, 70001: 5}
+    assert dataset.metadata["treinavel"] is True
