@@ -183,6 +183,10 @@ class ImportacaoRazaoResponse(BaseModel):
     warnings: list[dict]
 
 
+class ContaContabilFinancialOriginUpdate(BaseModel):
+    is_financial_origin: bool
+
+
 class ContaContabilResponse(BaseModel):
     id: int
     codigo: int
