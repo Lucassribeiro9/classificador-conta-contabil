@@ -8,6 +8,7 @@ from pwdlib import PasswordHash
 
 from core.config import settings
 from core.models import (
+    AuditEvent,
     ContaContabil,
     Empresa,
     Usuario,
@@ -144,6 +145,69 @@ def test_user_with_operacao_permission_imports_razao_and_receives_summary(client
     }
 
 
+def test_successful_razao_import_creates_audit_event_with_counters(client):
+    from tests.conftest import TestingSessionLocal
+
+    usuario, empresa_id = _seed_user_company_and_catalog("operacao")
+
+    response = client.post(
+        f"/api/v1/companies/{empresa_id}/razao/import",
+        files=_upload_file(),
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 200
+
+    with TestingSessionLocal() as session:
+        event = session.query(AuditEvent).one()
+        assert event.event_type == "ledger.imported"
+        assert event.user_id == usuario.id
+        assert event.empresa_id == empresa_id
+        assert event.resource_id == str(response.json()["lote_id"])
+        assert event.metadata_json["total_linhas"] == 1
+        assert event.metadata_json["total_importadas"] == 1
+        assert event.metadata_json["total_invalidas"] == 0
+        assert event.metadata_json["warnings"] == []
+        assert event.metadata_json["file_hash"].startswith("sha256:")
+        assert "Pagamento fornecedor" not in str(event.metadata_json)
+
+
+def test_duplicate_razao_file_hash_creates_failed_audit_event(client):
+    from tests.conftest import TestingSessionLocal
+
+    usuario, empresa_id = _seed_user_company_and_catalog("operacao")
+    headers = _auth_headers(usuario)
+
+    first_response = client.post(
+        f"/api/v1/companies/{empresa_id}/razao/import",
+        files=_upload_file(),
+        headers=headers,
+    )
+    second_response = client.post(
+        f"/api/v1/companies/{empresa_id}/razao/import",
+        files=_upload_file(),
+        headers=headers,
+    )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 400
+    assert second_response.json()["detail"] == "Arquivo ja importado com sucesso para esta empresa."
+
+    with TestingSessionLocal() as session:
+        events = session.query(AuditEvent).order_by(AuditEvent.id).all()
+        assert [event.event_type for event in events] == [
+            "ledger.imported",
+            "ledger.import_failed",
+        ]
+        failed_event = events[-1]
+        assert failed_event.user_id == usuario.id
+        assert failed_event.empresa_id == empresa_id
+        assert failed_event.metadata_json["file_hash"].startswith("sha256:")
+        assert failed_event.metadata_json["error_type"] == "RazaoImportError"
+        assert failed_event.metadata_json["reason"] == "duplicate_file_hash"
+        assert "Traceback" not in failed_event.metadata_json["error"]
+
+
 def test_user_with_admin_empresa_permission_imports_razao(client):
     usuario, empresa_id = _seed_user_company_and_catalog("admin_empresa")
 
@@ -192,6 +256,15 @@ def test_user_without_company_link_cannot_import_razao(client):
 
     assert response.status_code == 403
     assert response.json()["detail"] == "Acesso negado"
+
+    with TestingSessionLocal() as session:
+        event = session.query(AuditEvent).one()
+        assert event.event_type == "ledger.import_denied"
+        assert event.user_id == usuario.id
+        assert event.empresa_id == empresa_id
+        assert event.metadata_json["file_hash"].startswith("sha256:")
+        assert event.metadata_json["reason"] == "access_denied"
+        assert "Pagamento fornecedor" not in str(event.metadata_json)
 
 
 def test_razao_import_rejects_non_xlsx_file(client):
