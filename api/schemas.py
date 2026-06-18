@@ -203,3 +203,29 @@ class PredictResponse(BaseModel):
     quantidade_processada: int
     persisted: bool
     results: list[PredictResult]
+
+
+class MLClassificationInput(BaseModel):
+    historico: str
+    conta_origem: int
+    direcao: str
+
+    @field_validator("direcao")
+    @classmethod
+    def validate_direcao(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"debito", "credito"}:
+            raise ValueError("Direção inválida")
+        return normalized
+
+
+class MLClassificationResult(BaseModel):
+    conta_contrapartida: int
+    confianca: float
+    needs_review: bool
+
+
+class MLClassificationResponse(BaseModel):
+    empresa_id: int
+    quantidade_processada: int
+    results: list[MLClassificationResult]
