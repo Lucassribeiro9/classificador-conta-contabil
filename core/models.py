@@ -85,6 +85,11 @@ class Empresa(Base):
         back_populates="empresa",
         cascade="all, delete-orphan",
     )
+    feedbacks_classificacao: Mapped[list["FeedbackClassificacao"]] = relationship(
+        "FeedbackClassificacao",
+        back_populates="empresa",
+        cascade="all, delete-orphan",
+    )
 
 
 class Usuario(Base):
@@ -125,6 +130,10 @@ class Usuario(Base):
     )
     lotes_importacao_razao: Mapped[list["LoteImportacaoRazao"]] = relationship(
         "LoteImportacaoRazao",
+        back_populates="usuario",
+    )
+    feedbacks_classificacao: Mapped[list["FeedbackClassificacao"]] = relationship(
+        "FeedbackClassificacao",
         back_populates="usuario",
     )
 
@@ -332,6 +341,48 @@ class LancamentoRazaoNormalizado(Base):
     )
     empresa: Mapped["Empresa"] = relationship(
         "Empresa", back_populates="lancamentos_razao"
+    )
+    feedbacks_classificacao: Mapped[list["FeedbackClassificacao"]] = relationship(
+        "FeedbackClassificacao",
+        back_populates="lancamento",
+        cascade="all, delete-orphan",
+    )
+
+
+class FeedbackClassificacao(Base):
+    """
+    Registra correcao humana para classificacao de contrapartida do razao.
+    """
+
+    __tablename__ = "feedback_classificacao"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("empresas.id"), nullable=False
+    )
+    lancamento_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("lancamentos_razao_normalizados.id"), nullable=False
+    )
+    conta_sugerida: Mapped[int] = mapped_column(Integer, nullable=False)
+    conta_final: Mapped[int] = mapped_column(Integer, nullable=False)
+    usuario_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("usuarios.id"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, onupdate=datetime.now, nullable=False
+    )
+
+    empresa: Mapped["Empresa"] = relationship(
+        "Empresa", back_populates="feedbacks_classificacao"
+    )
+    lancamento: Mapped["LancamentoRazaoNormalizado"] = relationship(
+        "LancamentoRazaoNormalizado", back_populates="feedbacks_classificacao"
+    )
+    usuario: Mapped["Usuario"] = relationship(
+        "Usuario", back_populates="feedbacks_classificacao"
     )
 
 

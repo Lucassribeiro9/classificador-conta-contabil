@@ -24,6 +24,24 @@ class FeedbackUpdate(BaseModel):
     conta_contabil: int
 
 
+class FeedbackClassificacaoCreate(BaseModel):
+    lancamento_id: int
+    conta_sugerida: int
+    conta_final: int
+
+
+class FeedbackClassificacaoResponse(BaseModel):
+    id: int
+    empresa_id: int
+    lancamento_id: int
+    conta_sugerida: int
+    conta_final: int
+    usuario_id: int
+    created_at: datetime
+    updated_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
 # Schemas para transação
 class TransacaoBase(BaseModel):
     data: date
