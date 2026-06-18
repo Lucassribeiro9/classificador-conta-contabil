@@ -88,8 +88,8 @@ Exemplo de evento:
 - A primeira versao registrara eventos de autenticacao, acesso negado, importacao do plano, importacao do razao, classificacao, feedback e gestao de usuarios/permissoes.
 - O contexto do executor sera propagado por `contextvars`, preenchido durante requests HTTP autenticadas e ausente por padrao em execucoes fora de request.
 - O servico de auditoria podera usar o usuario do contexto quando `user_id` nao for informado explicitamente.
-- Eventos iniciais de autenticacao: `auth.login_success`, `auth.login_failed`, `auth.user.inactive_blocked`, `auth.access.denied`.
-- Eventos iniciais de plano de contas: `chart_import.started`, `chart_import.completed`, `chart_import.failed`.
+- Eventos iniciais de autenticacao: `auth.login.success`, `auth.login.failed`, `auth.user.inactive_blocked`, `auth.access.denied`.
+- Eventos iniciais de plano de contas: `plan.imported`, `plan.import_failed`.
 - Eventos iniciais de razao: `ledger_import.started`, `ledger_import.completed`, `ledger_import.completed_with_warnings`, `ledger_import.failed`.
 - Eventos iniciais de classificacao: `classification.started`, `classification.completed`, `classification.failed`.
 - Eventos iniciais de feedback: `feedback.created`, `feedback.updated`.
