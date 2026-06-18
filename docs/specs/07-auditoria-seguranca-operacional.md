@@ -80,9 +80,10 @@ Exemplo de evento:
 
 ## Decisoes Aprovadas
 
-- Auditoria sera uma tabela unica de eventos, como `audit_events`.
-- Eventos terao `event_type`, `usuario_id` opcional, `empresa_id` opcional, `resource_type`, `resource_id`, `metadata` JSON, `created_at`, e quando disponivel `ip_address` e `user_agent`.
-- `usuario_id` sera opcional porque login falho pode nao estar associado a usuario valido.
+- Auditoria sera uma tabela unica de eventos chamada `audit_events`.
+- O modelo ORM base sera `AuditEvent`.
+- Eventos terao `timestamp`, `event_type`, `user_id` opcional, `empresa_id` opcional, `resource_id` opcional e `metadata` JSON.
+- `user_id` sera opcional porque login falho ou evento de background pode nao estar associado a usuario valido.
 - `empresa_id` sera opcional para eventos globais como login ou gestao de usuario.
 - A primeira versao registrara eventos de autenticacao, acesso negado, importacao do plano, importacao do razao, classificacao, feedback e gestao de usuarios/permissoes.
 - Eventos iniciais de autenticacao: `auth.login.success`, `auth.login.failed`, `auth.user.inactive_blocked`, `auth.access.denied`.
@@ -101,6 +102,5 @@ Exemplo de evento:
 
 ## Open Questions
 
-- O nome final da tabela sera `audit_events` ou equivalente em portugues?
 - Eventos de login falho devem armazenar o email/login tentado em metadata mascarada?
 - Falha de auditoria em login falho sera best-effort ou deve bloquear a resposta?
