@@ -5,6 +5,7 @@ from fastapi import Depends, Header, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import ExpiredSignatureError, InvalidTokenError
 from sqlalchemy.orm import Session
+from core.audit import is_audit_request_context_active, set_audit_user_id
 from core.config import settings
 from core.models import Empresa, Usuario
 from core.database import SessionLocal
@@ -61,6 +62,8 @@ def get_current_user(
     if not usuario.is_active:
         raise HTTPException(status_code=403, detail="Usuário inativo")
 
+    if is_audit_request_context_active():
+        set_audit_user_id(usuario.id)
     return usuario
 
 
