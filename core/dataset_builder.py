@@ -3,7 +3,11 @@ from typing import Any
 
 from sqlalchemy.orm import Session, aliased
 
-from core.models import ContaContabil, LancamentoRazaoNormalizado
+from core.models import (
+    ContaContabil,
+    FeedbackClassificacao,
+    LancamentoRazaoNormalizado,
+)
 
 
 @dataclass(frozen=True)
@@ -27,8 +31,6 @@ def build_dataset_treino_contrapartida(
         raise ValueError("empresa_id e obrigatorio")
 
     conta_origem = aliased(ContaContabil)
-    conta_target = aliased(ContaContabil)
-
     lancamentos_empresa = session.query(LancamentoRazaoNormalizado).filter(
         LancamentoRazaoNormalizado.empresa_id == empresa_id
     )
@@ -44,18 +46,26 @@ def build_dataset_treino_contrapartida(
     )
 
     lancamentos = (
-        lancamentos_financeiros
-        .join(
-            conta_target,
-            conta_target.codigo == LancamentoRazaoNormalizado.conta_contrapartida,
-        )
-        .filter(conta_target.tipo == "A")
-        .filter(conta_target.is_active.is_(True))
-        .order_by(LancamentoRazaoNormalizado.id.asc())
-        .all()
+        lancamentos_financeiros.order_by(LancamentoRazaoNormalizado.id.asc()).all()
     )
 
-    linhas = [_to_dataset_row(lancamento) for lancamento in lancamentos]
+    feedback_por_lancamento = _latest_feedback_by_lancamento(
+        session,
+        empresa_id=empresa_id,
+        lancamento_ids=[lancamento.id for lancamento in lancamentos],
+    )
+    contas_validas = _valid_target_accounts(
+        session,
+        [
+            _target_for_lancamento(lancamento, feedback_por_lancamento)
+            for lancamento in lancamentos
+        ],
+    )
+    linhas = []
+    for lancamento in lancamentos:
+        target = _target_for_lancamento(lancamento, feedback_por_lancamento)
+        if target in contas_validas:
+            linhas.append(_to_dataset_row(lancamento, target=target))
     contagem_por_target = _count_targets(linhas)
     total_descartes = lancamentos_empresa.count() - len(linhas)
     treinavel = len(linhas) >= 10 and len(contagem_por_target) >= 2
@@ -72,7 +82,11 @@ def build_dataset_treino_contrapartida(
     )
 
 
-def _to_dataset_row(lancamento: LancamentoRazaoNormalizado) -> dict[str, Any]:
+def _to_dataset_row(
+    lancamento: LancamentoRazaoNormalizado,
+    *,
+    target: int,
+) -> dict[str, Any]:
     feature_tokens = [
         lancamento.historico_normalizado.strip(),
         f"origem_{lancamento.conta_origem}",
@@ -81,7 +95,57 @@ def _to_dataset_row(lancamento: LancamentoRazaoNormalizado) -> dict[str, Any]:
 
     return {
         "features": " ".join(token for token in feature_tokens if token),
-        "target_conta_contrapartida": lancamento.conta_contrapartida,
+        "target_conta_contrapartida": target,
+    }
+
+
+def _target_for_lancamento(
+    lancamento: LancamentoRazaoNormalizado,
+    feedback_por_lancamento: dict[int, int],
+) -> int:
+    return feedback_por_lancamento.get(
+        lancamento.id,
+        lancamento.conta_contrapartida,
+    )
+
+
+def _latest_feedback_by_lancamento(
+    session: Session,
+    *,
+    empresa_id: int,
+    lancamento_ids: list[int],
+) -> dict[int, int]:
+    if not lancamento_ids:
+        return {}
+
+    feedbacks = (
+        session.query(FeedbackClassificacao)
+        .filter(FeedbackClassificacao.empresa_id == empresa_id)
+        .filter(FeedbackClassificacao.lancamento_id.in_(lancamento_ids))
+        .order_by(
+            FeedbackClassificacao.lancamento_id.asc(),
+            FeedbackClassificacao.created_at.asc(),
+            FeedbackClassificacao.id.asc(),
+        )
+        .all()
+    )
+    latest: dict[int, int] = {}
+    for feedback in feedbacks:
+        latest[feedback.lancamento_id] = feedback.conta_final
+    return latest
+
+
+def _valid_target_accounts(session: Session, targets: list[int]) -> set[int]:
+    if not targets:
+        return set()
+
+    return {
+        conta.codigo
+        for conta in session.query(ContaContabil)
+        .filter(ContaContabil.codigo.in_(set(targets)))
+        .filter(ContaContabil.tipo == "A")
+        .filter(ContaContabil.is_active.is_(True))
+        .all()
     }
 
 

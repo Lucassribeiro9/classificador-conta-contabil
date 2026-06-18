@@ -4,11 +4,80 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from api import schemas
-from api.dependencies import DB_DEPENDENCY, verify_api_key
-from core.models import Empresa, Transacao
+from api.dependencies import (
+    DB_DEPENDENCY,
+    get_current_user,
+    require_company_access,
+    verify_api_key,
+)
+from core.models import (
+    ContaContabil,
+    Empresa,
+    FeedbackClassificacao,
+    LancamentoRazaoNormalizado,
+    Transacao,
+    Usuario,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+@router.post(
+    "/companies/{company_id}/ml/feedback",
+    response_model=schemas.FeedbackClassificacaoResponse,
+)
+def submit_feedback_classificacao(
+    company_id: int,
+    feedback: schemas.FeedbackClassificacaoCreate,
+    db: Session = DB_DEPENDENCY,
+    _empresa: Empresa = Depends(require_company_access("operacao")),
+    current_user: Usuario = Depends(get_current_user),
+):
+    lancamento = db.get(LancamentoRazaoNormalizado, feedback.lancamento_id)
+    if lancamento is None:
+        raise HTTPException(status_code=404, detail="Lançamento não encontrado")
+    if lancamento.empresa_id != company_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Lançamento pertence a outra empresa",
+        )
+
+    conta_final = (
+        db.query(ContaContabil)
+        .filter(ContaContabil.codigo == feedback.conta_final)
+        .filter(ContaContabil.tipo == "A")
+        .filter(ContaContabil.is_active.is_(True))
+        .first()
+    )
+    if conta_final is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Conta final deve ser analítica e ativa",
+        )
+
+    registro = FeedbackClassificacao(
+        empresa_id=company_id,
+        lancamento_id=feedback.lancamento_id,
+        conta_sugerida=feedback.conta_sugerida,
+        conta_final=feedback.conta_final,
+        usuario_id=current_user.id,
+    )
+    db.add(registro)
+    db.commit()
+    db.refresh(registro)
+
+    logger.info(
+        "Feedback de classificacao registrado",
+        extra={
+            "feedback_id": registro.id,
+            "empresa_id": company_id,
+            "lancamento_id": feedback.lancamento_id,
+            "usuario_id": current_user.id,
+        },
+    )
+
+    return registro
 
 
 @router.patch("/transactions/{transaction_id}/feedback")
