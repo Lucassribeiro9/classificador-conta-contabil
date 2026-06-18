@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from api.dependencies import DB_DEPENDENCY, get_current_user, require_global_admin
 from api.schemas import ContaContabilResponse, ImportacaoPlanoContasResponse
+from core.audit import record_audit_event
 from core.models import ContaContabil, Usuario
 from core.plano_contas_importer import import_plano_contas
 from core.plano_contas_parser import PlanoContasParseError, parse_plano_contas_xlsx
@@ -34,9 +35,27 @@ def import_chart_of_accounts(
     try:
         contas = parse_plano_contas_xlsx(temp_path)
         resumo = import_plano_contas(db, contas)
+        record_audit_event(
+            db,
+            event_type="plan.imported",
+            metadata=asdict(resumo),
+        )
         db.commit()
     except PlanoContasParseError as exc:
         db.rollback()
+        record_audit_event(
+            db,
+            event_type="plan.import_failed",
+            metadata={
+                "criadas": 0,
+                "atualizadas": 0,
+                "ignoradas": 0,
+                "invalidas": 0,
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+            },
+        )
+        db.commit()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception:
         db.rollback()
