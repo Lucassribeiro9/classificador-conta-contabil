@@ -12,7 +12,7 @@ from api.routes.auth import login_for_access_token
 from api.schemas import LoginRequest
 from core.config import settings
 from core.database import Base
-from core.models import Usuario
+from core.models import AuditEvent, Usuario
 
 
 password_hash = PasswordHash.recommended()
@@ -89,6 +89,24 @@ def test_login_valid_returns_access_token_with_user_claims_and_12h_expiration(se
     assert (expires_at - issued_at).total_seconds() == 12 * 60 * 60
 
 
+def test_login_valid_creates_success_audit_event_without_password(session):
+    usuario = _usuario()
+    session.add(usuario)
+    session.commit()
+
+    login_for_access_token(
+        credentials=LoginRequest(login="ana.contadora", senha="senha-segura-123"),
+        db=session,
+    )
+
+    event = session.query(AuditEvent).one()
+    assert event.event_type == "auth.login_success"
+    assert event.user_id == usuario.id
+    assert event.metadata_json == {"login": "ana.contadora"}
+    assert "senha" not in event.metadata_json
+    assert "password" not in event.metadata_json
+
+
 def test_login_accepts_email_as_identifier(session):
     usuario = _usuario()
     session.add(usuario)
@@ -112,7 +130,8 @@ def test_login_accepts_email_as_identifier(session):
 
 
 def test_login_rejects_invalid_password_without_leaking_user_existence(session):
-    session.add(_usuario())
+    usuario = _usuario()
+    session.add(usuario)
     session.commit()
 
     with pytest.raises(HTTPException) as exc_info:
@@ -124,16 +143,30 @@ def test_login_rejects_invalid_password_without_leaking_user_existence(session):
     assert exc_info.value.status_code == 401
     assert exc_info.value.detail == "Credenciais inválidas"
 
+    event = session.query(AuditEvent).one()
+    assert event.event_type == "auth.login_failed"
+    assert event.user_id == usuario.id
+    assert event.metadata_json == {"login": "ana.contadora", "reason": "invalid_credentials"}
+    assert "senha" not in event.metadata_json
+    assert "password" not in event.metadata_json
+
 
 def test_login_rejects_missing_user_without_leaking_user_existence(session):
     with pytest.raises(HTTPException) as exc_info:
         login_for_access_token(
-            credentials=LoginRequest(login="ninguem", senha="senha-qualquer"),
+            credentials=LoginRequest(login="ninguem@example.com", senha="senha-qualquer"),
             db=session,
         )
 
     assert exc_info.value.status_code == 401
     assert exc_info.value.detail == "Credenciais inválidas"
+
+    event = session.query(AuditEvent).one()
+    assert event.event_type == "auth.login_failed"
+    assert event.user_id is None
+    assert event.metadata_json == {"login": "ninguem@example.com", "reason": "invalid_credentials"}
+    assert "senha" not in event.metadata_json
+    assert "password" not in event.metadata_json
 
 
 def test_login_rejects_inactive_user(session):

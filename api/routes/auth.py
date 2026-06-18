@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from api.dependencies import DB_DEPENDENCY
 from api.schemas import LoginRequest, TokenResponse
+from core.audit import record_audit_event
 from core.config import settings
 from core.models import Usuario
 
@@ -73,12 +74,30 @@ def login_for_access_token(
     hash_to_check = usuario.senha_hash if usuario is not None else PRECOMPUTED_DUMMY_HASH
     senha_valida = password_hash.verify(credentials.senha, hash_to_check)
     if usuario is None or not senha_valida:
+        record_audit_event(
+            db,
+            event_type="auth.login_failed",
+            user_id=usuario.id if usuario is not None else None,
+            metadata={
+                "login": credentials.login,
+                "reason": "invalid_credentials",
+            },
+        )
+        db.commit()
         raise HTTPException(status_code=401, detail="Credenciais inválidas")
 
     if not usuario.is_active:
         raise HTTPException(status_code=403, detail="Usuário inativo")
 
-    return _create_access_token(usuario)
+    response = _create_access_token(usuario)
+    record_audit_event(
+        db,
+        event_type="auth.login_success",
+        user_id=usuario.id,
+        metadata={"login": credentials.login},
+    )
+    db.commit()
+    return response
 
 
 @router.post("/login", response_model=TokenResponse)
