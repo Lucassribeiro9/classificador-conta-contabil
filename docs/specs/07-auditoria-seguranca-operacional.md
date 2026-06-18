@@ -93,6 +93,7 @@ Exemplo de evento:
 - Eventos iniciais de edicao pontual de contas: `account.updated`, `account.deactivated`.
 - Eventos iniciais de razao: `ledger.imported`, `ledger.import_failed`, `ledger.import_denied`.
 - Eventos iniciais de classificacao: `classification.started`, `classification.completed`, `classification.failed`.
+- Eventos iniciais de modelo ML: `model.trained`, `model.exported`, `model.train_failed`.
 - Eventos iniciais de feedback: `feedback.created`, `feedback.updated`.
 - Eventos iniciais de usuarios/permissoes: `user.created`, `user.deactivated`, `user_company_permission.changed`.
 - `metadata` nao pode conter senha, token, API key, conteudo completo de planilhas ou payload sensivel.

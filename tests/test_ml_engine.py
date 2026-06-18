@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from core.database import Base
 from core.dataset_builder import DatasetTreinoContrapartida
 from core.ml_engine import ClassificadorContabil
-from core.models import Empresa, Transacao
+from core.models import AuditEvent, Empresa, Transacao
 
 
 @pytest.fixture()
@@ -164,6 +164,43 @@ def test_train_from_dataset_persists_multinomial_model_for_company(db_session, t
     )[0] in {50057, 70001}
 
 
+def test_train_from_dataset_creates_success_audit_event(db_session, tmp_path):
+    dataset = DatasetTreinoContrapartida(
+        linhas=[
+            {
+                "features": f"pagamento fornecedor {i} origem_10046 direcao_credito",
+                "target_conta_contrapartida": 50057,
+            }
+            for i in range(5)
+        ]
+        + [
+            {
+                "features": f"recebimento cliente {i} origem_10046 direcao_debito",
+                "target_conta_contrapartida": 70001,
+            }
+            for i in range(5)
+        ],
+        metadata={
+            "empresa_id": 44,
+            "total_linhas": 10,
+            "total_descartes": 0,
+            "contagem_por_target": {50057: 5, 70001: 5},
+            "treinavel": True,
+        },
+    )
+    engine_ml = ClassificadorContabil(db_session, model_dir=tmp_path)
+
+    assert engine_ml.train_from_dataset(dataset) is True
+
+    event = db_session.query(AuditEvent).one()
+    assert event.event_type == "model.trained"
+    assert event.empresa_id == 44
+    assert event.user_id is None
+    assert event.resource_id == "empresa_44/model_.joblib"
+    assert event.metadata_json["dataset_examples"] == 10
+    assert event.metadata_json["training_time_ms"] >= 0
+
+
 def test_train_from_dataset_recuses_insufficient_dataset_without_model_file(
     db_session, tmp_path
 ):
@@ -187,6 +224,38 @@ def test_train_from_dataset_recuses_insufficient_dataset_without_model_file(
 
     assert engine_ml.train_from_dataset(dataset) is False
     assert not (tmp_path / "empresa_43" / "model_.joblib").exists()
+
+
+def test_train_from_dataset_insufficient_dataset_creates_failure_audit_event(
+    db_session, tmp_path
+):
+    dataset = DatasetTreinoContrapartida(
+        linhas=[
+            {
+                "features": f"pagamento fornecedor {i} origem_10046 direcao_credito",
+                "target_conta_contrapartida": 50057,
+            }
+            for i in range(9)
+        ],
+        metadata={
+            "empresa_id": 45,
+            "total_linhas": 9,
+            "total_descartes": 0,
+            "contagem_por_target": {50057: 9},
+            "treinavel": False,
+        },
+    )
+    engine_ml = ClassificadorContabil(db_session, model_dir=tmp_path)
+
+    assert engine_ml.train_from_dataset(dataset) is False
+
+    event = db_session.query(AuditEvent).one()
+    assert event.event_type == "model.train_failed"
+    assert event.empresa_id == 45
+    assert event.user_id is None
+    assert event.metadata_json["dataset_examples"] == 9
+    assert event.metadata_json["training_time_ms"] >= 0
+    assert event.metadata_json["reason"] == "insufficient_dataset"
 
 
 def test_train_from_dataset_keeps_model_files_isolated_by_company(db_session, tmp_path):
