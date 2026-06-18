@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from core.config import settings
 from core.dataset_builder import DatasetTreinoContrapartida
 from core.models import Transacao
+from core.razao_parser import normalize_razao_historico
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +113,54 @@ class ClassificadorContabil:
         tmp_path = model_path.with_suffix(".joblib.tmp")
         joblib.dump(self.pipeline, tmp_path)
         tmp_path.replace(model_path)
+
+    def model_exists_for_company(self, empresa_id: int) -> bool:
+        return self._model_path_for_company(empresa_id).exists()
+
+    def classify_lancamentos_from_saved_model(
+        self,
+        empresa_id: int,
+        lancamentos: list[dict],
+    ) -> list[dict]:
+        model = joblib.load(self._model_path_for_company(empresa_id))
+        feature_texts = [
+            self._build_dataset_feature_text(
+                historico=item["historico"],
+                conta_origem=item["conta_origem"],
+                direcao=item["direcao"],
+            )
+            for item in lancamentos
+        ]
+        probabilities = model.predict_proba(feature_texts)
+        classes = model.classes_
+        predictions: list[dict] = []
+        for index in range(len(feature_texts)):
+            row_probabilities = probabilities[index]
+            max_prob = float(max(row_probabilities))
+            best_class = int(classes[list(row_probabilities).index(max_prob)])
+            predictions.append(
+                {
+                    "conta_contrapartida": best_class,
+                    "confianca": max_prob,
+                    "needs_review": max_prob < 0.7,
+                }
+            )
+        return predictions
+
+    def _build_dataset_feature_text(
+        self,
+        *,
+        historico: str,
+        conta_origem: int,
+        direcao: str,
+    ) -> str:
+        historico_normalizado = normalize_razao_historico(historico)
+        feature_tokens = [
+            historico_normalizado,
+            f"origem_{conta_origem}",
+            f"direcao_{direcao}",
+        ]
+        return " ".join(token for token in feature_tokens if token)
 
     def train_for_company(self, empresa_id: int):
         # Buscar as transações da empresa e verificar se não são nulas

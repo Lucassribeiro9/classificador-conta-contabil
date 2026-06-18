@@ -5,10 +5,15 @@ from typing import Union
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from api.schemas import PredictInput, PredictResponse
-from api.dependencies import DB_DEPENDENCY, verify_company
+from api.schemas import (
+    MLClassificationInput,
+    MLClassificationResponse,
+    PredictInput,
+    PredictResponse,
+)
+from api.dependencies import DB_DEPENDENCY, require_company_access, verify_company
 from core.ml_engine import ClassificadorContabil
-from core.models import Empresa, Transacao
+from core.models import ContaContabil, Empresa, Transacao
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -34,6 +39,59 @@ def _train_or_raise(engine_ml: ClassificadorContabil, company_id: int):
         raise HTTPException(status_code=422, detail=INSUFFICIENT_TRAINING_DATA)
     if not success_train:
         raise HTTPException(status_code=422, detail=INSUFFICIENT_TRAINING_DATA)
+
+
+@router.post(
+    "/companies/{company_id}/ml/classification",
+    response_model=MLClassificationResponse,
+)
+def classify_lancamentos_with_saved_model(
+    company_id: int,
+    payload: Union[MLClassificationInput, list[MLClassificationInput]],
+    db: Session = DB_DEPENDENCY,
+    _empresa: Empresa = Depends(require_company_access("operacao")),
+):
+    inputs = payload if isinstance(payload, list) else [payload]
+    if len(inputs) > 100:
+        raise HTTPException(
+            status_code=422,
+            detail="Limite de 100 lançamentos por requisição",
+        )
+
+    engine_ml = ClassificadorContabil(db)
+    if not engine_ml.model_exists_for_company(company_id):
+        raise HTTPException(
+            status_code=404,
+            detail="Modelo treinado não encontrado para a empresa",
+        )
+
+    predictions = engine_ml.classify_lancamentos_from_saved_model(
+        empresa_id=company_id,
+        lancamentos=[item.model_dump() for item in inputs],
+    )
+    predicted_accounts = {
+        prediction["conta_contrapartida"] for prediction in predictions
+    }
+    valid_accounts = {
+        conta.codigo
+        for conta in db.query(ContaContabil)
+        .filter(ContaContabil.codigo.in_(predicted_accounts))
+        .filter(ContaContabil.tipo == "A")
+        .filter(ContaContabil.is_active.is_(True))
+        .all()
+    }
+    invalid_accounts = predicted_accounts - valid_accounts
+    if invalid_accounts:
+        raise HTTPException(
+            status_code=422,
+            detail="Modelo retornou conta de contrapartida inválida",
+        )
+
+    return {
+        "empresa_id": company_id,
+        "quantidade_processada": len(predictions),
+        "results": predictions,
+    }
 
 
 @router.post("/companies/{company_id}/classification")
