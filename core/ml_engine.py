@@ -1,6 +1,9 @@
 import re
 import logging
+from pathlib import Path
+
 # - Bibliotecas para ML
+import joblib
 import nltk
 from nltk.corpus import stopwords
 
@@ -10,10 +13,11 @@ except LookupError:
     nltk.download("stopwords")
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.linear_model import LogisticRegression
+from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from core.config import settings
 from core.dataset_builder import DatasetTreinoContrapartida
 from core.models import Transacao
 
@@ -21,13 +25,14 @@ logger = logging.getLogger(__name__)
 
 
 class ClassificadorContabil:
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, model_dir: str | Path | None = None):
         self.db = db
+        self.model_dir = Path(model_dir or settings.MODEL_DIR)
 
         self.pipeline = Pipeline(
             [
                 ("tfidf", TfidfVectorizer(ngram_range=(1, 2))),
-                ("clf", LogisticRegression(random_state=42)),
+                ("clf", MultinomialNB()),
             ]
         )
 
@@ -95,7 +100,18 @@ class ClassificadorContabil:
 
         df = pd.DataFrame(dataset.linhas)
         self.pipeline.fit(df["features"], df["target_conta_contrapartida"])
+        self._persist_model(int(dataset.metadata["empresa_id"]))
         return True
+
+    def _model_path_for_company(self, empresa_id: int) -> Path:
+        return self.model_dir / f"empresa_{empresa_id}" / "model_.joblib"
+
+    def _persist_model(self, empresa_id: int) -> None:
+        model_path = self._model_path_for_company(empresa_id)
+        model_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = model_path.with_suffix(".joblib.tmp")
+        joblib.dump(self.pipeline, tmp_path)
+        tmp_path.replace(model_path)
 
     def train_for_company(self, empresa_id: int):
         # Buscar as transações da empresa e verificar se não são nulas
