@@ -6,7 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 
 from api.dependencies import DB_DEPENDENCY, get_current_user, require_global_admin
-from api.schemas import ContaContabilResponse, ImportacaoPlanoContasResponse
+from api.schemas import (
+    ContaContabilFinancialOriginUpdate,
+    ContaContabilResponse,
+    ImportacaoPlanoContasResponse,
+)
 from core.audit import record_audit_event
 from core.models import ContaContabil, Usuario
 from core.plano_contas_importer import import_plano_contas
@@ -66,10 +70,68 @@ def import_chart_of_accounts(
     return ImportacaoPlanoContasResponse(**asdict(resumo))
 
 
+@admin_router.patch("/{codigo}/financial-origin", response_model=ContaContabilResponse)
+def update_chart_account_financial_origin(
+    codigo: int,
+    update: ContaContabilFinancialOriginUpdate,
+    admin: Usuario = Depends(require_global_admin),
+    db: Session = DB_DEPENDENCY,
+) -> ContaContabil:
+    conta = _get_chart_account_by_codigo_or_404(db, codigo)
+    old_value = conta.is_financial_origin
+    conta.is_financial_origin = update.is_financial_origin
+    record_audit_event(
+        db,
+        event_type="account.updated",
+        user_id=admin.id,
+        resource_id=str(conta.codigo),
+        metadata={
+            "field": "is_financial_origin",
+            "old_value": old_value,
+            "new_value": conta.is_financial_origin,
+        },
+    )
+    db.commit()
+    db.refresh(conta)
+    return conta
+
+
+@admin_router.patch("/{codigo}/deactivate", response_model=ContaContabilResponse)
+def deactivate_chart_account(
+    codigo: int,
+    admin: Usuario = Depends(require_global_admin),
+    db: Session = DB_DEPENDENCY,
+) -> ContaContabil:
+    conta = _get_chart_account_by_codigo_or_404(db, codigo)
+    old_value = conta.is_active
+    conta.is_active = False
+    record_audit_event(
+        db,
+        event_type="account.deactivated",
+        user_id=admin.id,
+        resource_id=str(conta.codigo),
+        metadata={
+            "field": "is_active",
+            "old_value": old_value,
+            "new_value": conta.is_active,
+        },
+    )
+    db.commit()
+    db.refresh(conta)
+    return conta
+
+
 def _save_upload_to_temp_xlsx(file: UploadFile) -> str:
     with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as temp_file:
         temp_file.write(file.file.read())
         return temp_file.name
+
+
+def _get_chart_account_by_codigo_or_404(db: Session, codigo: int) -> ContaContabil:
+    conta = db.query(ContaContabil).filter(ContaContabil.codigo == codigo).first()
+    if conta is None:
+        raise HTTPException(status_code=404, detail="Conta contábil não encontrada")
+    return conta
 
 
 @catalog_router.get("", response_model=list[ContaContabilResponse])
@@ -124,7 +186,4 @@ def get_chart_account_by_codigo(
     db: Session = DB_DEPENDENCY,
 ) -> ContaContabil:
     """Retorna dados oficiais de uma conta pelo codigo contabil."""
-    conta = db.query(ContaContabil).filter(ContaContabil.codigo == codigo).first()
-    if conta is None:
-        raise HTTPException(status_code=404, detail="Conta contábil não encontrada")
-    return conta
+    return _get_chart_account_by_codigo_or_404(db, codigo)
