@@ -4,9 +4,19 @@ from sqlalchemy.orm import Session
 
 from api.dependencies import get_db
 from api.routes import auth, classification, companies, feedback, plano_contas, razao, transactions, users
+from core.audit import begin_audit_request_context, end_audit_request_context
 
 
 app = FastAPI(title="Classificador contábil")
+
+
+@app.middleware("http")
+async def audit_context_middleware(request, call_next):
+    begin_audit_request_context()
+    try:
+        return await call_next(request)
+    finally:
+        end_audit_request_context()
 
 
 # Checando se está tudo certo
