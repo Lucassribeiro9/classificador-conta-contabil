@@ -1,5 +1,6 @@
 import re
 import logging
+from time import perf_counter
 from pathlib import Path
 
 # - Bibliotecas para ML
@@ -17,6 +18,7 @@ from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from core.audit import record_audit_event
 from core.config import settings
 from core.dataset_builder import DatasetTreinoContrapartida
 from core.models import Transacao
@@ -88,6 +90,9 @@ class ClassificadorContabil:
         return predictions
 
     def train_from_dataset(self, dataset: DatasetTreinoContrapartida) -> bool:
+        started_at = perf_counter()
+        empresa_id = int(dataset.metadata["empresa_id"])
+        dataset_examples = int(dataset.metadata.get("total_linhas", len(dataset.linhas)))
         if not dataset.metadata.get("treinavel", False):
             logger.warning(
                 "Dataset insuficiente para treinamento",
@@ -97,11 +102,33 @@ class ClassificadorContabil:
                     "contagem_por_target": dataset.metadata.get("contagem_por_target"),
                 },
             )
+            record_audit_event(
+                self.db,
+                event_type="model.train_failed",
+                empresa_id=empresa_id,
+                metadata={
+                    "dataset_examples": dataset_examples,
+                    "training_time_ms": _elapsed_ms(started_at),
+                    "reason": "insufficient_dataset",
+                },
+            )
+            self.db.flush()
             return False
 
         df = pd.DataFrame(dataset.linhas)
         self.pipeline.fit(df["features"], df["target_conta_contrapartida"])
-        self._persist_model(int(dataset.metadata["empresa_id"]))
+        self._persist_model(empresa_id)
+        record_audit_event(
+            self.db,
+            event_type="model.trained",
+            empresa_id=empresa_id,
+            resource_id=f"empresa_{empresa_id}/model_.joblib",
+            metadata={
+                "dataset_examples": dataset_examples,
+                "training_time_ms": _elapsed_ms(started_at),
+            },
+        )
+        self.db.flush()
         return True
 
     def _model_path_for_company(self, empresa_id: int) -> Path:
@@ -222,3 +249,7 @@ class ClassificadorContabil:
             predictions[idx]["historico"] = item["historico"]
             predictions[idx]["cod_banco"] = item.get("cod_banco")
         return predictions
+
+
+def _elapsed_ms(started_at: float) -> int:
+    return max(0, int((perf_counter() - started_at) * 1000))
