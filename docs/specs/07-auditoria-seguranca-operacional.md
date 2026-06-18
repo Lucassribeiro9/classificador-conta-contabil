@@ -90,7 +90,7 @@ Exemplo de evento:
 - O servico de auditoria podera usar o usuario do contexto quando `user_id` nao for informado explicitamente.
 - Eventos iniciais de autenticacao: `auth.login.success`, `auth.login.failed`, `auth.user.inactive_blocked`, `auth.access.denied`.
 - Eventos iniciais de plano de contas: `plan.imported`, `plan.import_failed`.
-- Eventos iniciais de razao: `ledger_import.started`, `ledger_import.completed`, `ledger_import.completed_with_warnings`, `ledger_import.failed`.
+- Eventos iniciais de razao: `ledger.imported`, `ledger.import_failed`, `ledger.import_denied`.
 - Eventos iniciais de classificacao: `classification.started`, `classification.completed`, `classification.failed`.
 - Eventos iniciais de feedback: `feedback.created`, `feedback.updated`.
 - Eventos iniciais de usuarios/permissoes: `user.created`, `user.deactivated`, `user_company_permission.changed`.
