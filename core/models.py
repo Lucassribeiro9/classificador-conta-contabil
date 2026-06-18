@@ -90,6 +90,10 @@ class Empresa(Base):
         back_populates="empresa",
         cascade="all, delete-orphan",
     )
+    audit_events: Mapped[list["AuditEvent"]] = relationship(
+        "AuditEvent",
+        back_populates="empresa",
+    )
 
 
 class Usuario(Base):
@@ -136,6 +140,10 @@ class Usuario(Base):
         "FeedbackClassificacao",
         back_populates="usuario",
     )
+    audit_events: Mapped[list["AuditEvent"]] = relationship(
+        "AuditEvent",
+        back_populates="usuario",
+    )
 
 
 class UsuarioEmpresaPermissao(Base):
@@ -177,6 +185,37 @@ class UsuarioEmpresaPermissao(Base):
     )
     empresa: Mapped["Empresa"] = relationship(
         "Empresa", back_populates="permissoes_usuarios"
+    )
+
+
+class AuditEvent(Base):
+    """
+    Evento central de auditoria para acoes sensiveis do sistema.
+    """
+
+    __tablename__ = "audit_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, nullable=False
+    )
+    event_type: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    user_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("usuarios.id"), nullable=True
+    )
+    empresa_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("empresas.id"), nullable=True
+    )
+    resource_id: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    metadata_json: Mapped[dict] = mapped_column(
+        "metadata", JSON, default=dict, nullable=False
+    )
+
+    usuario: Mapped[Optional["Usuario"]] = relationship(
+        "Usuario", back_populates="audit_events"
+    )
+    empresa: Mapped[Optional["Empresa"]] = relationship(
+        "Empresa", back_populates="audit_events"
     )
 
 
