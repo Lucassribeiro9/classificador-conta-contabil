@@ -7,7 +7,7 @@ from openpyxl import Workbook
 from pwdlib import PasswordHash
 
 from core.config import settings
-from core.models import Usuario
+from core.models import AuditEvent, Usuario
 
 
 password_hash = PasswordHash.recommended()
@@ -84,11 +84,34 @@ def _plano_contas_xlsx() -> bytes:
     return buffer.read()
 
 
+def _invalid_plano_contas_xlsx() -> bytes:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["sem cabecalho esperado"])
+    sheet.append(["outra linha invalida"])
+
+    buffer = BytesIO()
+    workbook.save(buffer)
+    workbook.close()
+    buffer.seek(0)
+    return buffer.read()
+
+
 def _upload_file(filename: str = "plano-contas.xlsx") -> dict:
     return {
         "file": (
             filename,
             _plano_contas_xlsx(),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+    }
+
+
+def _invalid_upload_file() -> dict:
+    return {
+        "file": (
+            "plano-contas.xlsx",
+            _invalid_plano_contas_xlsx(),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
     }
@@ -110,6 +133,61 @@ def test_admin_imports_plano_contas_and_receives_summary(client):
         "ignoradas": 0,
         "invalidas": 0,
     }
+
+
+def test_successful_plano_contas_import_creates_audit_event(client):
+    from tests.conftest import TestingSessionLocal
+
+    admin = _seed_user(_usuario())
+
+    response = client.post(
+        "/api/v1/admin/plano-contas/import",
+        files=_upload_file(),
+        headers=_auth_headers(admin),
+    )
+
+    assert response.status_code == 200
+
+    with TestingSessionLocal() as session:
+        event = session.query(AuditEvent).one()
+        assert event.event_type == "plan.imported"
+        assert event.user_id == admin.id
+        assert event.empresa_id is None
+        assert event.resource_id is None
+        assert event.metadata_json == {
+            "criadas": 2,
+            "atualizadas": 0,
+            "ignoradas": 0,
+            "invalidas": 0,
+        }
+
+
+def test_failed_plano_contas_import_creates_safe_audit_event(client):
+    from tests.conftest import TestingSessionLocal
+
+    admin = _seed_user(_usuario())
+
+    response = client.post(
+        "/api/v1/admin/plano-contas/import",
+        files=_invalid_upload_file(),
+        headers=_auth_headers(admin),
+    )
+
+    assert response.status_code == 400
+
+    with TestingSessionLocal() as session:
+        event = session.query(AuditEvent).one()
+        assert event.event_type == "plan.import_failed"
+        assert event.user_id == admin.id
+        assert event.metadata_json["criadas"] == 0
+        assert event.metadata_json["atualizadas"] == 0
+        assert event.metadata_json["ignoradas"] == 0
+        assert event.metadata_json["invalidas"] == 0
+        assert event.metadata_json["error_type"] == "PlanoContasParseError"
+        assert "error" in event.metadata_json
+        assert "Traceback" not in event.metadata_json["error"]
+        assert "senha" not in event.metadata_json
+        assert "token" not in event.metadata_json
 
 
 def test_plano_contas_import_is_idempotent(client):
