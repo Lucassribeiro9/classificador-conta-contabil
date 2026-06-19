@@ -11,6 +11,7 @@ from api.schemas import (
     UsuarioEmpresaPermissaoResponse,
     UsuarioResponse,
 )
+from core.audit import record_audit_event
 from core.models import Empresa, Usuario, UsuarioEmpresaPermissao
 
 
@@ -50,7 +51,7 @@ def _get_permission_link(
 @router.post("", response_model=UsuarioResponse)
 def create_user(
     user: UsuarioCreate,
-    _admin: Usuario = Depends(require_global_admin),
+    admin: Usuario = Depends(require_global_admin),
     db: Session = DB_DEPENDENCY,
 ) -> Usuario:
     """Cria um usuario interno pelo painel administrativo.
@@ -74,6 +75,19 @@ def create_user(
     )
     try:
         db.add(new_user)
+        db.flush()
+        record_audit_event(
+            db,
+            event_type="user.created",
+            user_id=admin.id,
+            resource_id=str(new_user.id),
+            metadata={
+                "target_user_id": new_user.id,
+                "target_login": new_user.login,
+                "target_email": new_user.email,
+                "target_role": new_user.papel,
+            },
+        )
         db.commit()
     except IntegrityError as exc:
         db.rollback()
@@ -98,7 +112,7 @@ def list_users(
 @router.patch("/{user_id}/deactivate", response_model=UsuarioResponse)
 def deactivate_user(
     user_id: int,
-    _admin: Usuario = Depends(require_global_admin),
+    admin: Usuario = Depends(require_global_admin),
     db: Session = DB_DEPENDENCY,
 ) -> Usuario:
     """Desativa um usuario interno.
@@ -110,7 +124,20 @@ def deactivate_user(
     if user is None:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
 
+    old_is_active = user.is_active
     user.is_active = False
+    record_audit_event(
+        db,
+        event_type="user.deactivated",
+        user_id=admin.id,
+        resource_id=str(user.id),
+        metadata={
+            "target_user_id": user.id,
+            "target_login": user.login,
+            "old_is_active": old_is_active,
+            "new_is_active": False,
+        },
+    )
     db.commit()
     db.refresh(user)
     return user
@@ -145,7 +172,7 @@ def create_company_permission(
     user_id: int,
     company_id: int,
     permission: UsuarioEmpresaPermissaoCreate,
-    _admin: Usuario = Depends(require_global_admin),
+    admin: Usuario = Depends(require_global_admin),
     db: Session = DB_DEPENDENCY,
 ) -> UsuarioEmpresaPermissao:
     """Vincula um usuario a uma empresa com permissao operacional.
@@ -171,6 +198,19 @@ def create_company_permission(
     )
     try:
         db.add(link)
+        db.flush()
+        record_audit_event(
+            db,
+            event_type="user_company_permission.changed",
+            user_id=admin.id,
+            empresa_id=company_id,
+            resource_id=str(link.id),
+            metadata={
+                "target_user_id": user_id,
+                "old_permission": None,
+                "new_permission": permission.permissao,
+            },
+        )
         db.commit()
     except IntegrityError as exc:
         db.rollback()
@@ -188,7 +228,7 @@ def update_company_permission(
     user_id: int,
     company_id: int,
     permission: UsuarioEmpresaPermissaoCreate,
-    _admin: Usuario = Depends(require_global_admin),
+    admin: Usuario = Depends(require_global_admin),
     db: Session = DB_DEPENDENCY,
 ) -> UsuarioEmpresaPermissao:
     """Altera a permissao de um vinculo usuario-empresa existente."""
@@ -196,7 +236,20 @@ def update_company_permission(
     if link is None:
         raise HTTPException(status_code=404, detail="Vínculo não encontrado")
 
+    old_permission = link.permissao
     link.permissao = permission.permissao
+    record_audit_event(
+        db,
+        event_type="user_company_permission.changed",
+        user_id=admin.id,
+        empresa_id=company_id,
+        resource_id=str(link.id),
+        metadata={
+            "target_user_id": user_id,
+            "old_permission": old_permission,
+            "new_permission": permission.permissao,
+        },
+    )
     db.commit()
     db.refresh(link)
     return link

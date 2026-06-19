@@ -5,7 +5,7 @@ import pytest
 from pwdlib import PasswordHash
 
 from core.config import settings
-from core.models import Empresa, Usuario, UsuarioEmpresaPermissao
+from core.models import AuditEvent, Empresa, Usuario, UsuarioEmpresaPermissao
 
 
 password_hash = PasswordHash.recommended()
@@ -102,20 +102,38 @@ def test_admin_links_user_to_company_with_valid_permission(client):
     assert data["empresa_id"] == empresa_id
     assert data["permissao"] == "operacao"
 
+    from tests.conftest import TestingSessionLocal
+
+    with TestingSessionLocal() as session:
+        event = session.query(AuditEvent).one()
+
+    assert event.event_type == "user_company_permission.changed"
+    assert event.user_id == admin.id
+    assert event.empresa_id == empresa_id
+    assert event.resource_id == str(data["id"])
+    assert event.metadata_json == {
+        "target_user_id": usuario_id,
+        "old_permission": None,
+        "new_permission": "operacao",
+    }
+    assert "senha" not in event.metadata_json
+    assert "token" not in event.metadata_json
+
 
 def test_admin_updates_existing_company_permission(client):
     admin, usuario_id, empresa_id = _seed_admin_user_and_company()
     from tests.conftest import TestingSessionLocal
 
     with TestingSessionLocal() as session:
-        session.add(
-            UsuarioEmpresaPermissao(
-                usuario_id=usuario_id,
-                empresa_id=empresa_id,
-                permissao="leitura",
-            )
+        link = UsuarioEmpresaPermissao(
+            usuario_id=usuario_id,
+            empresa_id=empresa_id,
+            permissao="leitura",
         )
+        session.add(link)
         session.commit()
+        session.refresh(link)
+        link_id = link.id
 
     response = client.patch(
         f"/api/v1/admin/users/{usuario_id}/companies/{empresa_id}/permissions",
@@ -125,6 +143,19 @@ def test_admin_updates_existing_company_permission(client):
 
     assert response.status_code == 200
     assert response.json()["permissao"] == "admin_empresa"
+
+    with TestingSessionLocal() as session:
+        event = session.query(AuditEvent).one()
+
+    assert event.event_type == "user_company_permission.changed"
+    assert event.user_id == admin.id
+    assert event.empresa_id == empresa_id
+    assert event.resource_id == str(link_id)
+    assert event.metadata_json == {
+        "target_user_id": usuario_id,
+        "old_permission": "leitura",
+        "new_permission": "admin_empresa",
+    }
 
 
 def test_admin_removes_company_permission(client):

@@ -5,7 +5,7 @@ import pytest
 from pwdlib import PasswordHash
 
 from core.config import settings
-from core.models import Usuario
+from core.models import AuditEvent, Usuario
 
 
 password_hash = PasswordHash.recommended()
@@ -87,6 +87,23 @@ def test_admin_creates_user_with_allowed_role_without_exposing_password(client):
     assert data["is_active"] is True
     assert "senha" not in data
     assert "senha_hash" not in data
+
+    with TestingSessionLocal() as session:
+        event = session.query(AuditEvent).one()
+
+    assert event.event_type == "user.created"
+    assert event.user_id == admin.id
+    assert event.empresa_id is None
+    assert event.resource_id == str(data["id"])
+    assert event.metadata_json == {
+        "target_user_id": data["id"],
+        "target_login": "bruno.operador",
+        "target_email": "bruno.operador@example.com",
+        "target_role": "operador",
+    }
+    assert "senha" not in event.metadata_json
+    assert "senha_hash" not in event.metadata_json
+    assert "token" not in event.metadata_json
 
 
 def test_non_admin_cannot_create_user(client):
@@ -176,3 +193,17 @@ def test_admin_deactivates_and_reactivates_user(client):
     assert deactivate_response.json()["is_active"] is False
     assert activate_response.status_code == 200
     assert activate_response.json()["is_active"] is True
+
+    with TestingSessionLocal() as session:
+        event = session.query(AuditEvent).one()
+
+    assert event.event_type == "user.deactivated"
+    assert event.user_id == admin.id
+    assert event.empresa_id is None
+    assert event.resource_id == str(operador_id)
+    assert event.metadata_json == {
+        "target_user_id": operador_id,
+        "target_login": "bruno.operador",
+        "old_is_active": True,
+        "new_is_active": False,
+    }
