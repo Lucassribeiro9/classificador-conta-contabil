@@ -4,8 +4,9 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from api.dependencies import DB_DEPENDENCY, require_admin_token
+from api.dependencies import DB_DEPENDENCY, require_admin_token, require_global_admin
 from api.schemas import Empresa as EmpresaSchema, EmpresaCreate
+from core.audit import record_audit_event
 from core import models
 
 # Instanciando o router
@@ -125,6 +126,35 @@ def delete_company(company_id: int, _admin=Depends(require_admin_token), db: Ses
     company = db.query(models.Empresa).filter(models.Empresa.id == company_id).first()
     if not company:
         raise HTTPException(status_code=404, detail="Empresa não encontrada")
+    db.delete(company)
+    db.commit()
+    return
+
+
+@router.delete("/admin/companies/{company_id}", status_code=204)
+def delete_company_as_admin_user(
+    company_id: int,
+    admin: models.Usuario = Depends(require_global_admin),
+    db: Session = DB_DEPENDENCY,
+):
+    """Remove empresa por usuario admin autenticado e preserva trilha de auditoria."""
+    company = db.get(models.Empresa, company_id)
+    if company is None:
+        raise HTTPException(status_code=404, detail="Empresa não encontrada")
+
+    metadata = {
+        "company_id": company.id,
+        "nome_empresa": company.nome_empresa,
+        "cnpj_cpf": company.cnpj_cpf,
+        "cod_dominio": company.cod_dominio,
+    }
+    record_audit_event(
+        db,
+        event_type="company.deleted",
+        user_id=admin.id,
+        resource_id=str(company.id),
+        metadata=metadata,
+    )
     db.delete(company)
     db.commit()
     return

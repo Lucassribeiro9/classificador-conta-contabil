@@ -92,6 +92,7 @@ Exemplo de evento:
 - Eventos iniciais de plano de contas: `plan.imported`, `plan.import_failed`.
 - Eventos iniciais de edicao pontual de contas: `account.updated`, `account.deactivated`.
 - Eventos iniciais de razao: `ledger.imported`, `ledger.import_failed`, `ledger.import_denied`.
+- Eventos iniciais de delecao sensivel: `company.deleted`, `ledger.deleted`.
 - Eventos iniciais de classificacao: `classification.started`, `classification.completed`, `classification.failed`.
 - Eventos iniciais de modelo ML: `model.trained`, `model.exported`, `model.train_failed`.
 - Eventos iniciais de feedback: `feedback.created`, `feedback.updated`.

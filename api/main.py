@@ -56,6 +56,7 @@ app.include_router(
     tags=["Plano de Contas"],
 )
 app.include_router(razao.router, prefix="/api/v1", tags=["Razão"])
+app.include_router(razao.admin_router, prefix="/api/v1", tags=["Razão"])
 
 
 @app.get("/")
