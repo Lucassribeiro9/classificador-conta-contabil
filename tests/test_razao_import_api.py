@@ -223,6 +223,8 @@ def test_user_with_admin_empresa_permission_imports_razao(client):
 
 
 def test_user_with_leitura_permission_cannot_import_razao(client):
+    from tests.conftest import TestingSessionLocal
+
     usuario, empresa_id = _seed_user_company_and_catalog("leitura")
 
     response = client.post(
@@ -233,6 +235,14 @@ def test_user_with_leitura_permission_cannot_import_razao(client):
 
     assert response.status_code == 403
     assert response.json()["detail"] == "Permissão insuficiente"
+
+    with TestingSessionLocal() as session:
+        event = session.query(AuditEvent).one()
+        assert event.event_type == "ledger.import_denied"
+        assert event.user_id == usuario.id
+        assert event.empresa_id == empresa_id
+        assert event.metadata_json["file_hash"].startswith("sha256:")
+        assert event.metadata_json["reason"] == "insufficient_permission"
 
 
 def test_user_without_company_link_cannot_import_razao(client):

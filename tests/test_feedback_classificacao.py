@@ -96,7 +96,7 @@ def _auth_headers(usuario: Usuario) -> dict[str, str]:
     return {"Authorization": f"Bearer {_access_token(usuario)}"}
 
 
-def _seed_context():
+def _seed_context(permissao: str | None = "operacao"):
     from tests.conftest import TestingSessionLocal
 
     usuario = _usuario()
@@ -138,13 +138,14 @@ def _seed_context():
         session.refresh(usuario)
         session.refresh(empresa)
         session.refresh(lancamento)
-        session.add(
-            UsuarioEmpresaPermissao(
-                usuario_id=usuario.id,
-                empresa_id=empresa.id,
-                permissao="operacao",
+        if permissao is not None:
+            session.add(
+                UsuarioEmpresaPermissao(
+                    usuario_id=usuario.id,
+                    empresa_id=empresa.id,
+                    permissao=permissao,
+                )
             )
-        )
         session.commit()
         return _auth_headers(usuario), empresa.id, usuario.id, lancamento.id
 
@@ -338,3 +339,31 @@ def test_feedback_classificacao_rejects_synthetic_final_account(client):
 
     assert response.status_code == 422
     assert response.json()["detail"] == "Conta final deve ser analítica e ativa"
+
+
+def test_feedback_classificacao_rejects_user_without_company_link_and_audits(
+    client,
+):
+    headers, empresa_id, usuario_id, lancamento_id = _seed_context(permissao=None)
+
+    response = client.post(
+        f"/api/v1/companies/{empresa_id}/ml/feedback",
+        json={
+            "lancamento_id": lancamento_id,
+            "conta_sugerida": 50057,
+            "conta_final": 70001,
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Acesso negado"
+
+    from tests.conftest import TestingSessionLocal
+
+    with TestingSessionLocal() as session:
+        events = session.query(AuditEvent).order_by(AuditEvent.id).all()
+        assert [event.event_type for event in events] == ["auth.access.denied"]
+        assert events[0].user_id == usuario_id
+        assert events[0].empresa_id == empresa_id
+        assert events[0].metadata_json == {"reason": "access_denied"}

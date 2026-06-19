@@ -5,7 +5,11 @@ from fastapi import Depends, Header, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import ExpiredSignatureError, InvalidTokenError
 from sqlalchemy.orm import Session
-from core.audit import is_audit_request_context_active, set_audit_user_id
+from core.audit import (
+    is_audit_request_context_active,
+    record_audit_event,
+    set_audit_user_id,
+)
 from core.config import settings
 from core.models import Empresa, Usuario
 from core.database import SessionLocal
@@ -60,6 +64,13 @@ def get_current_user(
     if usuario is None:
         raise HTTPException(status_code=401, detail="Token inválido")
     if not usuario.is_active:
+        record_audit_event(
+            db,
+            event_type="auth.user.inactive_blocked",
+            user_id=usuario.id,
+            metadata={"reason": "inactive_user"},
+        )
+        db.commit()
         raise HTTPException(status_code=403, detail="Usuário inativo")
 
     if is_audit_request_context_active():
@@ -116,12 +127,28 @@ def require_company_access(required_permission: str) -> Callable:
             None,
         )
         if permission_link is None:
+            record_audit_event(
+                db,
+                event_type="auth.access.denied",
+                user_id=current_user.id,
+                empresa_id=company_id,
+                metadata={"reason": "access_denied"},
+            )
+            db.commit()
             raise HTTPException(status_code=403, detail="Acesso negado")
 
         if not _has_minimum_permission(
             actual=permission_link.permissao,
             required=required_permission,
         ):
+            record_audit_event(
+                db,
+                event_type="auth.access.denied",
+                user_id=current_user.id,
+                empresa_id=company_id,
+                metadata={"reason": "insufficient_permission"},
+            )
+            db.commit()
             raise HTTPException(status_code=403, detail="Permissão insuficiente")
 
         return empresa
