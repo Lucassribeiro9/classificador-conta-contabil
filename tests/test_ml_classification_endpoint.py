@@ -109,6 +109,42 @@ def _seed_user_company_and_account(permissao: str = "operacao"):
         return _auth_headers(usuario), empresa.id
 
 
+def _seed_inactive_user_company_and_account():
+    from tests.conftest import TestingSessionLocal
+
+    usuario = _usuario(is_active=False)
+    empresa = _empresa()
+    conta = _conta()
+    with TestingSessionLocal() as session:
+        session.add_all([usuario, empresa, conta])
+        session.commit()
+        session.refresh(usuario)
+        session.refresh(empresa)
+        session.add(
+            UsuarioEmpresaPermissao(
+                usuario_id=usuario.id,
+                empresa_id=empresa.id,
+                permissao="operacao",
+            )
+        )
+        session.commit()
+        return _auth_headers(usuario), empresa.id, usuario.id
+
+
+def _seed_user_without_company_link_and_account():
+    from tests.conftest import TestingSessionLocal
+
+    usuario = _usuario()
+    empresa = _empresa()
+    conta = _conta()
+    with TestingSessionLocal() as session:
+        session.add_all([usuario, empresa, conta])
+        session.commit()
+        session.refresh(usuario)
+        session.refresh(empresa)
+        return _auth_headers(usuario), empresa.id, usuario.id
+
+
 class ModeloMockado:
     classes_ = [50057, 70001]
 
@@ -323,7 +359,55 @@ def test_classification_endpoint_requires_company_operation_permission(client):
 
     assert response.status_code == 403
     assert response.json()["detail"] == "Permissão insuficiente"
-    assert _audit_events() == []
+    events = _audit_events()
+    assert [event.event_type for event in events] == ["auth.access.denied"]
+    assert events[0].empresa_id == empresa_id
+    assert events[0].metadata_json == {"reason": "insufficient_permission"}
+
+
+def test_classification_endpoint_rejects_user_without_company_link_and_audits(
+    client,
+):
+    headers, empresa_id, usuario_id = _seed_user_without_company_link_and_account()
+
+    response = client.post(
+        f"/api/v1/companies/{empresa_id}/ml/classification",
+        json={
+            "historico": "Pagamento Fornecedor",
+            "conta_origem": 10046,
+            "direcao": "credito",
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Acesso negado"
+    events = _audit_events()
+    assert [event.event_type for event in events] == ["auth.access.denied"]
+    assert events[0].user_id == usuario_id
+    assert events[0].empresa_id == empresa_id
+    assert events[0].metadata_json == {"reason": "access_denied"}
+
+
+def test_classification_endpoint_rejects_inactive_user_and_audits(client):
+    headers, empresa_id, usuario_id = _seed_inactive_user_company_and_account()
+
+    response = client.post(
+        f"/api/v1/companies/{empresa_id}/ml/classification",
+        json={
+            "historico": "Pagamento Fornecedor",
+            "conta_origem": 10046,
+            "direcao": "credito",
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Usuário inativo"
+    events = _audit_events()
+    assert [event.event_type for event in events] == ["auth.user.inactive_blocked"]
+    assert events[0].user_id == usuario_id
+    assert events[0].metadata_json == {"reason": "inactive_user"}
 
 
 
