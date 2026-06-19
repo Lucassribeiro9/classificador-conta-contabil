@@ -5,7 +5,13 @@ import pytest
 from pwdlib import PasswordHash
 
 from core.config import settings
-from core.models import ContaContabil, Empresa, Usuario, UsuarioEmpresaPermissao
+from core.models import (
+    AuditEvent,
+    ContaContabil,
+    Empresa,
+    Usuario,
+    UsuarioEmpresaPermissao,
+)
 
 
 password_hash = PasswordHash.recommended()
@@ -114,6 +120,20 @@ class ModeloMockado:
         return [[0.91, 0.09] for _ in features]
 
 
+class ModeloBaixaConfianca:
+    classes_ = [50057, 70001]
+
+    def predict_proba(self, features):
+        return [[0.60, 0.40] for _ in features]
+
+
+def _audit_events():
+    from tests.conftest import TestingSessionLocal
+
+    with TestingSessionLocal() as session:
+        return session.query(AuditEvent).order_by(AuditEvent.id).all()
+
+
 def test_classification_endpoint_returns_counterpart_prediction_with_probability(
     client, monkeypatch, tmp_path
 ):
@@ -153,6 +173,50 @@ def test_classification_endpoint_returns_counterpart_prediction_with_probability
     }
 
 
+def test_classification_endpoint_creates_started_and_completed_audit_events(
+    client, monkeypatch, tmp_path
+):
+    headers, empresa_id = _seed_user_company_and_account()
+    model_path = tmp_path / f"empresa_{empresa_id}" / "model_.joblib"
+    model_path.parent.mkdir(parents=True)
+    model_path.write_bytes(b"modelo mockado")
+    monkeypatch.setattr(settings, "MODEL_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        "core.ml_engine.joblib.load",
+        lambda path: ModeloBaixaConfianca(),
+    )
+
+    response = client.post(
+        f"/api/v1/companies/{empresa_id}/ml/classification",
+        json={
+            "historico": "Pagamento Fornecedor",
+            "conta_origem": 10046,
+            "direcao": "credito",
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    events = _audit_events()
+    assert [event.event_type for event in events] == [
+        "classification.started",
+        "classification.completed",
+    ]
+    started, completed = events
+    assert started.empresa_id == empresa_id
+    assert started.user_id is not None
+    assert started.resource_id == "ml_classification"
+    assert started.metadata_json == {"total_solicitado": 1}
+    assert completed.empresa_id == empresa_id
+    assert completed.user_id == started.user_id
+    assert completed.resource_id == "ml_classification"
+    assert completed.metadata_json == {
+        "total_processado": 1,
+        "total_revisao": 1,
+    }
+    assert "historico" not in completed.metadata_json
+
+
 def test_classification_endpoint_returns_404_when_company_has_no_model(client):
     headers, empresa_id = _seed_user_company_and_account()
 
@@ -168,6 +232,39 @@ def test_classification_endpoint_returns_404_when_company_has_no_model(client):
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Modelo treinado não encontrado para a empresa"
+
+
+def test_classification_endpoint_creates_failed_audit_event_when_model_is_missing(
+    client,
+):
+    headers, empresa_id = _seed_user_company_and_account()
+
+    response = client.post(
+        f"/api/v1/companies/{empresa_id}/ml/classification",
+        json={
+            "historico": "Pagamento Fornecedor",
+            "conta_origem": 10046,
+            "direcao": "credito",
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 404
+    events = _audit_events()
+    assert [event.event_type for event in events] == [
+        "classification.started",
+        "classification.failed",
+    ]
+    failed = events[1]
+    assert failed.empresa_id == empresa_id
+    assert failed.user_id is not None
+    assert failed.resource_id == "ml_classification"
+    assert failed.metadata_json == {
+        "total_solicitado": 1,
+        "error_type": "ModelNotFound",
+        "reason": "model_not_found",
+    }
+    assert "historico" not in failed.metadata_json
 
 
 def test_classification_endpoint_rejects_batches_over_100_items(
@@ -226,6 +323,8 @@ def test_classification_endpoint_requires_company_operation_permission(client):
 
     assert response.status_code == 403
     assert response.json()["detail"] == "Permissão insuficiente"
+    assert _audit_events() == []
+
 
 
 def test_classification_endpoint_loads_model_once_for_small_batch(
