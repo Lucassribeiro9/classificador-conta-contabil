@@ -12,6 +12,7 @@ from api.schemas import (
     PredictResponse,
 )
 from api.dependencies import DB_DEPENDENCY, require_company_access, verify_company
+from core.audit import record_audit_event
 from core.ml_engine import ClassificadorContabil
 from core.models import ContaContabil, Empresa, Transacao
 
@@ -59,16 +60,51 @@ def classify_lancamentos_with_saved_model(
         )
 
     engine_ml = ClassificadorContabil(db)
+    record_audit_event(
+        db,
+        event_type="classification.started",
+        empresa_id=company_id,
+        resource_id="ml_classification",
+        metadata={"total_solicitado": len(inputs)},
+    )
     if not engine_ml.model_exists_for_company(company_id):
+        record_audit_event(
+            db,
+            event_type="classification.failed",
+            empresa_id=company_id,
+            resource_id="ml_classification",
+            metadata={
+                "total_solicitado": len(inputs),
+                "error_type": "ModelNotFound",
+                "reason": "model_not_found",
+            },
+        )
+        db.commit()
         raise HTTPException(
             status_code=404,
             detail="Modelo treinado não encontrado para a empresa",
         )
 
-    predictions = engine_ml.classify_lancamentos_from_saved_model(
-        empresa_id=company_id,
-        lancamentos=[item.model_dump() for item in inputs],
-    )
+    try:
+        predictions = engine_ml.classify_lancamentos_from_saved_model(
+            empresa_id=company_id,
+            lancamentos=[item.model_dump() for item in inputs],
+        )
+    except Exception as exc:
+        record_audit_event(
+            db,
+            event_type="classification.failed",
+            empresa_id=company_id,
+            resource_id="ml_classification",
+            metadata={
+                "total_solicitado": len(inputs),
+                "error_type": type(exc).__name__,
+                "reason": "classification_error",
+            },
+        )
+        db.commit()
+        raise
+
     predicted_accounts = {
         prediction["conta_contrapartida"] for prediction in predictions
     }
@@ -82,10 +118,37 @@ def classify_lancamentos_with_saved_model(
     }
     invalid_accounts = predicted_accounts - valid_accounts
     if invalid_accounts:
+        record_audit_event(
+            db,
+            event_type="classification.failed",
+            empresa_id=company_id,
+            resource_id="ml_classification",
+            metadata={
+                "total_solicitado": len(inputs),
+                "total_processado": len(predictions),
+                "error_type": "InvalidPredictedAccount",
+                "reason": "invalid_predicted_account",
+            },
+        )
+        db.commit()
         raise HTTPException(
             status_code=422,
             detail="Modelo retornou conta de contrapartida inválida",
         )
+
+    record_audit_event(
+        db,
+        event_type="classification.completed",
+        empresa_id=company_id,
+        resource_id="ml_classification",
+        metadata={
+            "total_processado": len(predictions),
+            "total_revisao": sum(
+                1 for prediction in predictions if prediction["needs_review"]
+            ),
+        },
+    )
+    db.commit()
 
     return {
         "empresa_id": company_id,
