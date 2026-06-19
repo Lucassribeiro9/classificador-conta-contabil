@@ -6,15 +6,16 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
-from api.dependencies import DB_DEPENDENCY, get_current_user
+from api.dependencies import DB_DEPENDENCY, get_current_user, require_global_admin
 from api.schemas import ImportacaoRazaoResponse
 from core.audit import record_audit_event
-from core.models import Empresa, Usuario
+from core.models import Empresa, LoteImportacaoRazao, Usuario
 from core.razao_importer import RazaoImportError, import_razao
 from core.razao_parser import RazaoParseError
 
 
 router = APIRouter(prefix="/companies/{company_id}/razao")
+admin_router = APIRouter(prefix="/admin/razao")
 
 
 @router.post("/import", response_model=ImportacaoRazaoResponse)
@@ -154,3 +155,33 @@ def _failure_reason(exc: Exception) -> str:
     if isinstance(exc, RazaoImportError) and "Arquivo ja importado" in str(exc):
         return "duplicate_file_hash"
     return "invalid_file"
+
+
+@admin_router.delete("/lotes/{lote_id}", status_code=204)
+def delete_ledger_import_batch(
+    lote_id: int,
+    admin: Usuario = Depends(require_global_admin),
+    db: Session = DB_DEPENDENCY,
+) -> None:
+    lote = db.get(LoteImportacaoRazao, lote_id)
+    if lote is None:
+        raise HTTPException(status_code=404, detail="Lote de razão não encontrado")
+
+    metadata = {
+        "lote_id": lote.id,
+        "original_filename": lote.original_filename,
+        "file_hash": lote.file_hash,
+        "status": lote.status,
+        "created_at": lote.created_at.isoformat(),
+    }
+    record_audit_event(
+        db,
+        event_type="ledger.deleted",
+        user_id=admin.id,
+        empresa_id=lote.empresa_id,
+        resource_id=str(lote.id),
+        metadata=metadata,
+    )
+    db.delete(lote)
+    db.commit()
+    return None
