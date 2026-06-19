@@ -10,6 +10,7 @@ from api.dependencies import (
     require_company_access,
     verify_api_key,
 )
+from core.audit import record_audit_event
 from core.models import (
     ContaContabil,
     Empresa,
@@ -56,6 +57,14 @@ def submit_feedback_classificacao(
             detail="Conta final deve ser analítica e ativa",
         )
 
+    feedback_anterior = (
+        db.query(FeedbackClassificacao)
+        .filter(FeedbackClassificacao.empresa_id == company_id)
+        .filter(FeedbackClassificacao.lancamento_id == feedback.lancamento_id)
+        .order_by(FeedbackClassificacao.created_at.desc(), FeedbackClassificacao.id.desc())
+        .first()
+    )
+
     registro = FeedbackClassificacao(
         empresa_id=company_id,
         lancamento_id=feedback.lancamento_id,
@@ -64,6 +73,23 @@ def submit_feedback_classificacao(
         usuario_id=current_user.id,
     )
     db.add(registro)
+    db.flush()
+    record_audit_event(
+        db,
+        event_type="feedback.updated" if feedback_anterior else "feedback.created",
+        user_id=current_user.id,
+        empresa_id=company_id,
+        resource_id=str(registro.id),
+        metadata={
+            "lancamento_id": feedback.lancamento_id,
+            "conta_anterior": (
+                feedback_anterior.conta_final
+                if feedback_anterior
+                else feedback.conta_sugerida
+            ),
+            "conta_corrigida": feedback.conta_final,
+        },
+    )
     db.commit()
     db.refresh(registro)
 

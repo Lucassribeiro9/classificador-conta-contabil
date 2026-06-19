@@ -8,6 +8,7 @@ from pwdlib import PasswordHash
 from core.config import settings
 from core.dataset_builder import build_dataset_treino_contrapartida
 from core.models import (
+    AuditEvent,
     ContaContabil,
     Empresa,
     FeedbackClassificacao,
@@ -178,6 +179,115 @@ def test_feedback_classificacao_endpoint_persists_user_and_final_account(client)
         assert feedback.conta_sugerida == 50057
         assert feedback.conta_final == 70001
         assert feedback.usuario_id == usuario_id
+
+
+def test_feedback_classificacao_created_audit_event_has_safe_metadata(client):
+    headers, empresa_id, usuario_id, lancamento_id = _seed_context()
+
+    response = client.post(
+        f"/api/v1/companies/{empresa_id}/ml/feedback",
+        json={
+            "lancamento_id": lancamento_id,
+            "conta_sugerida": 50057,
+            "conta_final": 70001,
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+
+    from tests.conftest import TestingSessionLocal
+
+    with TestingSessionLocal() as session:
+        event = session.query(AuditEvent).one()
+        feedback = session.query(FeedbackClassificacao).one()
+        assert event.event_type == "feedback.created"
+        assert event.user_id == usuario_id
+        assert event.empresa_id == empresa_id
+        assert event.resource_id == str(feedback.id)
+        assert event.metadata_json == {
+            "lancamento_id": lancamento_id,
+            "conta_anterior": 50057,
+            "conta_corrigida": 70001,
+        }
+        assert "historico" not in event.metadata_json
+        assert "token" not in event.metadata_json
+
+
+def test_feedback_classificacao_updated_audit_event_uses_previous_final_account(
+    client,
+):
+    headers, empresa_id, usuario_id, lancamento_id = _seed_context()
+
+    first_response = client.post(
+        f"/api/v1/companies/{empresa_id}/ml/feedback",
+        json={
+            "lancamento_id": lancamento_id,
+            "conta_sugerida": 50057,
+            "conta_final": 70001,
+        },
+        headers=headers,
+    )
+    assert first_response.status_code == 200
+
+    second_response = client.post(
+        f"/api/v1/companies/{empresa_id}/ml/feedback",
+        json={
+            "lancamento_id": lancamento_id,
+            "conta_sugerida": 70001,
+            "conta_final": 50057,
+        },
+        headers=headers,
+    )
+
+    assert second_response.status_code == 200
+
+    from tests.conftest import TestingSessionLocal
+
+    with TestingSessionLocal() as session:
+        events = session.query(AuditEvent).order_by(AuditEvent.id).all()
+        assert [event.event_type for event in events] == [
+            "feedback.created",
+            "feedback.updated",
+        ]
+        updated = events[1]
+        latest_feedback = (
+            session.query(FeedbackClassificacao)
+            .order_by(FeedbackClassificacao.id.desc())
+            .first()
+        )
+        assert updated.user_id == usuario_id
+        assert updated.empresa_id == empresa_id
+        assert updated.resource_id == str(latest_feedback.id)
+        assert updated.metadata_json == {
+            "lancamento_id": lancamento_id,
+            "conta_anterior": 70001,
+            "conta_corrigida": 50057,
+        }
+
+
+def test_feedback_classificacao_invalid_final_account_does_not_audit(client):
+    headers, empresa_id, _usuario_id, lancamento_id = _seed_context()
+
+    from tests.conftest import TestingSessionLocal
+
+    with TestingSessionLocal() as session:
+        session.add(_conta(90001, tipo="S"))
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/companies/{empresa_id}/ml/feedback",
+        json={
+            "lancamento_id": lancamento_id,
+            "conta_sugerida": 50057,
+            "conta_final": 90001,
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 422
+    with TestingSessionLocal() as session:
+        assert session.query(AuditEvent).all() == []
 
 
 def test_dataset_builder_uses_feedback_final_account_as_target(client):
