@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import hashlib
 from pathlib import Path
 from typing import Any
@@ -71,29 +71,38 @@ def import_razao(
     session.flush()
 
     for index, parsed in enumerate(parsed_lancamentos, start=1):
-        normalized = normalize_lancamento_razao(parsed)
-        normalized["empresa_id"] = empresa_id
-        normalized["numero_lancamento"] = normalized.pop("numero")
-        if _is_blank(normalized.get("conta_contrapartida")):
+        try:
+            normalized = normalize_lancamento_razao(parsed)
+            normalized["empresa_id"] = empresa_id
+            normalized["numero_lancamento"] = normalized.pop("numero")
+            if _is_blank(normalized.get("conta_contrapartida")):
+                warnings.append(
+                    {
+                        "linha": index,
+                        "warnings": ["Linha do razao sem contrapartida valida."],
+                    }
+                )
+                continue
+
+            validation = validate_lancamento_razao_contas(session, normalized)
+            if not validation.is_valid:
+                warnings.append({"linha": index, "warnings": validation.warnings})
+                continue
+
+            normalized["historico_normalizado"] = normalize_razao_historico(
+                normalized["historico"]
+            )
+            session.add(_to_model(lote.id, empresa_id, normalized))
+            _link_contas_to_empresa(session, empresa_id, normalized)
+            imported += 1
+        except (RazaoParseError, ValueError, TypeError, InvalidOperation) as exc:
             warnings.append(
                 {
                     "linha": index,
-                    "warnings": ["Linha do razao sem contrapartida valida."],
+                    "warnings": [_line_error_message(exc)],
                 }
             )
             continue
-
-        validation = validate_lancamento_razao_contas(session, normalized)
-        if not validation.is_valid:
-            warnings.append({"linha": index, "warnings": validation.warnings})
-            continue
-
-        normalized["historico_normalizado"] = normalize_razao_historico(
-            normalized["historico"]
-        )
-        session.add(_to_model(lote.id, empresa_id, normalized))
-        _link_contas_to_empresa(session, empresa_id, normalized)
-        imported += 1
 
     invalid = len(parsed_lancamentos) - imported
     lote.total_importadas = imported
@@ -205,6 +214,19 @@ def _parse_date(value: Any) -> date:
     if isinstance(value, date):
         return value
     return date.fromisoformat(str(value))
+
+
+def _line_error_message(exc: Exception) -> str:
+    message = str(exc)
+    if isinstance(exc, RazaoParseError):
+        return message
+    if "Invalid isoformat" in message:
+        return "Data do lancamento invalida."
+    if isinstance(exc, InvalidOperation):
+        return "Valor do lancamento invalido."
+    if "invalid literal for int" in message:
+        return "Conta do lancamento invalida."
+    return "Linha do razao invalida."
 
 
 def _file_hash(path: Path) -> str:

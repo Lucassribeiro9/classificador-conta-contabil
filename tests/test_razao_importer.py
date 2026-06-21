@@ -208,6 +208,115 @@ def test_import_razao_fixture_tabular_com_warnings_importa_parcialmente(session)
     assert lancamento.conta_contrapartida == 20101
 
 
+def test_import_razao_records_warning_for_invalid_date_format(session, tmp_path):
+    empresa = _empresa()
+    usuario = _usuario()
+    session.add_all([empresa, usuario, _conta(10046), _conta(20001)])
+    session.flush()
+    xlsx_path = tmp_path / "razao-data-invalida.xlsx"
+    _write_workbook(
+        xlsx_path,
+        [
+            ["Conta:", "10046", "BCO. SANTANDER"],
+            ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito"],
+            ["2026-01-02", "42", "Pagamento fornecedor", "20001", 250.75, None],
+            ["31/02/2026", "43", "Data invalida", "20001", 10.00, None],
+        ],
+    )
+
+    result = import_razao(
+        session,
+        xlsx_path,
+        empresa_id=empresa.id,
+        usuario_id=usuario.id,
+        original_filename="razao-data-invalida.xlsx",
+    )
+
+    assert result.status == "completed_with_warnings"
+    assert result.total_linhas == 2
+    assert result.total_importadas == 1
+    assert result.total_invalidas == 1
+    assert result.warnings == [
+        {
+            "linha": 2,
+            "warnings": ["Data do lancamento invalida."],
+        }
+    ]
+    assert session.query(LancamentoRazaoNormalizado).count() == 1
+
+
+def test_import_razao_records_warning_for_invalid_amount_format(session, tmp_path):
+    empresa = _empresa()
+    usuario = _usuario()
+    session.add_all([empresa, usuario, _conta(10046), _conta(20001)])
+    session.flush()
+    xlsx_path = tmp_path / "razao-valor-invalido.xlsx"
+    _write_workbook(
+        xlsx_path,
+        [
+            ["Conta:", "10046", "BCO. SANTANDER"],
+            ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito"],
+            ["2026-01-02", "42", "Pagamento fornecedor", "20001", 250.75, None],
+            ["2026-01-03", "43", "Valor invalido", "20001", "abc", None],
+        ],
+    )
+
+    result = import_razao(
+        session,
+        xlsx_path,
+        empresa_id=empresa.id,
+        usuario_id=usuario.id,
+        original_filename="razao-valor-invalido.xlsx",
+    )
+
+    assert result.status == "completed_with_warnings"
+    assert result.total_linhas == 2
+    assert result.total_importadas == 1
+    assert result.total_invalidas == 1
+    assert result.warnings == [
+        {
+            "linha": 2,
+            "warnings": ["Valor do lancamento invalido."],
+        }
+    ]
+    assert session.query(LancamentoRazaoNormalizado).count() == 1
+
+
+def test_import_razao_accepts_integer_like_account_codes_with_decimal_suffix(
+    session,
+    tmp_path,
+):
+    empresa = _empresa()
+    usuario = _usuario()
+    session.add_all([empresa, usuario, _conta(10046), _conta(20001)])
+    session.flush()
+    xlsx_path = tmp_path / "razao-contas-decimais.xlsx"
+    _write_workbook(
+        xlsx_path,
+        [
+            ["Conta:", "10046.0", "BCO. SANTANDER"],
+            ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito"],
+            ["2026-01-02", "42.0", "Pagamento fornecedor", "20001.0", 250.75, None],
+        ],
+    )
+
+    result = import_razao(
+        session,
+        xlsx_path,
+        empresa_id=empresa.id,
+        usuario_id=usuario.id,
+        original_filename="razao-contas-decimais.xlsx",
+    )
+
+    lancamento = session.query(LancamentoRazaoNormalizado).one()
+    assert result.status == "completed"
+    assert result.total_importadas == 1
+    assert result.warnings == []
+    assert lancamento.numero_lancamento == "42"
+    assert lancamento.conta_origem == 10046
+    assert lancamento.conta_contrapartida == 20001
+
+
 def test_import_razao_blocks_inactive_company_from_file_cnpj(session, tmp_path):
     empresa = _empresa()
     empresa.is_active = False

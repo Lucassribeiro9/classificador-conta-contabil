@@ -107,6 +107,12 @@ def _parse_razao_xlsx(path: str | Path, *, require_metadata: bool) -> RazaoParse
             periodo_fim,
             require_metadata=require_metadata,
         )
+        if require_metadata and header_by_column is None and not lancamentos:
+            raise RazaoParseError(
+                "Layout do razao nao reconhecido: cabecalho obrigatorio nao "
+                "encontrado. Verifique colunas como data, historico, "
+                "contrapartida, debito e credito."
+            )
         return RazaoParseResult(metadata=metadata, lancamentos=lancamentos)
     finally:
         workbook.close()
@@ -192,7 +198,7 @@ def _extract_account_block(row: tuple[Any, ...]) -> str | None:
 
 def _first_text_after(row: tuple[Any, ...], index: int) -> str | None:
     for value in row[index + 1 :]:
-        text = _clean_text(value)
+        text = _clean_integer_like_text(value)
         if text:
             return text.split()[0]
     return None
@@ -274,11 +280,11 @@ def _parse_entry_row(
         return None
 
     return {
-        "conta_origem": _clean_text(resolved_conta_origem),
+        "conta_origem": _clean_integer_like_text(resolved_conta_origem),
         "data": _format_entry_date(data),
-        "numero": _clean_text(numero),
+        "numero": _clean_integer_like_text(numero),
         "historico": _clean_text(historico),
-        "contrapartida": _clean_text(contrapartida),
+        "contrapartida": _clean_integer_like_text(contrapartida),
         "debito": debito if not _is_blank_value(debito) else None,
         "credito": credito if not _is_blank_value(credito) else None,
     }
@@ -352,7 +358,9 @@ def _parse_br_date(value: Any) -> str | None:
 
 def _format_entry_date(value: Any) -> str | None:
     if isinstance(value, datetime):
-        return _clean_text(value)
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
     parsed_br_date = _parse_br_date(value)
     if parsed_br_date is not None:
         return parsed_br_date
@@ -382,6 +390,15 @@ def _clean_text(value: Any) -> str | None:
     if _is_blank_value(value):
         return None
     return str(value).strip()
+
+
+def _clean_integer_like_text(value: Any) -> str | None:
+    text = _clean_text(value)
+    if text is None:
+        return None
+    if re.fullmatch(r"\d+\.0+", text):
+        return text.split(".", 1)[0]
+    return text
 
 
 def _normalize_text(value: Any) -> str:
