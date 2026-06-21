@@ -191,6 +191,7 @@ def _link_contas_to_empresa(
                     ultima_utilizacao=data_lancamento,
                 )
             )
+            session.flush()
             continue
 
         vinculo.quantidade_lancamentos += 1

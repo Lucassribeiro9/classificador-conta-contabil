@@ -98,6 +98,46 @@ def test_parse_razao_fixture_sanitizada_representa_layout_real_dominio():
     ]
 
 
+def test_parse_razao_fixture_tabular_modelo_com_conta_origem():
+    fixture_path = FIXTURES_DIR / "razao_lote_valido.xlsx"
+
+    result = parse_razao_xlsx_with_metadata(fixture_path)
+
+    assert result.metadata.empresa_nome == "EMPRESA TESTE RAZAO LTDA"
+    assert result.metadata.cnpj_cpf == "22333444000155"
+    assert result.metadata.periodo_inicio == "2024-01-01"
+    assert result.metadata.periodo_fim == "2024-12-31"
+    assert result.lancamentos == [
+        {
+            "conta_origem": "10046",
+            "data": "2024-01-02",
+            "numero": "9001",
+            "historico": "ALUGUEL - Lancamento teste 5506",
+            "contrapartida": "20102",
+            "debito": None,
+            "credito": 548.96,
+        },
+        {
+            "conta_origem": "10046",
+            "data": "2024-01-03",
+            "numero": "9002",
+            "historico": "VENDA - Lancamento teste 7912",
+            "contrapartida": "30102",
+            "debito": 2653.82,
+            "credito": None,
+        },
+        {
+            "conta_origem": "10046",
+            "data": "2024-01-04",
+            "numero": "9003",
+            "historico": "IMPOSTO - Lancamento teste 1434",
+            "contrapartida": "20104",
+            "debito": None,
+            "credito": 10131.84,
+        },
+    ]
+
+
 def test_parse_razao_accepts_dominio_export_layout_without_entry_number(tmp_path):
     xlsx_path = tmp_path / "razao-dominio.xlsx"
     _write_workbook(

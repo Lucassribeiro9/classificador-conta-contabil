@@ -26,10 +26,11 @@ class RazaoParseResult:
 
 
 _REQUIRED_COLUMNS = ("data", "historico", "contrapartida", "debito", "credito")
-_OPTIONAL_COLUMNS = ("numero",)
+_OPTIONAL_COLUMNS = ("numero", "conta_origem")
 _COLUMN_ALIASES = {
     "data": "data",
     "numero": "numero",
+    "conta_origem": "conta_origem",
     "historico": "historico",
     "contrapartida": "contrapartida",
     "cta.c.part.": "contrapartida",
@@ -73,6 +74,7 @@ def _parse_razao_xlsx(path: str | Path, *, require_metadata: bool) -> RazaoParse
                 cnpj_cpf = row_metadata["cnpj_cpf"]
             if row_metadata.get("periodo_inicio") is not None:
                 periodo_inicio = row_metadata["periodo_inicio"]
+            if row_metadata.get("periodo_fim") is not None:
                 periodo_fim = row_metadata["periodo_fim"]
 
             conta_bloco = _extract_account_block(row)
@@ -85,7 +87,10 @@ def _parse_razao_xlsx(path: str | Path, *, require_metadata: bool) -> RazaoParse
                 header_by_column = maybe_header
                 continue
 
-            if conta_origem is None or header_by_column is None:
+            if header_by_column is None:
+                continue
+
+            if conta_origem is None and header_by_column.get("conta_origem") is None:
                 continue
 
             if _is_balance_row(row):
@@ -206,6 +211,14 @@ def _extract_metadata(row: tuple[Any, ...]) -> dict[str, str | None]:
         elif normalized in {"c.n.p.j.:", "c.n.p.j.", "cnpj:", "cnpj"}:
             cnpj = _first_clean_text_after(row, index)
             metadata["cnpj_cpf"] = _only_digits(cnpj)
+        elif normalized in {"periodo inicio:", "periodo inicio"}:
+            metadata["periodo_inicio"] = _parse_br_date(
+                _first_clean_text_after(row, index)
+            )
+        elif normalized in {"periodo fim:", "periodo fim"}:
+            metadata["periodo_fim"] = _parse_br_date(
+                _first_clean_text_after(row, index)
+            )
         elif normalized in {"periodo:", "periodo"}:
             periodo = _first_clean_text_after(row, index)
             inicio, fim = _parse_period_range(periodo)
@@ -241,22 +254,28 @@ def _header_by_column(row: tuple[Any, ...]) -> dict[str, int | None] | None:
 
 def _parse_entry_row(
     row: tuple[Any, ...],
-    conta_origem: str,
+    conta_origem: str | None,
     header_by_column: dict[str, int | None],
 ) -> dict[str, Any] | None:
     data = _cell(row, header_by_column["data"])
     numero = _cell(row, header_by_column["numero"])
+    row_conta_origem = _cell(row, header_by_column["conta_origem"])
     historico = _cell(row, header_by_column["historico"])
     contrapartida = _cell(row, header_by_column["contrapartida"])
     debito = _cell(row, header_by_column["debito"])
     credito = _cell(row, header_by_column["credito"])
+    resolved_conta_origem = conta_origem or _clean_text(row_conta_origem)
 
-    if _is_blank_value(data) or _is_blank_value(historico):
+    if (
+        _is_blank_value(data)
+        or _is_blank_value(historico)
+        or _is_blank_value(resolved_conta_origem)
+    ):
         return None
 
     return {
-        "conta_origem": conta_origem,
-        "data": _clean_text(data),
+        "conta_origem": _clean_text(resolved_conta_origem),
+        "data": _format_entry_date(data),
         "numero": _clean_text(numero),
         "historico": _clean_text(historico),
         "contrapartida": _clean_text(contrapartida),
@@ -329,6 +348,15 @@ def _parse_br_date(value: Any) -> str | None:
         except ValueError:
             return None
     return parsed_date.isoformat()
+
+
+def _format_entry_date(value: Any) -> str | None:
+    if isinstance(value, datetime):
+        return _clean_text(value)
+    parsed_br_date = _parse_br_date(value)
+    if parsed_br_date is not None:
+        return parsed_br_date
+    return _clean_text(value)
 
 
 def _only_digits(value: Any) -> str | None:

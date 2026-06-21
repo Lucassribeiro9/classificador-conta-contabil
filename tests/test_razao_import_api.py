@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
+from pathlib import Path
 
 import jwt
 import pytest
@@ -17,6 +18,7 @@ from core.models import (
 
 
 password_hash = PasswordHash.recommended()
+FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
 
 @pytest.fixture(autouse=True)
@@ -109,7 +111,20 @@ def _upload_file(filename: str = "razao.xlsx") -> dict:
     }
 
 
-def _seed_user_company_and_catalog(permissao: str = "operacao"):
+def _upload_fixture_file(filename: str) -> dict:
+    return {
+        "file": (
+            filename,
+            (FIXTURES_DIR / filename).read_bytes(),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+    }
+
+
+def _seed_user_company_and_catalog(
+    permissao: str = "operacao",
+    contas: tuple[int, ...] = (10046, 20001),
+):
     from tests.conftest import TestingSessionLocal
 
     usuario = _usuario()
@@ -118,7 +133,7 @@ def _seed_user_company_and_catalog(permissao: str = "operacao"):
         UsuarioEmpresaPermissao(empresa=empresa, permissao=permissao)
     )
     with TestingSessionLocal() as session:
-        session.add_all([usuario, _conta(10046), _conta(20001)])
+        session.add_all([usuario, *[_conta(codigo) for codigo in contas]])
         session.commit()
         session.refresh(usuario)
         session.refresh(empresa)
@@ -143,6 +158,59 @@ def test_user_with_operacao_permission_imports_razao_and_receives_summary(client
         "total_invalidas": 0,
         "warnings": [],
     }
+
+
+def test_user_imports_valid_tabular_fixture_through_endpoint(client):
+    usuario, empresa_id = _seed_user_company_and_catalog(
+        "operacao",
+        contas=(10046, 20102, 30102, 20104),
+    )
+
+    response = client.post(
+        f"/api/v1/companies/{empresa_id}/razao/import",
+        files=_upload_fixture_file("razao_lote_valido.xlsx"),
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "completed"
+    assert response.json()["total_linhas"] == 3
+    assert response.json()["total_importadas"] == 3
+    assert response.json()["total_invalidas"] == 0
+    assert response.json()["warnings"] == []
+
+
+def test_user_imports_tabular_fixture_with_controlled_warnings_through_endpoint(
+    client,
+):
+    usuario, empresa_id = _seed_user_company_and_catalog(
+        "operacao",
+        contas=(10046, 20101),
+    )
+
+    response = client.post(
+        f"/api/v1/companies/{empresa_id}/razao/import",
+        files=_upload_fixture_file("razao_lote_com_warnings.xlsx"),
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "completed_with_warnings"
+    assert response.json()["total_linhas"] == 3
+    assert response.json()["total_importadas"] == 1
+    assert response.json()["total_invalidas"] == 2
+    assert response.json()["warnings"] == [
+        {
+            "linha": 2,
+            "warnings": ["Linha do razao sem contrapartida valida."],
+        },
+        {
+            "linha": 3,
+            "warnings": [
+                "Conta de contrapartida 99999 nao encontrada no catalogo."
+            ],
+        },
+    ]
 
 
 def test_successful_razao_import_creates_audit_event_with_counters(client):

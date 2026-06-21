@@ -1,5 +1,6 @@
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 from openpyxl import Workbook
@@ -17,6 +18,9 @@ from core.models import (
     Usuario,
 )
 from core.razao_importer import RazaoImportError, import_razao
+
+
+FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
 
 @pytest.fixture()
@@ -123,6 +127,85 @@ def test_import_razao_persists_valid_lines_and_completes_lote(session, tmp_path)
     assert lancamento.historico == "Pagamento fornecedor"
     assert lancamento.historico_normalizado == "pagamento fornecedor"
     assert lancamento.valor == Decimal("250.75")
+
+
+def test_import_razao_fixture_tabular_valida_completa_lote(session):
+    empresa = _empresa()
+    usuario = _usuario()
+    session.add_all(
+        [
+            empresa,
+            usuario,
+            _conta(10046),
+            _conta(20102),
+            _conta(30102),
+            _conta(20104),
+        ]
+    )
+    session.flush()
+
+    result = import_razao(
+        session,
+        FIXTURES_DIR / "razao_lote_valido.xlsx",
+        empresa_id=empresa.id,
+        usuario_id=usuario.id,
+        original_filename="razao_lote_valido.xlsx",
+    )
+
+    lote = session.query(LoteImportacaoRazao).one()
+    lancamentos = (
+        session.query(LancamentoRazaoNormalizado)
+        .order_by(LancamentoRazaoNormalizado.numero_lancamento)
+        .all()
+    )
+    assert result.status == "completed"
+    assert result.total_linhas == 3
+    assert result.total_importadas == 3
+    assert result.total_invalidas == 0
+    assert result.warnings == []
+    assert lote.warnings_metadata == {"warnings": []}
+    assert [l.numero_lancamento for l in lancamentos] == ["9001", "9002", "9003"]
+    assert [l.direcao for l in lancamentos] == ["credito", "debito", "credito"]
+    assert session.query(EmpresaContaContabil).count() == 4
+
+
+def test_import_razao_fixture_tabular_com_warnings_importa_parcialmente(session):
+    empresa = _empresa()
+    usuario = _usuario()
+    session.add_all([empresa, usuario, _conta(10046), _conta(20101)])
+    session.flush()
+
+    result = import_razao(
+        session,
+        FIXTURES_DIR / "razao_lote_com_warnings.xlsx",
+        empresa_id=empresa.id,
+        usuario_id=usuario.id,
+        original_filename="razao_lote_com_warnings.xlsx",
+    )
+
+    lote = session.query(LoteImportacaoRazao).one()
+    lancamento = session.query(LancamentoRazaoNormalizado).one()
+    assert result.status == "completed_with_warnings"
+    assert result.total_linhas == 3
+    assert result.total_importadas == 1
+    assert result.total_invalidas == 2
+    assert result.warnings == [
+        {
+            "linha": 2,
+            "warnings": ["Linha do razao sem contrapartida valida."],
+        },
+        {
+            "linha": 3,
+            "warnings": [
+                "Conta de contrapartida 99999 nao encontrada no catalogo."
+            ],
+        },
+    ]
+    assert lote.status == "completed_with_warnings"
+    assert lote.warnings_metadata == {"warnings": result.warnings}
+    assert lancamento.numero_lancamento == "9101"
+    assert lancamento.conta_origem == 10046
+    assert lancamento.conta_contrapartida == 20101
 
 
 def test_import_razao_blocks_inactive_company_from_file_cnpj(session, tmp_path):
