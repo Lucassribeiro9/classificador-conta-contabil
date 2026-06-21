@@ -131,6 +131,7 @@ def test_import_razao_persists_valid_lines_and_completes_lote(session, tmp_path)
 
 def test_import_razao_fixture_tabular_valida_completa_lote(session):
     empresa = _empresa()
+    empresa.cnpj_cpf = "22333444000155"
     usuario = _usuario()
     session.add_all(
         [
@@ -171,6 +172,7 @@ def test_import_razao_fixture_tabular_valida_completa_lote(session):
 
 def test_import_razao_fixture_tabular_com_warnings_importa_parcialmente(session):
     empresa = _empresa()
+    empresa.cnpj_cpf = "22333444000155"
     usuario = _usuario()
     session.add_all([empresa, usuario, _conta(10046), _conta(20101)])
     session.flush()
@@ -383,6 +385,46 @@ def test_import_razao_allows_active_company_from_file_cnpj(session, tmp_path):
     assert result.status == "completed"
     assert session.query(LoteImportacaoRazao).count() == 1
     assert session.query(LancamentoRazaoNormalizado).count() == 1
+
+
+def test_import_razao_blocks_file_cnpj_from_another_company(session, tmp_path):
+    empresa_alvo = _empresa()
+    outra_empresa = Empresa(
+        nome_empresa="Outra Empresa Razao LTDA",
+        cnpj_cpf="11222333000144",
+        api_key="api-key-outra-razao",
+        cod_dominio=8802,
+    )
+    usuario = _usuario()
+    session.add_all(
+        [empresa_alvo, outra_empresa, usuario, _conta(10046), _conta(20001)]
+    )
+    session.flush()
+    xlsx_path = tmp_path / "razao-outra-empresa.xlsx"
+    _write_workbook(
+        xlsx_path,
+        [
+            ["Empresa:", None, outra_empresa.nome_empresa],
+            ["C.N.P.J.:", None, "11.222.333/0001-44"],
+            ["Período:", None, "01/01/2026 - 31/12/2026"],
+            [],
+            ["Conta:", "10046", "BCO. SANTANDER"],
+            ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito"],
+            ["2026-01-02", "42", "Pagamento fornecedor", "20001", 250.75, None],
+        ],
+    )
+
+    with pytest.raises(RazaoImportError, match="CNPJ.*nao corresponde"):
+        import_razao(
+            session,
+            xlsx_path,
+            empresa_id=empresa_alvo.id,
+            usuario_id=usuario.id,
+            original_filename="razao-outra-empresa.xlsx",
+        )
+
+    assert session.query(LoteImportacaoRazao).count() == 0
+    assert session.query(LancamentoRazaoNormalizado).count() == 0
 
 
 def test_import_razao_persists_valid_lines_and_records_warnings_for_invalid_ones(

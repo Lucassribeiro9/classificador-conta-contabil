@@ -52,6 +52,7 @@ def import_razao(
     parsed_lancamentos = _parse_lancamentos_and_validate_company(
         session,
         file_path,
+        empresa_id,
     )
     warnings: list[dict[str, Any]] = []
     imported = 0
@@ -129,6 +130,7 @@ def import_razao(
 def _parse_lancamentos_and_validate_company(
     session: Session,
     file_path: Path,
+    empresa_id: int,
 ) -> list[dict[str, Any]]:
     try:
         parsed = parse_razao_xlsx_with_metadata(file_path)
@@ -137,18 +139,27 @@ def _parse_lancamentos_and_validate_company(
             raise
         return parse_razao_xlsx(file_path)
 
-    _ensure_company_from_metadata_is_active(session, parsed.metadata.cnpj_cpf)
+    _ensure_file_company_matches_target(
+        session,
+        empresa_id,
+        parsed.metadata.cnpj_cpf,
+    )
     return parsed.lancamentos
 
 
-def _ensure_company_from_metadata_is_active(
+def _ensure_file_company_matches_target(
     session: Session,
-    cnpj_cpf: str,
+    empresa_id: int,
+    file_cnpj_cpf: str,
 ) -> None:
-    empresa = session.execute(
-        select(Empresa).where(Empresa.cnpj_cpf == cnpj_cpf)
-    ).scalar_one_or_none()
-    if empresa is not None and not empresa.is_active:
+    empresa = session.get(Empresa, empresa_id)
+    if empresa is None:
+        raise RazaoImportError("Empresa da importacao nao encontrada.")
+    if file_cnpj_cpf != empresa.cnpj_cpf:
+        raise RazaoImportError(
+            "CNPJ do razao nao corresponde a empresa da importacao."
+        )
+    if not empresa.is_active:
         raise RazaoImportError(
             "empresa do razao esta inativa; reative a empresa antes de importar."
         )

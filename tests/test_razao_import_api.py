@@ -12,6 +12,8 @@ from core.models import (
     AuditEvent,
     ContaContabil,
     Empresa,
+    LancamentoRazaoNormalizado,
+    LoteImportacaoRazao,
     Usuario,
     UsuarioEmpresaPermissao,
 )
@@ -101,11 +103,43 @@ def _razao_xlsx() -> bytes:
     return buffer.read()
 
 
+def _razao_xlsx_with_metadata(cnpj: str) -> bytes:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["Empresa:", None, "Empresa Arquivo LTDA"])
+    sheet.append(["C.N.P.J.:", None, cnpj])
+    sheet.append(["Período:", None, "01/01/2026 - 31/12/2026"])
+    sheet.append([])
+    sheet.append(["Conta:", "10046", "BCO. SANTANDER"])
+    sheet.append(
+        ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito"]
+    )
+    sheet.append(
+        ["2026-01-02", "42", "Pagamento fornecedor", "20001", 250.75, None]
+    )
+
+    buffer = BytesIO()
+    workbook.save(buffer)
+    workbook.close()
+    buffer.seek(0)
+    return buffer.read()
+
+
 def _upload_file(filename: str = "razao.xlsx") -> dict:
     return {
         "file": (
             filename,
             _razao_xlsx(),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+    }
+
+
+def _upload_file_with_metadata(cnpj: str, filename: str = "razao.xlsx") -> dict:
+    return {
+        "file": (
+            filename,
+            _razao_xlsx_with_metadata(cnpj),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
     }
@@ -178,6 +212,35 @@ def test_user_imports_valid_tabular_fixture_through_endpoint(client):
     assert response.json()["total_importadas"] == 3
     assert response.json()["total_invalidas"] == 0
     assert response.json()["warnings"] == []
+
+
+def test_razao_import_rejects_file_cnpj_from_another_company(client):
+    from tests.conftest import TestingSessionLocal
+
+    usuario, empresa_id = _seed_user_company_and_catalog("operacao")
+
+    response = client.post(
+        f"/api/v1/companies/{empresa_id}/razao/import",
+        files=_upload_file_with_metadata("11.222.333/0001-44"),
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 400
+    assert (
+        response.json()["detail"]
+        == "CNPJ do razao nao corresponde a empresa da importacao."
+    )
+
+    with TestingSessionLocal() as session:
+        event = session.query(AuditEvent).one()
+        assert event.event_type == "ledger.import_failed"
+        assert event.user_id == usuario.id
+        assert event.empresa_id == empresa_id
+        assert event.metadata_json["reason"] == "company_mismatch"
+        assert event.metadata_json["file_hash"].startswith("sha256:")
+        assert "11222333000144" not in str(event.metadata_json)
+        assert session.query(LoteImportacaoRazao).count() == 0
+        assert session.query(LancamentoRazaoNormalizado).count() == 0
 
 
 def test_user_imports_tabular_fixture_with_controlled_warnings_through_endpoint(

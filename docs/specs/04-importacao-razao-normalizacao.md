@@ -55,7 +55,7 @@ Campos obrigatorios do cabecalho:
 
 - `Empresa`: nome da empresa exibida no arquivo.
 - `CNPJ`: documento da empresa. A importacao normaliza para digitos e usa o
-  valor para validar a situacao da empresa quando informado no arquivo.
+  valor como validacao forte contra a empresa alvo da importacao.
 - `Periodo inicio`: data inicial do Razao.
 - `Periodo fim`: data final do Razao.
 
@@ -86,8 +86,10 @@ lancamento.
 participa da regra principal de debito/credito, nao define `valor`, nao define
 `direcao` e nao entra na chave de deduplicacao aprovada.
 
-Se o CNPJ informado no arquivo pertencer a uma empresa inativa, a importacao
-deve ser bloqueada antes de persistir lote ou lancamentos.
+Se o CNPJ informado no arquivo divergir da empresa alvo da importacao, a
+importacao deve ser bloqueada antes de persistir lote ou lancamentos. Se o
+CNPJ corresponder a uma empresa inativa, a importacao tambem deve ser
+bloqueada antes de persistir dados.
 
 Linhas invalidas nao devem ser persistidas como lancamento valido. A importacao
 pode ser parcial: linhas validas entram, linhas invalidas geram warnings no
@@ -148,6 +150,8 @@ lote. Quando houver ao menos uma linha valida e warnings, o status aprovado e
 - Apenas arquivos `.xlsx` serao aceitos nesta fase.
 - O plano de contas deve estar importado antes da importacao do razao.
 - A importacao de razao exige permissao `operacao` ou `admin_empresa` na empresa.
+- Quando o arquivo trouxer metadados obrigatorios, o CNPJ do arquivo deve
+  corresponder ao CNPJ da empresa alvo da importacao.
 - O lote de importacao armazenara `original_filename`, `file_hash`, usuario, empresa, status, contadores e timestamps.
 - Warnings de linhas invalidas serao armazenados em metadata JSON do lote na primeira fase.
 - O status de lote para importacao parcial sera `completed_with_warnings`.
