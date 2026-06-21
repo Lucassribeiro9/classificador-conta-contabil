@@ -154,6 +154,11 @@ def _razao_permission_denial_detail(user: Usuario, company_id: int) -> str | Non
 def _failure_reason(exc: Exception) -> str:
     if isinstance(exc, RazaoImportError) and "Arquivo ja importado" in str(exc):
         return "duplicate_file_hash"
+    if (
+        isinstance(exc, RazaoImportError)
+        and "CNPJ do razao nao corresponde" in str(exc)
+    ):
+        return "company_mismatch"
     return "invalid_file"
 
 
