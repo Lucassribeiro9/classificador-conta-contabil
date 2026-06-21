@@ -137,3 +137,21 @@ Geram warning, entre outros casos:
 
 Se houver linhas validas e warnings, o lote fica com status
 `completed_with_warnings`. Se nenhuma linha for valida, o lote fica `failed`.
+
+## Diagnostico de layout e formatacao
+
+Se a planilha tiver metadados obrigatorios, mas nao tiver cabecalho reconhecivel
+de lancamentos, a importacao deve falhar com mensagem clara de layout nao
+reconhecido. Verifique se existem colunas equivalentes a `data`, `historico`,
+`contrapartida`, `debito` e `credito`.
+
+Linhas reconhecidas com formatacao invalida nao devem gerar erro interno
+generico. Quando houver outras linhas validas no mesmo arquivo, a importacao
+deve ser parcial e registrar warnings. Exemplos:
+
+- codigos inteiros exportados como `10046.0` sao tratados como `10046`;
+- data invalida gera warning de data do lancamento invalida;
+- valor invalido em `debito` ou `credito` gera warning de valor do lancamento
+  invalido;
+- linha sem exatamente um lado preenchido entre `debito` e `credito` gera
+  warning de debito/credito invalido.

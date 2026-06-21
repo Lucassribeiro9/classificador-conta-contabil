@@ -1,3 +1,4 @@
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -79,7 +80,7 @@ def test_parse_razao_fixture_sanitizada_representa_layout_real_dominio():
     assert result.lancamentos == [
         {
             "conta_origem": "10001",
-            "data": "2024-01-31 00:00:00",
+            "data": "2024-01-31",
             "numero": None,
             "historico": "PAGAMENTO FORNECEDOR MODELO",
             "contrapartida": "20951",
@@ -88,7 +89,7 @@ def test_parse_razao_fixture_sanitizada_representa_layout_real_dominio():
         },
         {
             "conta_origem": "10001",
-            "data": "2024-02-29 00:00:00",
+            "data": "2024-02-29",
             "numero": None,
             "historico": "RECEBIMENTO CLIENTE MODELO",
             "contrapartida": "10851",
@@ -136,6 +137,80 @@ def test_parse_razao_fixture_tabular_modelo_com_conta_origem():
             "credito": 10131.84,
         },
     ]
+
+
+def test_parse_razao_normalizes_integer_like_numeric_account_codes(tmp_path):
+    xlsx_path = tmp_path / "razao-contas-numericas.xlsx"
+    _write_workbook(
+        xlsx_path,
+        [
+            ["Empresa", "EMPRESA TESTE LTDA"],
+            ["CNPJ", "12.345.678/0001-90"],
+            ["Periodo inicio", "01/01/2024"],
+            ["Periodo fim", "31/12/2024"],
+            [],
+            ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito"],
+            ["Conta:", "10046.0", "BANCO TESTE"],
+            ["31/01/2024", "142196.0", "PAGAMENTO TESTE", "20001.0", 49.92, None],
+        ],
+    )
+
+    result = parse_razao_xlsx_with_metadata(xlsx_path)
+
+    assert result.lancamentos == [
+        {
+            "conta_origem": "10046",
+            "data": "2024-01-31",
+            "numero": "142196",
+            "historico": "PAGAMENTO TESTE",
+            "contrapartida": "20001",
+            "debito": 49.92,
+            "credito": None,
+        }
+    ]
+
+
+def test_parse_razao_normalizes_excel_datetime_entry_date(tmp_path):
+    xlsx_path = tmp_path / "razao-data-excel.xlsx"
+    _write_workbook(
+        xlsx_path,
+        [
+            ["Empresa", "EMPRESA TESTE LTDA"],
+            ["CNPJ", "12.345.678/0001-90"],
+            ["Periodo inicio", "01/01/2024"],
+            ["Periodo fim", "31/12/2024"],
+            [],
+            ["Data", "Historico", "Contrapartida", "Debito", "Credito"],
+            ["Conta:", "10046", "BANCO TESTE"],
+            [datetime(2024, 1, 31), "PAGAMENTO TESTE", "20001", 49.92, None],
+        ],
+    )
+
+    result = parse_razao_xlsx_with_metadata(xlsx_path)
+
+    assert result.lancamentos[0]["data"] == "2024-01-31"
+
+
+def test_parse_razao_with_metadata_rejects_unrecognized_layout(tmp_path):
+    xlsx_path = tmp_path / "razao-layout-desconhecido.xlsx"
+    _write_workbook(
+        xlsx_path,
+        [
+            ["Empresa", "EMPRESA TESTE LTDA"],
+            ["CNPJ", "12.345.678/0001-90"],
+            ["Periodo inicio", "01/01/2024"],
+            ["Periodo fim", "31/12/2024"],
+            [],
+            ["Data Movimento", "Descricao", "Valor"],
+            ["31/01/2024", "PAGAMENTO TESTE", 100],
+        ],
+    )
+
+    with pytest.raises(
+        RazaoParseError,
+        match="Layout do razao nao reconhecido.*cabecalho",
+    ):
+        parse_razao_xlsx_with_metadata(xlsx_path)
 
 
 def test_parse_razao_accepts_dominio_export_layout_without_entry_number(tmp_path):
