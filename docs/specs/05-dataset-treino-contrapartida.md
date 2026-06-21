@@ -43,6 +43,8 @@ Catalogo de contas (`ContaContabil`):
 
 Lancamento normalizado do Razao (`LancamentoRazaoNormalizado`):
 
+- fonte canonica do novo fluxo de dataset; a decisao completa esta em
+  `docs/razao-transacoes-dataset-decisao.md`.
 - `empresa_id`: escopo obrigatorio do dataset.
 - `conta_origem`: conta do bloco do Razao, usada para filtrar origem financeira.
 - `conta_contrapartida`: alvo inicial do dataset.
@@ -126,6 +128,9 @@ Exemplo de metadados esperados:
 ## Decisoes Aprovadas
 
 - O dataset sera gerado por empresa.
+- O dataset de contrapartida consome diretamente `LancamentoRazaoNormalizado`;
+  `Transacao` permanece como legado/compatibilidade e nao e fonte do novo
+  dataset.
 - Origem financeira sera definida pela flag persistida `is_financial_origin` no catalogo.
 - A heuristica de banco/caixa/aplicacao pertence a spec de plano de contas, nao ao builder.
 - O dataset usara apenas lancamentos normalizados validos.

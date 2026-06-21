@@ -166,6 +166,9 @@ lote. Quando houver ao menos uma linha valida e warnings, o status aprovado e
 - Cada lancamento normalizado preserva conta de origem, contrapartida, conta de debito, conta de credito, direcao, historico, valor, data, numero do lancamento e lote.
 - Parser e persistencia permanecem separados.
 - Contas validas encontradas no razao serao vinculadas automaticamente a empresa.
+- `LancamentoRazaoNormalizado` e a fonte canonica do novo fluxo contabil e nao
+  deve ser copiado automaticamente para `Transacao`; ver
+  `docs/razao-transacoes-dataset-decisao.md`.
 
 ## Open Questions
 

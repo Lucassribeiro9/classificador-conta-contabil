@@ -6,6 +6,11 @@ Adaptar o fluxo de ML para prever contrapartida contabil em movimentos de origem
 
 Sucesso significa que o modelo usa o dataset normalizado, retorna predicoes explicaveis e permite correcao humana auditavel.
 
+O fluxo novo de ML usa `LancamentoRazaoNormalizado` como origem canonica por
+meio do dataset de contrapartida. `Transacao` permanece legado/compatibilidade
+ate ser isolado, adaptado ou removido em issue propria; ver
+`docs/razao-transacoes-dataset-decisao.md`.
+
 ## Tech Stack
 
 - scikit-learn com pipeline de texto no estado inicial.
@@ -97,6 +102,8 @@ Exemplo de resposta esperada:
 - Schemas novos de contrapartida podem ser criados para evitar confusao com o fluxo antigo.
 - O classificador nao conhece parser de Excel.
 - O algoritmo principal nao sera trocado nesta fase.
+- Metodos baseados em `Transacao` pertencem ao fluxo legado e nao devem ser
+  usados como fonte do novo dataset de contrapartida.
 
 ## Open Questions
 
