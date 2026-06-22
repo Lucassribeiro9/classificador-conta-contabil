@@ -13,6 +13,7 @@ from core.models import (
     Empresa,
     LancamentoRazaoNormalizado,
     LoteImportacaoRazao,
+    Transacao,
     Usuario,
 )
 
@@ -157,6 +158,51 @@ def test_dataset_builder_can_be_called_for_known_company(session):
             "target_conta_contrapartida": 50057,
         }
     ]
+
+
+def test_dataset_builder_uses_imported_razao_instead_of_legacy_transactions(session):
+    empresa = _empresa()
+    lote = LoteImportacaoRazao(
+        empresa=empresa,
+        usuario=_usuario(),
+        original_filename="razao-importado.xlsx",
+        file_hash="sha256:razao-importado",
+        status="completed",
+    )
+    session.add_all(
+        [
+            _conta(10046, is_financial_origin=True),
+            _conta(50057, is_financial_origin=False),
+            _lancamento(
+                lote=lote,
+                empresa=empresa,
+                historico="Recebimento por razao importado",
+                historico_normalizado="recebimento por razao importado",
+            ),
+            Transacao(
+                empresa=empresa,
+                data=date(2026, 1, 16),
+                cod_banco=1,
+                historico="Transacao legada ignorada",
+                valor=Decimal("999.99"),
+                conta_contabil=101,
+            ),
+        ]
+    )
+    session.commit()
+
+    dataset = build_dataset_treino_contrapartida(session, empresa_id=empresa.id)
+
+    assert dataset.linhas == [
+        {
+            "features": (
+                "recebimento por razao importado origem_10046 direcao_credito"
+            ),
+            "target_conta_contrapartida": 50057,
+        }
+    ]
+    assert dataset.metadata["total_linhas"] == 1
+    assert dataset.metadata["contagem_por_target"] == {50057: 1}
 
 
 def test_dataset_builder_returns_explicit_lines_and_metadata(session):
