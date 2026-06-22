@@ -27,6 +27,12 @@ from core.razao_parser import normalize_razao_historico
 logger = logging.getLogger(__name__)
 
 
+def legacy_transacao_flow(method):
+    """Marca metodos mantidos apenas para compatibilidade com Transacao."""
+    method.legacy_flow = "transacao"
+    return method
+
+
 class ClassificadorContabil:
     def __init__(self, db: Session, model_dir: str | Path | None = None):
         self.db = db
@@ -189,7 +195,9 @@ class ClassificadorContabil:
         ]
         return " ".join(token for token in feature_tokens if token)
 
+    @legacy_transacao_flow
     def train_for_company(self, empresa_id: int):
+        """Fluxo legado: treina a partir de Transacao para endpoints antigos."""
         # Buscar as transações da empresa e verificar se não são nulas
         stmt = select(Transacao).where(
             Transacao.empresa_id == empresa_id, Transacao.conta_contabil.is_not(None)
@@ -220,7 +228,9 @@ class ClassificadorContabil:
         self.pipeline.fit(df["features"], df["conta_contabil"])
         return True
 
+    @legacy_transacao_flow
     def classify_transactions(self, empresa_id: int, transacao_id: list[int]):
+        """Fluxo legado: classifica registros Transacao ja existentes."""
         # Aplicando a regra dos 70% para classificar
         stmt = select(Transacao).where(Transacao.id.in_(transacao_id))
         transactions = self.db.execute(stmt).scalars().all()
@@ -237,7 +247,9 @@ class ClassificadorContabil:
         self.db.commit()
         return transactions
 
+    @legacy_transacao_flow
     def predict_inputs(self, inputs: list[dict]):
+        """Fluxo legado: prediz payloads no formato historico/cod_banco."""
         if not inputs:
             return []
         feature_texts = [

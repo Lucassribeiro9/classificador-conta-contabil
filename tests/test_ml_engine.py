@@ -91,6 +91,12 @@ def test_train_for_company_com_poucos_dados_retorna_false(db_session, empresa):
     assert engine_ml.train_for_company(empresa.id) is False
 
 
+def test_transacao_based_methods_are_marked_as_legacy_flow():
+    assert ClassificadorContabil.train_for_company.legacy_flow == "transacao"
+    assert ClassificadorContabil.classify_transactions.legacy_flow == "transacao"
+    assert ClassificadorContabil.predict_inputs.legacy_flow == "transacao"
+
+
 def test_train_from_dataset_contract_trains_classifier(db_session, tmp_path):
     dataset = DatasetTreinoContrapartida(
         linhas=[
@@ -126,6 +132,42 @@ def test_train_from_dataset_contract_trains_classifier(db_session, tmp_path):
     assert predictions[0]["conta_contabil_predita"] == predictions[0][
         "conta_contrapartida_predita"
     ]
+
+
+def test_train_from_dataset_does_not_query_legacy_transactions(
+    db_session, tmp_path, monkeypatch
+):
+    dataset = DatasetTreinoContrapartida(
+        linhas=[
+            {
+                "features": f"pagamento fornecedor {i} origem_10046 direcao_credito",
+                "target_conta_contrapartida": 50057,
+            }
+            for i in range(5)
+        ]
+        + [
+            {
+                "features": f"recebimento cliente {i} origem_10046 direcao_debito",
+                "target_conta_contrapartida": 70001,
+            }
+            for i in range(5)
+        ],
+        metadata={
+            "empresa_id": 1,
+            "total_linhas": 10,
+            "total_descartes": 0,
+            "contagem_por_target": {50057: 5, 70001: 5},
+            "treinavel": True,
+        },
+    )
+
+    def fail_execute(*args, **kwargs):
+        raise AssertionError("train_from_dataset nao deve consultar Transacao")
+
+    monkeypatch.setattr(db_session, "execute", fail_execute)
+    engine_ml = ClassificadorContabil(db_session, model_dir=tmp_path)
+
+    assert engine_ml.train_from_dataset(dataset) is True
 
 
 def test_train_from_dataset_persists_multinomial_model_for_company(db_session, tmp_path):
