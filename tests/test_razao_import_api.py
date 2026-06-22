@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
 
@@ -174,6 +175,63 @@ def _seed_user_company_and_catalog(
         return usuario, empresa.id
 
 
+def _seed_razao_lote_with_lancamento(
+    *,
+    permissao: str = "leitura",
+    empresa_overrides: dict | None = None,
+    lote_overrides: dict | None = None,
+    lancamento_overrides: dict | None = None,
+):
+    from tests.conftest import TestingSessionLocal
+
+    empresa = _empresa(**(empresa_overrides or {}))
+    usuario = _usuario(
+        login=f"operador.razao.{empresa.cod_dominio}",
+        email=f"operador.razao.{empresa.cod_dominio}@example.com",
+    )
+    usuario.permissoes_empresas.append(
+        UsuarioEmpresaPermissao(empresa=empresa, permissao=permissao)
+    )
+    lote_data = {
+        "empresa": empresa,
+        "usuario": usuario,
+        "original_filename": "razao-consulta.xlsx",
+        "file_hash": "sha256:razao-consulta",
+        "status": "completed",
+        "total_linhas": 1,
+        "total_importadas": 1,
+        "total_invalidas": 0,
+        "warnings_metadata": {},
+    }
+    lote_data.update(lote_overrides or {})
+    lote = LoteImportacaoRazao(**lote_data)
+    lancamento_data = {
+        "lote": lote,
+        "empresa": empresa,
+        "numero_lancamento": "42",
+        "data": datetime(2026, 1, 2).date(),
+        "conta_origem": 10046,
+        "conta_contrapartida": 20001,
+        "conta_debito": 10046,
+        "conta_credito": 20001,
+        "direcao": "debito",
+        "historico": "Pagamento fornecedor confidencial",
+        "historico_normalizado": "pagamento fornecedor",
+        "valor": Decimal("250.75"),
+    }
+    lancamento_data.update(lancamento_overrides or {})
+    lancamento = LancamentoRazaoNormalizado(**lancamento_data)
+
+    with TestingSessionLocal() as session:
+        session.add_all([usuario, lote, lancamento])
+        session.commit()
+        session.refresh(usuario)
+        session.refresh(empresa)
+        session.refresh(lote)
+        session.refresh(lancamento)
+        return usuario, empresa.id, lote.id, lancamento.id
+
+
 def test_user_with_operacao_permission_imports_razao_and_receives_summary(client):
     usuario, empresa_id = _seed_user_company_and_catalog("operacao")
 
@@ -192,6 +250,127 @@ def test_user_with_operacao_permission_imports_razao_and_receives_summary(client
         "total_invalidas": 0,
         "warnings": [],
     }
+
+
+def test_user_with_leitura_permission_lists_own_razao_lotes_only(client):
+    usuario, empresa_id, lote_id, _ = _seed_razao_lote_with_lancamento(
+        permissao="leitura"
+    )
+    _seed_razao_lote_with_lancamento(
+        empresa_overrides={
+            "nome_empresa": "Empresa Vizinha LTDA",
+            "cnpj_cpf": "55444333000122",
+            "api_key": "api-key-razao-vizinha",
+            "cod_dominio": 9302,
+        },
+        lote_overrides={
+            "original_filename": "razao-outra-empresa.xlsx",
+            "file_hash": "sha256:razao-outra-empresa",
+        },
+    )
+
+    response = client.get(
+        f"/api/v1/companies/{empresa_id}/razao/lotes",
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["total"] == 1
+    assert response.json()["page"] == 1
+    assert response.json()["limit"] == 100
+    assert response.json()["has_next"] is False
+    assert response.json()["items"] == [
+        {
+            "id": lote_id,
+            "empresa_id": empresa_id,
+            "original_filename": "razao-consulta.xlsx",
+            "status": "completed",
+            "total_linhas": 1,
+            "total_importadas": 1,
+            "total_invalidas": 0,
+            "created_at": response.json()["items"][0]["created_at"],
+        }
+    ]
+
+
+def test_user_with_leitura_permission_lists_lote_lancamentos_without_raw_history(
+    client,
+):
+    usuario, empresa_id, lote_id, lancamento_id = _seed_razao_lote_with_lancamento(
+        permissao="leitura"
+    )
+
+    response = client.get(
+        f"/api/v1/companies/{empresa_id}/razao/lotes/{lote_id}/lancamentos",
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["total"] == 1
+    assert response.json()["items"] == [
+        {
+            "id": lancamento_id,
+            "lote_id": lote_id,
+            "empresa_id": empresa_id,
+            "numero_lancamento": "42",
+            "data": "2026-01-02",
+            "conta_origem": 10046,
+            "conta_contrapartida": 20001,
+            "conta_debito": 10046,
+            "conta_credito": 20001,
+            "direcao": "debito",
+            "historico_normalizado": "pagamento fornecedor",
+            "valor": "250.75",
+        }
+    ]
+    assert "historico" not in response.json()["items"][0]
+
+
+def test_user_without_company_link_cannot_list_razao_lotes(client):
+    usuario = _usuario(
+        login="usuario.sem.razao",
+        email="usuario.sem.razao@example.com",
+    )
+    _, empresa_id, _, _ = _seed_razao_lote_with_lancamento(permissao="leitura")
+    from tests.conftest import TestingSessionLocal
+
+    with TestingSessionLocal() as session:
+        session.add(usuario)
+        session.commit()
+        session.refresh(usuario)
+
+    response = client.get(
+        f"/api/v1/companies/{empresa_id}/razao/lotes",
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Acesso negado"
+
+
+def test_razao_lancamentos_query_does_not_cross_company_boundaries(client):
+    usuario, empresa_id, _, _ = _seed_razao_lote_with_lancamento(permissao="leitura")
+    _, outra_empresa_id, outro_lote_id, _ = _seed_razao_lote_with_lancamento(
+        empresa_overrides={
+            "nome_empresa": "Empresa Sem Acesso LTDA",
+            "cnpj_cpf": "66777888000199",
+            "api_key": "api-key-sem-acesso",
+            "cod_dominio": 9303,
+        },
+        lote_overrides={
+            "original_filename": "razao-sem-acesso.xlsx",
+            "file_hash": "sha256:razao-sem-acesso",
+        },
+    )
+
+    response = client.get(
+        f"/api/v1/companies/{empresa_id}/razao/lotes/{outro_lote_id}/lancamentos",
+        headers=_auth_headers(usuario),
+    )
+
+    assert outra_empresa_id != empresa_id
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Lote de razão não encontrado"
 
 
 def test_user_imports_valid_tabular_fixture_through_endpoint(client):

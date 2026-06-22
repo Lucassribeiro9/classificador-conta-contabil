@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, field_validator
@@ -181,6 +182,50 @@ class ImportacaoRazaoResponse(BaseModel):
     total_importadas: int
     total_invalidas: int
     warnings: list[dict]
+
+
+class RazaoLoteResponse(BaseModel):
+    id: int
+    empresa_id: int
+    original_filename: str
+    status: str
+    total_linhas: int
+    total_importadas: int
+    total_invalidas: int
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RazaoLoteListResponse(BaseModel):
+    items: list[RazaoLoteResponse]
+    total: int
+    page: int
+    limit: int
+    has_next: bool
+
+
+class RazaoLancamentoResponse(BaseModel):
+    id: int
+    lote_id: int
+    empresa_id: int
+    numero_lancamento: str
+    data: date
+    conta_origem: int
+    conta_contrapartida: int
+    conta_debito: int
+    conta_credito: int
+    direcao: str
+    historico_normalizado: str
+    valor: Decimal
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RazaoLancamentoListResponse(BaseModel):
+    items: list[RazaoLancamentoResponse]
+    total: int
+    page: int
+    limit: int
+    has_next: bool
 
 
 class ContaContabilFinancialOriginUpdate(BaseModel):
