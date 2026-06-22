@@ -3,19 +3,98 @@ import os
 import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 
-from api.dependencies import DB_DEPENDENCY, get_current_user, require_global_admin
-from api.schemas import ImportacaoRazaoResponse
+from api.dependencies import (
+    DB_DEPENDENCY,
+    get_current_user,
+    require_company_access,
+    require_global_admin,
+)
+from api.schemas import (
+    ImportacaoRazaoResponse,
+    RazaoLancamentoListResponse,
+    RazaoLoteListResponse,
+)
 from core.audit import record_audit_event
-from core.models import Empresa, LoteImportacaoRazao, Usuario
+from core.models import (
+    Empresa,
+    LancamentoRazaoNormalizado,
+    LoteImportacaoRazao,
+    Usuario,
+)
 from core.razao_importer import RazaoImportError, import_razao
 from core.razao_parser import RazaoParseError
 
 
 router = APIRouter(prefix="/companies/{company_id}/razao")
 admin_router = APIRouter(prefix="/admin/razao")
+
+
+@router.get("/lotes", response_model=RazaoLoteListResponse)
+def list_company_razao_lotes(
+    company_id: int,
+    page: int = Query(1, ge=1),
+    limit: int = Query(100, ge=1, le=500),
+    empresa: Empresa = Depends(require_company_access("leitura")),
+    db: Session = DB_DEPENDENCY,
+) -> RazaoLoteListResponse:
+    query = (
+        db.query(LoteImportacaoRazao)
+        .filter(LoteImportacaoRazao.empresa_id == empresa.id)
+        .order_by(LoteImportacaoRazao.id.asc())
+    )
+    offset = (page - 1) * limit
+    total = query.count()
+    lotes = query.offset(offset).limit(limit).all()
+    return RazaoLoteListResponse(
+        items=lotes,
+        total=total,
+        page=page,
+        limit=limit,
+        has_next=offset + len(lotes) < total,
+    )
+
+
+@router.get("/lotes/{lote_id}/lancamentos", response_model=RazaoLancamentoListResponse)
+def list_company_razao_lancamentos(
+    company_id: int,
+    lote_id: int,
+    page: int = Query(1, ge=1),
+    limit: int = Query(100, ge=1, le=500),
+    empresa: Empresa = Depends(require_company_access("leitura")),
+    db: Session = DB_DEPENDENCY,
+) -> RazaoLancamentoListResponse:
+    lote = (
+        db.query(LoteImportacaoRazao)
+        .filter(
+            LoteImportacaoRazao.id == lote_id,
+            LoteImportacaoRazao.empresa_id == empresa.id,
+        )
+        .first()
+    )
+    if lote is None:
+        raise HTTPException(status_code=404, detail="Lote de razão não encontrado")
+
+    query = (
+        db.query(LancamentoRazaoNormalizado)
+        .filter(
+            LancamentoRazaoNormalizado.empresa_id == empresa.id,
+            LancamentoRazaoNormalizado.lote_id == lote_id,
+        )
+        .order_by(LancamentoRazaoNormalizado.id.asc())
+    )
+    offset = (page - 1) * limit
+    total = query.count()
+    lancamentos = query.offset(offset).limit(limit).all()
+    return RazaoLancamentoListResponse(
+        items=lancamentos,
+        total=total,
+        page=page,
+        limit=limit,
+        has_next=offset + len(lancamentos) < total,
+    )
 
 
 @router.post("/import", response_model=ImportacaoRazaoResponse)
