@@ -68,11 +68,27 @@ O fluxo novo de ML deve treinar a partir do dataset de contrapartida. Metodos
 que ainda treinam ou classificam `Transacao` devem ser tratados como legado ate
 serem isolados, adaptados ou removidos em issue propria.
 
+Contratos atuais durante a transicao:
+
+- `POST /companies/{company_id}/classification`: legado/compatibilidade baseado
+  em `Transacao`.
+- `POST /companies/{company_id}/predict`: legado/compatibilidade enquanto puder
+  persistir ou responder no contrato de `Transacao`.
+- `POST /companies/{company_id}/ml/classification`: contrato novo de
+  classificacao de contrapartida, sem depender de `Transacao`.
+
 ### Feedback
 
 Feedback novo deve se vincular a `LancamentoRazaoNormalizado`, porque a
 correcao humana altera a contrapartida usada pelo dataset futuro. Feedback sobre
 `Transacao` antiga nao deve ser misturado automaticamente com feedback do razao.
+
+Contratos atuais durante a transicao:
+
+- `POST /companies/{company_id}/ml/feedback`: contrato novo de feedback sobre
+  `LancamentoRazaoNormalizado`.
+- `PATCH /transactions/{transaction_id}/feedback`: legado/compatibilidade
+  baseado em `Transacao`.
 
 ### Auditoria
 
