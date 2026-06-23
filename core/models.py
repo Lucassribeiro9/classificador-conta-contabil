@@ -75,10 +75,24 @@ class Empresa(Base):
         back_populates="empresa",
         cascade="all, delete-orphan",
     )
+    lotes_importacao_movimentos_operacionais: Mapped[
+        list["LoteImportacaoMovimentoOperacional"]
+    ] = relationship(
+        "LoteImportacaoMovimentoOperacional",
+        back_populates="empresa",
+        cascade="all, delete-orphan",
+    )
     lancamentos_razao: Mapped[list["LancamentoRazaoNormalizado"]] = relationship(
         "LancamentoRazaoNormalizado",
         back_populates="empresa",
         cascade="all, delete-orphan",
+    )
+    movimentos_operacionais: Mapped[list["MovimentoOperacionalImportado"]] = (
+        relationship(
+            "MovimentoOperacionalImportado",
+            back_populates="empresa",
+            cascade="all, delete-orphan",
+        )
     )
     contas_contabeis_usadas: Mapped[list["EmpresaContaContabil"]] = relationship(
         "EmpresaContaContabil",
@@ -134,6 +148,12 @@ class Usuario(Base):
     )
     lotes_importacao_razao: Mapped[list["LoteImportacaoRazao"]] = relationship(
         "LoteImportacaoRazao",
+        back_populates="usuario",
+    )
+    lotes_importacao_movimentos_operacionais: Mapped[
+        list["LoteImportacaoMovimentoOperacional"]
+    ] = relationship(
+        "LoteImportacaoMovimentoOperacional",
         back_populates="usuario",
     )
     feedbacks_classificacao: Mapped[list["FeedbackClassificacao"]] = relationship(
@@ -422,6 +442,134 @@ class FeedbackClassificacao(Base):
     )
     usuario: Mapped["Usuario"] = relationship(
         "Usuario", back_populates="feedbacks_classificacao"
+    )
+
+
+class LoteImportacaoMovimentoOperacional(Base):
+    """
+    Representa um lote de importacao de movimentos operacionais.
+    """
+
+    __tablename__ = "lotes_importacao_movimentos_operacionais"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('processing', 'completed', 'completed_with_warnings', 'failed')",
+            name="ck_lotes_importacao_movimentos_operacionais_status",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("empresas.id"), nullable=False
+    )
+    usuario_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("usuarios.id"), nullable=False
+    )
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    total_linhas: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    total_importadas: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    total_invalidas: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    warnings_metadata: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    periodo_inicio: Mapped[date] = mapped_column(Date, nullable=False)
+    periodo_fim: Mapped[date] = mapped_column(Date, nullable=False)
+    cnpj_cpf_arquivo: Mapped[str] = mapped_column(String(14), nullable=False)
+    codigo_dominio_arquivo: Mapped[Optional[str]] = mapped_column(
+        String(30), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, onupdate=datetime.now, nullable=False
+    )
+
+    empresa: Mapped["Empresa"] = relationship(
+        "Empresa", back_populates="lotes_importacao_movimentos_operacionais"
+    )
+    usuario: Mapped["Usuario"] = relationship(
+        "Usuario", back_populates="lotes_importacao_movimentos_operacionais"
+    )
+    movimentos: Mapped[list["MovimentoOperacionalImportado"]] = relationship(
+        "MovimentoOperacionalImportado",
+        back_populates="lote",
+        cascade="all, delete-orphan",
+    )
+
+
+class MovimentoOperacionalImportado(Base):
+    """
+    Representa uma linha operacional importada para classificacao e revisao.
+    """
+
+    __tablename__ = "movimentos_operacionais_importados"
+    __table_args__ = (
+        CheckConstraint(
+            "direcao IN ('entrada', 'saida')",
+            name="ck_movimentos_operacionais_importados_direcao",
+        ),
+        CheckConstraint(
+            "status IN ("
+            "'pendente', 'pre_classificado', 'sugerido', 'revisao', "
+            "'aprovado', 'corrigido', 'rejeitado', 'convertido'"
+            ")",
+            name="ck_movimentos_operacionais_importados_status",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    lote_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("lotes_importacao_movimentos_operacionais.id"),
+        nullable=False,
+    )
+    empresa_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("empresas.id"), nullable=False
+    )
+    data: Mapped[date] = mapped_column(Date, nullable=False)
+    conta_financeira: Mapped[int] = mapped_column(Integer, nullable=False)
+    historico: Mapped[str] = mapped_column(String, nullable=False)
+    historico_normalizado: Mapped[str] = mapped_column(String, nullable=False)
+    valor_original: Mapped[float] = mapped_column(
+        Numeric(precision=12, scale=2), nullable=False
+    )
+    valor_absoluto: Mapped[float] = mapped_column(
+        Numeric(precision=12, scale=2), nullable=False
+    )
+    direcao: Mapped[str] = mapped_column(String(10), nullable=False)
+    tipo_movimento: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    documento: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    observacao: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    contrapartida_informada: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True
+    )
+    contrapartida_sugerida: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True
+    )
+    contrapartida_final: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    confidence_sugerida: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    status: Mapped[str] = mapped_column(String(30), nullable=False)
+    elegivel_treino: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    mensagens_validacao: Mapped[list] = mapped_column(
+        JSON, default=list, nullable=False
+    )
+    conta_debito: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    conta_credito: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, onupdate=datetime.now, nullable=False
+    )
+
+    lote: Mapped["LoteImportacaoMovimentoOperacional"] = relationship(
+        "LoteImportacaoMovimentoOperacional", back_populates="movimentos"
+    )
+    empresa: Mapped["Empresa"] = relationship(
+        "Empresa", back_populates="movimentos_operacionais"
     )
 
 
