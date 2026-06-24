@@ -259,6 +259,17 @@ class MovimentoOperacionalLoteListResponse(BaseModel):
     has_next: bool
 
 
+class MovimentoOperacionalReviewRequest(BaseModel):
+    action: str  # "approve", "correct", "reject"
+    conta_final: Optional[int] = None
+
+    @field_validator("action")
+    @classmethod
+    def validate_action(cls, value: str) -> str:
+        if value not in {"approve", "correct", "reject"}:
+            raise ValueError("Ação inválida. Use 'approve', 'correct' ou 'reject'")
+        return value
+
 class MovimentoOperacionalResponse(BaseModel):
     id: int
     lote_id: int
