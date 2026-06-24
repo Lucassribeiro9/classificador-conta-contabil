@@ -3,13 +3,22 @@ import os
 import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 
 from api.dependencies import DB_DEPENDENCY, get_current_user
-from api.schemas import ImportacaoMovimentoOperacionalResponse
+from api.schemas import (
+    ImportacaoMovimentoOperacionalResponse,
+    MovimentoOperacionalListResponse,
+    MovimentoOperacionalLoteListResponse,
+)
 from core.audit import record_audit_event
-from core.models import Empresa, Usuario
+from core.models import (
+    Empresa,
+    LoteImportacaoMovimentoOperacional,
+    MovimentoOperacionalImportado,
+    Usuario,
+)
 from core.movimentos_operacionais_importer import (
     MovimentoOperacionalImportError,
     import_movimentos_operacionais,
@@ -18,6 +27,94 @@ from core.movimentos_operacionais_parser import MovimentoOperacionalParseError
 
 
 router = APIRouter(prefix="/companies/{company_id}/movimentos-operacionais")
+
+
+@router.get("/lotes", response_model=MovimentoOperacionalLoteListResponse)
+def list_company_operational_movement_lotes(
+    company_id: int,
+    status: str | None = Query(default=None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(100, ge=1, le=500),
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = DB_DEPENDENCY,
+) -> MovimentoOperacionalLoteListResponse:
+    """Lista lotes operacionais da empresa para diagnostico e revisao."""
+    empresa = _ensure_company_for_operational_query(db, company_id)
+    denial_detail = _movimentos_read_denial_detail(current_user, company_id)
+    if denial_detail is not None:
+        raise HTTPException(status_code=403, detail=denial_detail)
+
+    query = (
+        db.query(LoteImportacaoMovimentoOperacional)
+        .filter(LoteImportacaoMovimentoOperacional.empresa_id == empresa.id)
+        .order_by(LoteImportacaoMovimentoOperacional.id.asc())
+    )
+    if status is not None:
+        query = query.filter(LoteImportacaoMovimentoOperacional.status == status)
+
+    offset = (page - 1) * limit
+    total = query.count()
+    lotes = query.offset(offset).limit(limit).all()
+    return MovimentoOperacionalLoteListResponse(
+        items=lotes,
+        total=total,
+        page=page,
+        limit=limit,
+        has_next=offset + len(lotes) < total,
+    )
+
+
+@router.get(
+    "/lotes/{lote_id}/movimentos",
+    response_model=MovimentoOperacionalListResponse,
+)
+def list_company_operational_movements(
+    company_id: int,
+    lote_id: int,
+    status: str | None = Query(default=None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(100, ge=1, le=500),
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = DB_DEPENDENCY,
+) -> MovimentoOperacionalListResponse:
+    """Lista movimentos de um lote da empresa, com filtro opcional por status."""
+    empresa = _ensure_company_for_operational_query(db, company_id)
+    denial_detail = _movimentos_read_denial_detail(current_user, company_id)
+    if denial_detail is not None:
+        raise HTTPException(status_code=403, detail=denial_detail)
+
+    lote = (
+        db.query(LoteImportacaoMovimentoOperacional)
+        .filter(
+            LoteImportacaoMovimentoOperacional.id == lote_id,
+            LoteImportacaoMovimentoOperacional.empresa_id == empresa.id,
+        )
+        .first()
+    )
+    if lote is None:
+        raise HTTPException(status_code=404, detail="Lote operacional não encontrado")
+
+    query = (
+        db.query(MovimentoOperacionalImportado)
+        .filter(
+            MovimentoOperacionalImportado.empresa_id == empresa.id,
+            MovimentoOperacionalImportado.lote_id == lote_id,
+        )
+        .order_by(MovimentoOperacionalImportado.id.asc())
+    )
+    if status is not None:
+        query = query.filter(MovimentoOperacionalImportado.status == status)
+
+    offset = (page - 1) * limit
+    total = query.count()
+    movimentos = query.offset(offset).limit(limit).all()
+    return MovimentoOperacionalListResponse(
+        items=movimentos,
+        total=total,
+        page=page,
+        limit=limit,
+        has_next=offset + len(movimentos) < total,
+    )
 
 
 @router.post("/import", response_model=ImportacaoMovimentoOperacionalResponse)
@@ -165,6 +262,35 @@ def _movimentos_permission_denial_detail(
     if permission_link.permissao not in {"operacao", "admin_empresa"}:
         return "Permissão insuficiente"
     return None
+
+
+def _movimentos_read_denial_detail(
+    user: Usuario,
+    company_id: int,
+) -> str | None:
+    """Retorna o motivo de bloqueio quando usuario nao pode consultar."""
+    if user.papel == "admin":
+        return None
+
+    permission_link = next(
+        (
+            permission
+            for permission in user.permissoes_empresas
+            if permission.empresa_id == company_id
+        ),
+        None,
+    )
+    if permission_link is None:
+        return "Acesso negado"
+    return None
+
+
+def _ensure_company_for_operational_query(db: Session, company_id: int) -> Empresa:
+    """Carrega empresa da rota ou retorna erro HTTP estavel."""
+    empresa = db.get(Empresa, company_id)
+    if empresa is None:
+        raise HTTPException(status_code=404, detail="Empresa não encontrada")
+    return empresa
 
 
 def _failure_reason(exc: Exception) -> str:
