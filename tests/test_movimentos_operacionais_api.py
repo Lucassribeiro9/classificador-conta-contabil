@@ -493,3 +493,36 @@ def test_operational_movements_query_does_not_cross_company_boundaries(client):
     assert outra_empresa_id != empresa_id
     assert response.status_code == 404
     assert response.json()["detail"] == "Lote operacional não encontrado"
+
+
+def test_user_with_operacao_permission_classifies_pending_operational_movements(
+    client,
+    monkeypatch,
+):
+    usuario, empresa_id, _ = _seed_operational_lote_with_movements(permissao="operacao")
+
+    def fake_classificar(db, *, empresa_id, model_dir=None):
+        return {
+            "empresa_id": empresa_id,
+            "quantidade_processada": 2,
+            "total_sugerido": 1,
+            "total_revisao": 1,
+        }
+
+    monkeypatch.setattr(
+        "api.routes.movimentos_operacionais.classificar_movimentos_operacionais_pendentes",
+        fake_classificar,
+    )
+
+    response = client.post(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/classificar",
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "empresa_id": empresa_id,
+        "quantidade_processada": 2,
+        "total_sugerido": 1,
+        "total_revisao": 1,
+    }

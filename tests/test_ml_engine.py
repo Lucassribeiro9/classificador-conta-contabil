@@ -170,6 +170,23 @@ def test_train_from_dataset_does_not_query_legacy_transactions(
     assert engine_ml.train_from_dataset(dataset) is True
 
 
+def test_operational_movement_feature_text_uses_normalized_history_and_context(
+    db_session,
+):
+    engine_ml = ClassificadorContabil(db_session)
+
+    feature_text = engine_ml.build_operational_movement_feature_text(
+        historico_normalizado="Pagamento   Fornecedor",
+        conta_financeira=10046,
+        direcao="saida",
+        tipo_movimento="Transferencia",
+    )
+
+    assert feature_text == (
+        "pagamento fornecedor origem_10046 direcao_saida tipo_transferencia"
+    )
+
+
 def test_train_from_dataset_persists_multinomial_model_for_company(db_session, tmp_path):
     dataset = DatasetTreinoContrapartida(
         linhas=[
