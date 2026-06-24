@@ -289,6 +289,13 @@ class MovimentoOperacionalListResponse(BaseModel):
     has_next: bool
 
 
+class ClassificacaoMovimentoOperacionalResponse(BaseModel):
+    empresa_id: int
+    quantidade_processada: int
+    total_sugerido: int
+    total_revisao: int
+
+
 class ContaContabilFinancialOriginUpdate(BaseModel):
     is_financial_origin: bool
 

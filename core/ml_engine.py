@@ -180,6 +180,57 @@ class ClassificadorContabil:
             )
         return predictions
 
+    def classify_operational_movements_from_saved_model(
+        self,
+        empresa_id: int,
+        movimentos: list[dict],
+    ) -> list[dict]:
+        """Classifica movimentos operacionais usando modelo salvo do dataset canonico."""
+        model = joblib.load(self._model_path_for_company(empresa_id))
+        feature_texts = [
+            self.build_operational_movement_feature_text(
+                historico_normalizado=item["historico_normalizado"],
+                conta_financeira=item["conta_financeira"],
+                direcao=item["direcao"],
+                tipo_movimento=item.get("tipo_movimento"),
+            )
+            for item in movimentos
+        ]
+        probabilities = model.predict_proba(feature_texts)
+        classes = model.classes_
+        predictions: list[dict] = []
+        for index in range(len(feature_texts)):
+            row_probabilities = probabilities[index]
+            max_prob = float(max(row_probabilities))
+            best_class = int(classes[list(row_probabilities).index(max_prob)])
+            predictions.append(
+                {
+                    "contrapartida_sugerida": best_class,
+                    "confidence_sugerida": max_prob,
+                    "status": "revisao" if max_prob < 0.70 else "sugerido",
+                }
+            )
+        return predictions
+
+    def build_operational_movement_feature_text(
+        self,
+        *,
+        historico_normalizado: str,
+        conta_financeira: int,
+        direcao: str,
+        tipo_movimento: str | None = None,
+    ) -> str:
+        """Monta features do movimento operacional sem usar valor ou documento."""
+        feature_tokens = [
+            normalize_razao_historico(historico_normalizado),
+            f"origem_{conta_financeira}",
+            f"direcao_{direcao}",
+            f"tipo_{normalize_razao_historico(tipo_movimento)}"
+            if tipo_movimento
+            else "",
+        ]
+        return " ".join(token for token in feature_tokens if token)
+
     def _build_dataset_feature_text(
         self,
         *,

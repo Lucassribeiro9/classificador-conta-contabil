@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from api.dependencies import DB_DEPENDENCY, get_current_user
 from api.schemas import (
+    ClassificacaoMovimentoOperacionalResponse,
     ImportacaoMovimentoOperacionalResponse,
     MovimentoOperacionalListResponse,
     MovimentoOperacionalLoteListResponse,
@@ -22,6 +23,9 @@ from core.models import (
 from core.movimentos_operacionais_importer import (
     MovimentoOperacionalImportError,
     import_movimentos_operacionais,
+)
+from core.movimentos_operacionais_classification import (
+    classificar_movimentos_operacionais_pendentes,
 )
 from core.movimentos_operacionais_parser import MovimentoOperacionalParseError
 
@@ -226,6 +230,29 @@ def import_company_operational_movements(
         os.unlink(temp_path)
 
     return ImportacaoMovimentoOperacionalResponse(**resumo.__dict__)
+
+
+@router.post(
+    "/classificar",
+    response_model=ClassificacaoMovimentoOperacionalResponse,
+)
+def classify_company_pending_operational_movements(
+    company_id: int,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = DB_DEPENDENCY,
+) -> ClassificacaoMovimentoOperacionalResponse:
+    """Classifica movimentos operacionais pendentes sem aprovar automaticamente."""
+    empresa = _ensure_company_for_operational_query(db, company_id)
+    denial_detail = _movimentos_permission_denial_detail(current_user, empresa.id)
+    if denial_detail is not None:
+        raise HTTPException(status_code=403, detail=denial_detail)
+
+    result = classificar_movimentos_operacionais_pendentes(
+        db,
+        empresa_id=empresa.id,
+    )
+    db.commit()
+    return ClassificacaoMovimentoOperacionalResponse(**result)
 
 
 def _save_upload_to_temp_xlsx(file: UploadFile) -> str:
