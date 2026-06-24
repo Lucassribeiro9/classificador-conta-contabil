@@ -228,6 +228,15 @@ class RazaoLancamentoListResponse(BaseModel):
     has_next: bool
 
 
+class ImportacaoMovimentoOperacionalResponse(BaseModel):
+    lote_id: int
+    status: str
+    total_linhas: int
+    total_importadas: int
+    total_invalidas: int
+    warnings: list[dict]
+
+
 class ContaContabilFinancialOriginUpdate(BaseModel):
     is_financial_origin: bool
 
