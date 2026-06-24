@@ -3,7 +3,17 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from api.dependencies import get_db
-from api.routes import auth, classification, companies, feedback, plano_contas, razao, transactions, users
+from api.routes import (
+    auth,
+    classification,
+    companies,
+    feedback,
+    movimentos_operacionais,
+    plano_contas,
+    razao,
+    transactions,
+    users,
+)
 from core.audit import begin_audit_request_context, end_audit_request_context
 
 
@@ -57,6 +67,11 @@ app.include_router(
 )
 app.include_router(razao.router, prefix="/api/v1", tags=["Razão"])
 app.include_router(razao.admin_router, prefix="/api/v1", tags=["Razão"])
+app.include_router(
+    movimentos_operacionais.router,
+    prefix="/api/v1",
+    tags=["Movimentos Operacionais"],
+)
 
 
 @app.get("/")
