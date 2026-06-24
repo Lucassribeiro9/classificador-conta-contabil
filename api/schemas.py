@@ -237,6 +237,58 @@ class ImportacaoMovimentoOperacionalResponse(BaseModel):
     warnings: list[dict]
 
 
+class MovimentoOperacionalLoteResponse(BaseModel):
+    id: int
+    empresa_id: int
+    original_filename: str
+    status: str
+    total_linhas: int
+    total_importadas: int
+    total_invalidas: int
+    periodo_inicio: date
+    periodo_fim: date
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MovimentoOperacionalLoteListResponse(BaseModel):
+    items: list[MovimentoOperacionalLoteResponse]
+    total: int
+    page: int
+    limit: int
+    has_next: bool
+
+
+class MovimentoOperacionalResponse(BaseModel):
+    id: int
+    lote_id: int
+    empresa_id: int
+    data: date
+    conta_financeira: int
+    historico_normalizado: str
+    valor_absoluto: Decimal
+    direcao: str
+    tipo_movimento: Optional[str] = None
+    contrapartida_informada: Optional[int] = None
+    contrapartida_sugerida: Optional[int] = None
+    contrapartida_final: Optional[int] = None
+    confidence_sugerida: Optional[float] = None
+    status: str
+    elegivel_treino: bool
+    mensagens_validacao: list
+    conta_debito: Optional[int] = None
+    conta_credito: Optional[int] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MovimentoOperacionalListResponse(BaseModel):
+    items: list[MovimentoOperacionalResponse]
+    total: int
+    page: int
+    limit: int
+    has_next: bool
+
+
 class ContaContabilFinancialOriginUpdate(BaseModel):
     is_financial_origin: bool
 

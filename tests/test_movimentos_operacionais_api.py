@@ -169,6 +169,105 @@ def _seed_user_company_catalog_and_links(permissao: str = "operacao"):
         return usuario, empresa.id
 
 
+def _seed_operational_lote_with_movements(
+    *,
+    permissao: str = "leitura",
+    empresa_overrides: dict | None = None,
+    usuario_overrides: dict | None = None,
+    lote_overrides: dict | None = None,
+    movimentos: list[dict] | None = None,
+):
+    from tests.conftest import TestingSessionLocal
+
+    empresa = _empresa(**(empresa_overrides or {}))
+    usuario = _usuario(
+        **(
+            usuario_overrides
+            or {
+                "login": f"consulta.movimentos.{empresa.cod_dominio}",
+                "email": f"consulta.movimentos.{empresa.cod_dominio}@example.com",
+            }
+        )
+    )
+    usuario.permissoes_empresas.append(
+        UsuarioEmpresaPermissao(empresa=empresa, permissao=permissao)
+    )
+    lote_data = {
+        "empresa": empresa,
+        "usuario": usuario,
+        "original_filename": "movimentos-consulta.xlsx",
+        "file_hash": f"sha256:movimentos-consulta-{empresa.cod_dominio}",
+        "status": "completed_with_warnings",
+        "total_linhas": 2,
+        "total_importadas": 2,
+        "total_invalidas": 0,
+        "warnings_metadata": {"warnings": []},
+        "periodo_inicio": date(2026, 1, 1),
+        "periodo_fim": date(2026, 1, 31),
+        "cnpj_cpf_arquivo": empresa.cnpj_cpf,
+        "codigo_dominio_arquivo": str(empresa.cod_dominio),
+    }
+    lote_data.update(lote_overrides or {})
+    lote = LoteImportacaoMovimentoOperacional(**lote_data)
+    movimentos_data = movimentos or [
+        {
+            "data": date(2026, 1, 2),
+            "conta_financeira": 10046,
+            "historico": "Pagamento fornecedor sensivel",
+            "historico_normalizado": "pagamento fornecedor",
+            "valor_original": -250.75,
+            "valor_absoluto": 250.75,
+            "direcao": "saida",
+            "tipo_movimento": "saida",
+            "documento": "DOC-SENSIVEL-001",
+            "observacao": "Observacao sensivel",
+            "contrapartida_informada": 20001,
+            "status": "pre_classificado",
+            "mensagens_validacao": [],
+        },
+        {
+            "data": date(2026, 1, 3),
+            "conta_financeira": 10046,
+            "historico": "Transferencia sem contrapartida sensivel",
+            "historico_normalizado": "transferencia sem contrapartida",
+            "valor_original": -100,
+            "valor_absoluto": 100,
+            "direcao": "saida",
+            "tipo_movimento": "transferencia",
+            "documento": "DOC-SENSIVEL-002",
+            "observacao": "Outra observacao sensivel",
+            "contrapartida_informada": None,
+            "status": "revisao",
+            "mensagens_validacao": [
+                "Tipo de movimento transferencia exige contrapartida."
+            ],
+        },
+    ]
+
+    with TestingSessionLocal() as session:
+        session.add(lote)
+        session.flush()
+        for item in movimentos_data:
+            session.add(
+                MovimentoOperacionalImportado(
+                    lote_id=lote.id,
+                    empresa_id=empresa.id,
+                    contrapartida_sugerida=None,
+                    contrapartida_final=None,
+                    confidence_sugerida=None,
+                    elegivel_treino=False,
+                    conta_debito=None,
+                    conta_credito=None,
+                    **item,
+                )
+            )
+        session.commit()
+        session.refresh(usuario)
+        session.refresh(empresa)
+        session.refresh(lote)
+        return usuario, empresa.id, lote.id
+
+
 def test_user_with_operacao_permission_imports_operational_movements(client):
     from tests.conftest import TestingSessionLocal
 
@@ -261,3 +360,136 @@ def test_operational_movements_import_rejects_non_xlsx_file(client):
         assert event.metadata_json["reason"] == "invalid_file_type"
         assert event.metadata_json["file_hash"].startswith("sha256:")
         assert "data,historico" not in str(event.metadata_json)
+
+
+def test_user_with_leitura_permission_lists_own_operational_lotes(client):
+    usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(
+        permissao="leitura"
+    )
+    _seed_operational_lote_with_movements(
+        empresa_overrides={
+            "nome_empresa": "Outra Empresa Movimentos LTDA",
+            "cnpj_cpf": "99888777000166",
+            "api_key": "api-key-outra-movimentos",
+            "cod_dominio": 2211,
+        },
+        usuario_overrides={
+            "login": "consulta.movimentos.outra",
+            "email": "consulta.movimentos.outra@example.com",
+        },
+    )
+
+    response = client.get(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes",
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["total"] == 1
+    assert response.json()["page"] == 1
+    assert response.json()["limit"] == 100
+    assert response.json()["has_next"] is False
+    assert response.json()["items"] == [
+        {
+            "id": lote_id,
+            "empresa_id": empresa_id,
+            "original_filename": "movimentos-consulta.xlsx",
+            "status": "completed_with_warnings",
+            "total_linhas": 2,
+            "total_importadas": 2,
+            "total_invalidas": 0,
+            "periodo_inicio": "2026-01-01",
+            "periodo_fim": "2026-01-31",
+            "created_at": response.json()["items"][0]["created_at"],
+        }
+    ]
+
+
+def test_user_lists_operational_movements_by_lote_and_status_without_raw_payload(
+    client,
+):
+    usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(
+        permissao="leitura"
+    )
+
+    response = client.get(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/{lote_id}/movimentos",
+        params={"status": "revisao"},
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["total"] == 1
+    assert response.json()["items"] == [
+        {
+            "id": response.json()["items"][0]["id"],
+            "lote_id": lote_id,
+            "empresa_id": empresa_id,
+            "data": "2026-01-03",
+            "conta_financeira": 10046,
+            "historico_normalizado": "transferencia sem contrapartida",
+            "valor_absoluto": "100.00",
+            "direcao": "saida",
+            "tipo_movimento": "transferencia",
+            "contrapartida_informada": None,
+            "contrapartida_sugerida": None,
+            "contrapartida_final": None,
+            "confidence_sugerida": None,
+            "status": "revisao",
+            "elegivel_treino": False,
+            "mensagens_validacao": [
+                "Tipo de movimento transferencia exige contrapartida."
+            ],
+            "conta_debito": None,
+            "conta_credito": None,
+        }
+    ]
+    item = response.json()["items"][0]
+    assert "historico" not in item
+    assert "documento" not in item
+    assert "observacao" not in item
+    assert "DOC-SENSIVEL-002" not in str(response.json())
+
+
+def test_user_without_company_access_cannot_list_operational_lotes(client):
+    from tests.conftest import TestingSessionLocal
+
+    usuario = _usuario(login="sem.consulta.mov", email="sem.consulta.mov@example.com")
+    _, empresa_id, _ = _seed_operational_lote_with_movements(permissao="leitura")
+    with TestingSessionLocal() as session:
+        session.add(usuario)
+        session.commit()
+        session.refresh(usuario)
+
+    response = client.get(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes",
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Acesso negado"
+
+
+def test_operational_movements_query_does_not_cross_company_boundaries(client):
+    usuario, empresa_id, _ = _seed_operational_lote_with_movements(permissao="leitura")
+    _, outra_empresa_id, outro_lote_id = _seed_operational_lote_with_movements(
+        empresa_overrides={
+            "nome_empresa": "Empresa Sem Acesso Movimentos LTDA",
+            "cnpj_cpf": "88777666000155",
+            "api_key": "api-key-sem-acesso-movimentos",
+            "cod_dominio": 3311,
+        },
+        usuario_overrides={
+            "login": "consulta.movimentos.sem.acesso",
+            "email": "consulta.movimentos.sem.acesso@example.com",
+        },
+    )
+
+    response = client.get(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/{outro_lote_id}/movimentos",
+        headers=_auth_headers(usuario),
+    )
+
+    assert outra_empresa_id != empresa_id
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Lote operacional não encontrado"
