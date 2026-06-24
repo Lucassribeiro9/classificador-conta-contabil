@@ -12,6 +12,8 @@ from api.schemas import (
     ImportacaoMovimentoOperacionalResponse,
     MovimentoOperacionalListResponse,
     MovimentoOperacionalLoteListResponse,
+    MovimentoOperacionalResponse,
+    MovimentoOperacionalReviewRequest,
 )
 from core.audit import record_audit_event
 from core.models import (
@@ -28,6 +30,10 @@ from core.movimentos_operacionais_classification import (
     classificar_movimentos_operacionais_pendentes,
 )
 from core.movimentos_operacionais_parser import MovimentoOperacionalParseError
+from core.movimentos_operacionais_review import (
+    MovimentoReviewError,
+    review_movimento_operacional,
+)
 
 
 router = APIRouter(prefix="/companies/{company_id}/movimentos-operacionais")
@@ -253,6 +259,44 @@ def classify_company_pending_operational_movements(
     )
     db.commit()
     return ClassificacaoMovimentoOperacionalResponse(**result)
+
+
+@router.post(
+    "/lotes/{lote_id}/movimentos/{movimento_id}/review",
+    response_model=MovimentoOperacionalResponse,
+)
+def review_company_operational_movement(
+    company_id: int,
+    lote_id: int,
+    movimento_id: int,
+    request: MovimentoOperacionalReviewRequest,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = DB_DEPENDENCY,
+) -> MovimentoOperacionalResponse:
+    """Revisa (aprova, corrige, rejeita) um movimento operacional individual."""
+    empresa = _ensure_company_for_operational_query(db, company_id)
+    denial_detail = _movimentos_permission_denial_detail(current_user, empresa.id)
+    if denial_detail is not None:
+        raise HTTPException(status_code=403, detail=denial_detail)
+
+    try:
+        mov = review_movimento_operacional(
+            db=db,
+            movimento_id=movimento_id,
+            empresa_id=empresa.id,
+            usuario_id=current_user.id,
+            action=request.action,
+            conta_final=request.conta_final,
+        )
+        if mov.lote_id != lote_id:
+            raise HTTPException(status_code=404, detail="Movimento não encontrado neste lote")
+            
+        db.commit()
+        return MovimentoOperacionalResponse.model_validate(mov)
+    except MovimentoReviewError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc))
+
 
 
 def _save_upload_to_temp_xlsx(file: UploadFile) -> str:

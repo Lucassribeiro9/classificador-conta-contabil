@@ -526,3 +526,64 @@ def test_user_with_operacao_permission_classifies_pending_operational_movements(
         "total_sugerido": 1,
         "total_revisao": 1,
     }
+
+
+def test_review_movimento_approve_success(client):
+    from tests.conftest import TestingSessionLocal
+    from core.models import ContaContabil
+    usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(permissao="operacao")
+    
+    with TestingSessionLocal() as session:
+        conta = ContaContabil(codigo=20001, classificacao="2.0.0", nome="Conta 20001", tipo="A", grau=3)
+        session.add(conta)
+        session.commit()
+        mov = session.query(MovimentoOperacionalImportado).filter_by(lote_id=lote_id).first()
+        mov_id = mov.id
+
+    response = client.post(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/{lote_id}/movimentos/{mov_id}/review",
+        json={"action": "approve", "conta_final": 20001},
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "aprovado"
+    assert response.json()["contrapartida_final"] == 20001
+
+
+def test_review_movimento_reject_success(client):
+    from tests.conftest import TestingSessionLocal
+    usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(permissao="operacao")
+    
+    with TestingSessionLocal() as session:
+        mov = session.query(MovimentoOperacionalImportado).filter_by(lote_id=lote_id).first()
+        mov_id = mov.id
+
+    response = client.post(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/{lote_id}/movimentos/{mov_id}/review",
+        json={"action": "reject"},
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "rejeitado"
+    assert response.json()["contrapartida_final"] is None
+
+
+def test_review_movimento_without_permission(client):
+    from tests.conftest import TestingSessionLocal
+    usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(permissao="leitura")
+    
+    with TestingSessionLocal() as session:
+        mov = session.query(MovimentoOperacionalImportado).filter_by(lote_id=lote_id).first()
+        mov_id = mov.id
+
+    response = client.post(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/{lote_id}/movimentos/{mov_id}/review",
+        json={"action": "approve", "conta_final": 20001},
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Permissão insuficiente"
+
