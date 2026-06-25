@@ -50,6 +50,7 @@ def import_ledger(
 - Testar usuario inativo.
 - Testar access token JWT valido, expirado e invalido.
 - Testar admin criando usuario.
+- Testar admin redefinindo senha manualmente.
 - Testar admin vinculando usuario a empresa.
 - Testar usuario sem acesso recebendo bloqueio.
 - Testar usuario com acesso importando ou consultando empresa permitida.
@@ -64,7 +65,7 @@ def import_ledger(
 - Sempre: validar se usuario continua ativo a cada request autenticada.
 - Sempre: criar o primeiro admin por script interno de bootstrap.
 - Perguntar antes: adicionar refresh token.
-- Perguntar antes: permitir reset de senha ou fluxo de convite.
+- Perguntar antes: adicionar fluxo de reset por token temporario, e-mail ou convite.
 - Perguntar antes: permitir que contador gerencie permissoes de empresas.
 - Nunca: usar senha compartilhada para todos os usuarios.
 - Nunca: confiar apenas em rede interna como autenticacao.
@@ -95,6 +96,9 @@ def import_ledger(
 - As permissoes por empresa serao `leitura`, `operacao` e `admin_empresa`.
 - Apenas `admin` gerencia usuarios e permissoes na primeira versao.
 - O primeiro usuario admin sera criado por script interno de bootstrap.
+- O reset inicial de senha sera manual por usuario `admin` autenticado.
+- Reset por token temporario, envio de e-mail ou convite permanece fora desta
+  fase e deve ser tratado em backlog proprio se necessario.
 - Senhas devem ser armazenadas apenas com hash seguro.
 - Endpoints internos novos exigem JWT.
 - API keys permanecem para compatibilidade e integracoes futuras, mas nao substituem usuario humano.
@@ -102,5 +106,4 @@ def import_ledger(
 
 ## Open Questions
 
-- Reset de senha sera manual por admin ou tera fluxo proprio em backlog?
 - Eventos de login devem entrar ja nesta spec ou ficar na spec de auditoria?
