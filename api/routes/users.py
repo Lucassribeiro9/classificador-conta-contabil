@@ -9,6 +9,7 @@ from api.schemas import (
     UsuarioCreate,
     UsuarioEmpresaPermissaoCreate,
     UsuarioEmpresaPermissaoResponse,
+    UsuarioPasswordReset,
     UsuarioResponse,
 )
 from core.audit import record_audit_event
@@ -159,6 +160,35 @@ def activate_user(
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
 
     user.is_active = True
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.patch("/{user_id}/reset-password", response_model=UsuarioResponse)
+def reset_user_password(
+    user_id: int,
+    payload: UsuarioPasswordReset,
+    admin: Usuario = Depends(require_global_admin),
+    db: Session = DB_DEPENDENCY,
+) -> Usuario:
+    """Redefine manualmente a senha de um usuario interno.
+
+    Requer usuario autenticado com papel `admin`, armazena apenas o novo hash e
+    nao retorna nem registra o segredo em auditoria.
+    """
+    user = _get_user_or_404(user_id=user_id, db=db)
+    user.senha_hash = password_hash.hash(payload.senha)
+    record_audit_event(
+        db,
+        event_type="user.password_reset",
+        user_id=admin.id,
+        resource_id=str(user.id),
+        metadata={
+            "target_user_id": user.id,
+            "target_login": user.login,
+        },
+    )
     db.commit()
     db.refresh(user)
     return user

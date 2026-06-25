@@ -207,3 +207,100 @@ def test_admin_deactivates_and_reactivates_user(client):
         "old_is_active": True,
         "new_is_active": False,
     }
+
+
+def test_admin_resets_user_password_without_exposing_secret(client):
+    admin = _usuario()
+    operador = _usuario(
+        nome="Bruno Operador",
+        login="bruno.operador",
+        email="bruno.operador@example.com",
+        papel="operador",
+        senha_hash=password_hash.hash("senha-antiga-123"),
+    )
+    from tests.conftest import TestingSessionLocal
+
+    with TestingSessionLocal() as session:
+        session.add_all([admin, operador])
+        session.commit()
+        session.refresh(admin)
+        session.refresh(operador)
+        headers = _auth_headers(admin)
+        operador_id = operador.id
+
+    response = client.patch(
+        f"/api/v1/admin/users/{operador_id}/reset-password",
+        json={"senha": "senha-nova-456"},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] == operador_id
+    assert data["login"] == "bruno.operador"
+    assert "senha" not in data
+    assert "senha_hash" not in data
+
+    old_login = client.post(
+        "/api/v1/auth/login",
+        json={"login": "bruno.operador", "senha": "senha-antiga-123"},
+    )
+    new_login = client.post(
+        "/api/v1/auth/login",
+        json={"login": "bruno.operador", "senha": "senha-nova-456"},
+    )
+
+    assert old_login.status_code == 401
+    assert new_login.status_code == 200
+
+    with TestingSessionLocal() as session:
+        event = (
+            session.query(AuditEvent)
+            .filter(AuditEvent.event_type == "user.password_reset")
+            .one()
+        )
+
+    assert event.user_id == admin.id
+    assert event.empresa_id is None
+    assert event.resource_id == str(operador_id)
+    assert event.metadata_json == {
+        "target_user_id": operador_id,
+        "target_login": "bruno.operador",
+    }
+    assert "senha" not in event.metadata_json
+    assert "senha_hash" not in event.metadata_json
+    assert "password" not in event.metadata_json
+    assert "token" not in event.metadata_json
+
+
+def test_non_admin_cannot_reset_user_password(client):
+    contador = _usuario(
+        nome="Caio Contador",
+        login="caio.contador",
+        email="caio.contador@example.com",
+        papel="contador",
+    )
+    operador = _usuario(
+        nome="Bruno Operador",
+        login="bruno.operador",
+        email="bruno.operador@example.com",
+        papel="operador",
+    )
+    from tests.conftest import TestingSessionLocal
+
+    with TestingSessionLocal() as session:
+        session.add_all([contador, operador])
+        session.commit()
+        session.refresh(contador)
+        session.refresh(operador)
+        headers = _auth_headers(contador)
+        operador_id = operador.id
+
+    response = client.patch(
+        f"/api/v1/admin/users/{operador_id}/reset-password",
+        json={"senha": "senha-nova-456"},
+        headers=headers,
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Acesso restrito a administradores"

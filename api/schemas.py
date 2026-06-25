@@ -147,6 +147,10 @@ class UsuarioResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class UsuarioPasswordReset(BaseModel):
+    senha: str
+
+
 class UsuarioEmpresaPermissaoCreate(BaseModel):
     permissao: str
 
