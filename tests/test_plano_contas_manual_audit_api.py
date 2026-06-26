@@ -108,6 +108,33 @@ def test_admin_updates_financial_origin_flag_and_audits_change(client):
         }
 
 
+def test_financial_origin_review_rejects_official_account_fields(client):
+    from tests.conftest import TestingSessionLocal
+
+    admin, codigo = _seed_admin_and_account()
+
+    response = client.patch(
+        f"/api/v1/admin/plano-contas/{codigo}/financial-origin",
+        json={
+            "is_financial_origin": True,
+            "nome": "CONTA EDITADA INDEVIDAMENTE",
+        },
+        headers=_auth_headers(admin),
+    )
+
+    assert response.status_code == 422
+
+    with TestingSessionLocal() as session:
+        conta = (
+            session.query(ContaContabil)
+            .filter(ContaContabil.codigo == codigo)
+            .one()
+        )
+        assert conta.nome == "BCO. SANTANDER"
+        assert conta.is_financial_origin is False
+        assert session.query(AuditEvent).count() == 0
+
+
 def test_admin_deactivates_account_and_audits_change(client):
     from tests.conftest import TestingSessionLocal
 
