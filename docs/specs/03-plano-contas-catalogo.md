@@ -55,6 +55,7 @@ Exemplo de shape esperado:
 - Testar rejeicao de linhas incompletas ou invalidas com mensagem clara.
 - Testar que contas ausentes em nova importacao permanecem ativas.
 - Testar inferencia inicial de contas candidatas a origem financeira.
+- Testar revisao manual auditavel da flag financeira por usuario admin.
 - Testar bloqueio de importacao por usuario que nao seja admin.
 
 ## Boundaries
@@ -65,7 +66,8 @@ Exemplo de shape esperado:
 - Sempre: manter contas ausentes em uma nova importacao como ativas por padrao.
 - Sempre: restringir importacao do plano de contas a usuarios `admin`.
 - Sempre: identificar contas de banco/caixa/aplicacao por heuristica inicial e flag persistida `is_financial_origin`.
-- Sempre: permitir que `is_financial_origin` seja revisada futuramente sem alterar os campos oficiais do plano.
+- Sempre: permitir que `is_financial_origin` seja revisada por usuario `admin` sem alterar os campos oficiais do plano.
+- Sempre: auditar alteracoes manuais de `is_financial_origin`.
 - Perguntar antes: excluir ou inativar contas que sumiram de uma nova importacao.
 - Perguntar antes: permitir edicao manual de conta no catalogo.
 - Nunca: criar catalogo separado por cliente nesta fase.
@@ -80,6 +82,7 @@ Exemplo de shape esperado:
 - Contas podem ser usadas por vinculos de empresa e dataset.
 - Contas ausentes em nova importacao nao sao inativadas automaticamente.
 - Contas candidatas a origem financeira possuem a flag persistida `is_financial_origin`.
+- A flag financeira pode ser revisada manualmente por admin com auditoria.
 - Importacao do plano exige usuario admin.
 - Testes cobrem parser e idempotencia.
 
@@ -96,9 +99,11 @@ Exemplo de shape esperado:
 - Contas de banco/caixa/aplicacao serao identificadas por heuristica inicial e flag persistida.
 - O nome da flag persistida de origem financeira sera `is_financial_origin`.
 - A heuristica inicial de origem financeira usara `nome` e `classificacao`.
+- A flag `is_financial_origin` podera ser revisada manualmente por admin.
+- Revisoes manuais de `is_financial_origin` serao auditadas.
 - Campos oficiais do plano (`codigo`, `classificacao`, `nome`, `tipo`, `grau`) nao terao edicao manual na primeira fase.
 - Parser e persistencia permanecem separados.
 
 ## Open Questions
 
-- A revisao manual da flag financeira entra nesta fase ou apenas em backlog?
+- Nenhuma em aberto para a revisao manual da flag financeira nesta fase.

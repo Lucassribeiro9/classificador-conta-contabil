@@ -312,6 +312,8 @@ class ClassificacaoMovimentoOperacionalResponse(BaseModel):
 
 
 class ContaContabilFinancialOriginUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     is_financial_origin: bool
 
 
