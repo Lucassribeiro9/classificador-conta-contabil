@@ -22,6 +22,8 @@ Sucesso significa que importacoes, feedbacks, classificacoes e alteracoes releva
 
 - `core/models.py`: modelo de auditoria.
 - `api/dependencies.py`: usuario atual e contexto de seguranca.
+- `api/routes/`: endpoints administrativos de consulta de auditoria.
+- `api/schemas.py`: schemas de resposta para eventos de auditoria.
 - `core/`: servico de auditoria.
 - `tests/`: testes de eventos e bloqueios de acesso.
 
@@ -49,6 +51,7 @@ Exemplo de evento:
 - Testar evento de classificacao.
 - Testar eventos de login, acesso negado e usuario inativo bloqueado.
 - Testar eventos de gestao de usuarios e permissoes.
+- Testar consulta administrativa de auditoria com filtros e paginacao.
 - Testar que metadata nao inclui senha, token ou conteudo sensivel desnecessario.
 - Testar bloqueios de acesso por empresa.
 - Testar usuario inativo sem acesso.
@@ -61,6 +64,8 @@ Exemplo de evento:
 - Sempre: usar tabela unica de eventos de auditoria na primeira versao.
 - Sempre: manter logs tecnicos separados de eventos de auditoria.
 - Sempre: registrar eventos de auditoria para login, acesso negado, importacao, classificacao, feedback e gestao de usuarios/permissoes.
+- Sempre: restringir consulta de auditoria a usuarios `admin`.
+- Sempre: consultar auditoria com paginacao e filtros por usuario, empresa, tipo de evento e periodo.
 - Sempre: tornar auditoria de acoes sensiveis de escrita transacional quando possivel.
 - Sempre: manter historico de auditoria por tempo indeterminado na primeira versao.
 - Perguntar antes: registrar conteudo completo de planilhas ou payloads.
@@ -75,6 +80,7 @@ Exemplo de evento:
 - Eventos incluem usuario, empresa, tipo de evento e timestamp.
 - Eventos podem incluir recurso afetado e metadata segura.
 - Logs/auditoria nao armazenam segredos.
+- Admin consegue consultar eventos de auditoria com filtros e paginacao.
 - Testes cobrem eventos e bloqueios.
 - Regras de acesso interno estao alinhadas ao PRD.
 
@@ -86,6 +92,9 @@ Exemplo de evento:
 - `user_id` sera opcional porque login falho ou evento de background pode nao estar associado a usuario valido.
 - `empresa_id` sera opcional para eventos globais como login ou gestao de usuario.
 - A primeira versao registrara eventos de autenticacao, acesso negado, importacao do plano, importacao do razao, classificacao, feedback e gestao de usuarios/permissoes.
+- A primeira versao ira expor consulta administrativa de auditoria em endpoint restrito a `admin`.
+- A consulta administrativa suportara filtros por `user_id`, `empresa_id`, `event_type`, `data_inicio` e `data_fim`.
+- A consulta administrativa sera paginada e retornara eventos mais recentes primeiro.
 - O contexto do executor sera propagado por `contextvars`, preenchido durante requests HTTP autenticadas e ausente por padrao em execucoes fora de request.
 - O servico de auditoria podera usar o usuario do contexto quando `user_id` nao for informado explicitamente.
 - Eventos iniciais de autenticacao: `auth.login.success`, `auth.login.failed`, `auth.user.inactive_blocked`, `auth.access.denied`.
