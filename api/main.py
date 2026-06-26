@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from api.dependencies import get_db
 from api.routes import (
+    audit,
     auth,
     classification,
     companies,
@@ -50,6 +51,7 @@ def health_check(db: Session = Depends(get_db)):
 
 # Rotas
 app.include_router(auth.router, prefix="/api/v1", tags=["Auth"])
+app.include_router(audit.router, prefix="/api/v1", tags=["Auditoria"])
 app.include_router(companies.router, prefix="/api/v1", tags=["Empresas"])
 app.include_router(transactions.router, prefix="/api/v1", tags=["Transações"])
 app.include_router(classification.router, prefix="/api/v1", tags=["Classificação"])

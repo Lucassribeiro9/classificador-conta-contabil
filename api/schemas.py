@@ -120,6 +120,24 @@ class TokenResponse(BaseModel):
     expires_in: int
 
 
+class AuditEventResponse(BaseModel):
+    id: int
+    timestamp: datetime
+    event_type: str
+    user_id: Optional[int] = None
+    empresa_id: Optional[int] = None
+    resource_id: Optional[str] = None
+    metadata: dict
+
+
+class AuditEventListResponse(BaseModel):
+    items: list[AuditEventResponse]
+    total: int
+    page: int
+    limit: int
+    has_next: bool
+
+
 class UsuarioCreate(BaseModel):
     nome: str
     login: str
