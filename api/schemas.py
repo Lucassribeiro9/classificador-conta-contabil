@@ -408,3 +408,15 @@ class MLTrainResponse(BaseModel):
     contagem_por_target: dict[int, int]
     treinavel: bool
     status: str
+
+
+class MLStatusResponse(BaseModel):
+    empresa_id: int
+    dataset_total_linhas: int
+    dataset_total_descartes: int
+    contagem_por_target: dict[int, int]
+    treinavel: bool
+    modelo_existente: bool
+    modelo_path: Optional[str] = None
+    pode_classificar_movimentos: bool
+    status: str
