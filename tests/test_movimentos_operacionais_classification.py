@@ -93,7 +93,7 @@ def _movimento(
         historico_normalizado=historico_normalizado,
         valor_original=Decimal("-250.75"),
         valor_absoluto=Decimal("250.75"),
-        direcao="saida",
+        direcao="credito",
         tipo_movimento=tipo_movimento,
         documento="DOC-SENSIVEL-001",
         observacao="Observacao sensivel",
@@ -113,14 +113,14 @@ def _train_razao_dataset_model(db, tmp_path, empresa_id: int) -> None:
     dataset = DatasetTreinoContrapartida(
         linhas=[
             {
-                "features": f"pagamento fornecedor {i} origem_10046 direcao_saida tipo_saida",
+                "features": f"pagamento fornecedor {i} origem_10046 direcao_credito tipo_saida",
                 "target_conta_contrapartida": 20001,
             }
             for i in range(6)
         ]
         + [
             {
-                "features": f"recebimento cliente {i} origem_10046 direcao_entrada tipo_entrada",
+                "features": f"recebimento cliente {i} origem_10046 direcao_debito tipo_entrada",
                 "target_conta_contrapartida": 30001,
             }
             for i in range(6)

@@ -87,7 +87,7 @@ def test_persiste_lote_e_movimento_operacional_sem_criar_razao_ou_transacao(sess
         historico_normalizado="recebimento cliente",
         valor_original=Decimal("3660.15"),
         valor_absoluto=Decimal("3660.15"),
-        direcao="entrada",
+        direcao="debito",
         tipo_movimento="entrada",
         documento="OFX-0001",
         observacao="Contrapartida conhecida pelo contador",

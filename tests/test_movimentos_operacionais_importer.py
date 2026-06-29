@@ -231,7 +231,8 @@ def test_import_movimentos_operacionais_persiste_lote_parcial_e_movimentos(sessi
     assert [movimento.empresa_id for movimento in movimentos] == [empresa.id] * 3
     assert movimentos[0].valor_original == Decimal("3660.15")
     assert movimentos[0].valor_absoluto == Decimal("3660.15")
-    assert movimentos[0].direcao == "entrada"
+    assert movimentos[0].direcao == "debito"
+    assert movimentos[1].direcao == "credito"
     assert movimentos[0].contrapartida_informada == 10722
     assert movimentos[2].mensagens_validacao == [
         "Contrapartida 103382 nao vinculada a empresa."

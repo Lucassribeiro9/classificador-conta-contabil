@@ -89,7 +89,7 @@ def _approve_movimento(
     movimento.contrapartida_final = conta_final
     movimento.status = "aprovado"
     movimento.elegivel_treino = True
-    if movimento.direcao == "entrada":
+    if movimento.direcao == "debito":
         movimento.conta_debito = movimento.conta_financeira
         movimento.conta_credito = conta_final
     else:

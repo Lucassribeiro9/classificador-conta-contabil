@@ -52,7 +52,7 @@ def test_validar_movimento_com_contrapartida_valida_pre_classifica():
     assert result.movimento["data"] == date(2025, 1, 10)
     assert result.movimento["valor_original"] == Decimal("3660.15")
     assert result.movimento["valor_absoluto"] == Decimal("3660.15")
-    assert result.movimento["direcao"] == "entrada"
+    assert result.movimento["direcao"] == "debito"
     assert result.movimento["historico_normalizado"] == "recebto.duplicatas"
     assert result.movimento["contrapartida_informada"] == 10722
 
@@ -73,7 +73,7 @@ def test_validar_movimento_sem_contrapartida_fica_pendente():
     assert result.mensagens == []
     assert result.movimento["valor_original"] == Decimal("-1200")
     assert result.movimento["valor_absoluto"] == Decimal("1200")
-    assert result.movimento["direcao"] == "saida"
+    assert result.movimento["direcao"] == "credito"
     assert result.movimento["contrapartida_informada"] is None
 
 
