@@ -178,12 +178,12 @@ def test_operational_movement_feature_text_uses_normalized_history_and_context(
     feature_text = engine_ml.build_operational_movement_feature_text(
         historico_normalizado="Pagamento   Fornecedor",
         conta_financeira=10046,
-        direcao="saida",
+        direcao="credito",
         tipo_movimento="Transferencia",
     )
 
     assert feature_text == (
-        "pagamento fornecedor origem_10046 direcao_saida tipo_transferencia"
+        "pagamento fornecedor origem_10046 direcao_credito tipo_transferencia"
     )
 
 

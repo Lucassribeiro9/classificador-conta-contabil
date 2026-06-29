@@ -217,7 +217,7 @@ def _seed_operational_lote_with_movements(
             "historico_normalizado": "pagamento fornecedor",
             "valor_original": -250.75,
             "valor_absoluto": 250.75,
-            "direcao": "saida",
+            "direcao": "credito",
             "tipo_movimento": "saida",
             "documento": "DOC-SENSIVEL-001",
             "observacao": "Observacao sensivel",
@@ -232,7 +232,7 @@ def _seed_operational_lote_with_movements(
             "historico_normalizado": "transferencia sem contrapartida",
             "valor_original": -100,
             "valor_absoluto": 100,
-            "direcao": "saida",
+            "direcao": "credito",
             "tipo_movimento": "transferencia",
             "documento": "DOC-SENSIVEL-002",
             "observacao": "Outra observacao sensivel",
@@ -429,7 +429,7 @@ def test_user_lists_operational_movements_by_lote_and_status_without_raw_payload
             "conta_financeira": 10046,
             "historico_normalizado": "transferencia sem contrapartida",
             "valor_absoluto": "100.00",
-            "direcao": "saida",
+            "direcao": "credito",
             "tipo_movimento": "transferencia",
             "contrapartida_informada": None,
             "contrapartida_sugerida": None,
@@ -586,4 +586,3 @@ def test_review_movimento_without_permission(client):
 
     assert response.status_code == 403
     assert response.json()["detail"] == "Permissão insuficiente"
-

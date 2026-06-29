@@ -63,7 +63,7 @@ def validar_movimento_operacional(
     assert historico is not None
     assert valor_original is not None
 
-    direcao = "entrada" if valor_original > 0 else "saida"
+    direcao = _direcao_contabil(valor_original)
     warnings = _build_warnings(
         data=data,
         conta_financeira=conta_financeira,
@@ -152,6 +152,12 @@ def _build_warnings(
         if contrapartida is None:
             warnings.append(f"Tipo de movimento {tipo_movimento} exige contrapartida.")
     return warnings
+
+
+def _direcao_contabil(valor_original: Decimal) -> str:
+    """Deriva direcao contabil canonica a partir do sinal do valor."""
+
+    return "debito" if valor_original > 0 else "credito"
 
 
 def _resolve_status(

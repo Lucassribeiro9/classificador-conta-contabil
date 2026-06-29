@@ -179,7 +179,7 @@ Campos de origem:
 - `historico_normalizado`
 - `valor_original`
 - `valor_absoluto`
-- `direcao`
+- `direcao` (`debito` ou `credito`)
 - `tipo_movimento`
 - `documento`
 - `observacao`
@@ -283,8 +283,12 @@ Linha persistida como `pendente`:
 Campos derivados na importacao:
 
 - `valor_absoluto = abs(valor)`;
-- `direcao = entrada` quando `valor > 0`;
-- `direcao = saida` quando `valor < 0`.
+- `direcao = debito` quando `valor > 0`;
+- `direcao = credito` quando `valor < 0`.
+
+A semantica operacional de entrada ou saida continua derivavel pelo sinal de
+`valor_original` quando necessario, mas nao deve ser persistida no campo
+`direcao`.
 
 Regra conceitual para par final:
 
@@ -336,7 +340,7 @@ Classificacao e acao separada da importacao no MVP.
 4. Features iniciais do movimento:
    - `historico_normalizado`;
    - `conta_financeira`;
-   - `direcao`;
+   - `direcao` (`debito` ou `credito`);
    - `tipo_movimento`, se preenchido.
 5. Sistema preenche `contrapartida_sugerida` e `confidence_sugerida`.
 6. Se `confidence_sugerida >= 0.70`, status vira `sugerido`.
@@ -451,8 +455,10 @@ isso nao for necessario para auditoria.
 
 ### Debito/Credito
 
-- Valor positivo deriva entrada.
-- Valor negativo deriva saida.
+- Valor positivo deriva `direcao=debito`.
+- Valor negativo deriva `direcao=credito`.
+- Features de classificacao usam `direcao_debito` ou `direcao_credito`,
+  alinhadas ao dataset canonico do Razao.
 - Par debito/credito final so existe apos aprovacao/correcao.
 
 ### Classificacao e Revisao

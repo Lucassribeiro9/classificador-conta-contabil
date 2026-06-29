@@ -28,9 +28,35 @@ def test_approve_movimento_sets_status_and_final_conta(setup_db):
         assert result.status == "aprovado"
         assert result.contrapartida_final == 100
         assert result.elegivel_treino is True
-        # Como o movimento da fixture tem direcao="saida":
+        # Como o movimento da fixture tem direcao="credito":
         assert result.conta_debito == 100
         assert result.conta_credito == mov.conta_financeira
+
+
+def test_approve_debit_direction_debits_financial_account(setup_db):
+    usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(permissao="operacao")
+
+    with TestingSessionLocal() as session:
+        conta = ContaContabil(codigo=100, classificacao="1.0.0", nome="Conta", tipo="A", grau=3)
+        session.add(conta)
+        session.commit()
+
+        mov = session.query(MovimentoOperacionalImportado).filter_by(lote_id=lote_id).first()
+        mov.direcao = "debito"
+        mov_id = mov.id
+
+        result = review_movimento_operacional(
+            db=session,
+            movimento_id=mov_id,
+            empresa_id=empresa_id,
+            usuario_id=usuario.id,
+            action="approve",
+            conta_final=100
+        )
+
+        assert result.conta_debito == mov.conta_financeira
+        assert result.conta_credito == 100
+
 
 def test_reject_movimento(setup_db):
     usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(permissao="operacao")

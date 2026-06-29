@@ -506,7 +506,7 @@ class MovimentoOperacionalImportado(Base):
     __tablename__ = "movimentos_operacionais_importados"
     __table_args__ = (
         CheckConstraint(
-            "direcao IN ('entrada', 'saida')",
+            "direcao IN ('debito', 'credito')",
             name="ck_movimentos_operacionais_importados_direcao",
         ),
         CheckConstraint(

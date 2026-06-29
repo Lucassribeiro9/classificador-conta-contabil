@@ -80,7 +80,7 @@ def review_movimento_operacional(
         mov.elegivel_treino = True
         
         # Par débito/crédito
-        if mov.direcao == "entrada":
+        if mov.direcao == "debito":
             mov.conta_debito = mov.conta_financeira
             mov.conta_credito = conta_final
         else:

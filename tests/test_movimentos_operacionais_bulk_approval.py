@@ -128,7 +128,7 @@ def _movimento(
         historico_normalizado="pagamento fornecedor",
         valor_original=Decimal("-250.75"),
         valor_absoluto=Decimal("250.75"),
-        direcao="saida",
+        direcao="credito",
         tipo_movimento="saida",
         documento="DOC-SENSIVEL-001",
         observacao="Observacao sensivel",

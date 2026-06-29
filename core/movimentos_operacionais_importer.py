@@ -226,7 +226,7 @@ def _validar_movimento(
             "historico_normalizado": _normalize_historico(historico),
             "valor_original": valor_original,
             "valor_absoluto": abs(valor_original),
-            "direcao": "entrada" if valor_original > 0 else "saida",
+            "direcao": _direcao_contabil(valor_original),
             "tipo_movimento": tipo_movimento,
             "documento": _clean_text(movimento.get("documento")),
             "observacao": _clean_text(movimento.get("observacao")),
@@ -298,6 +298,12 @@ def _line_warnings(
         if contrapartida is None:
             warnings.append(f"Tipo de movimento {tipo_movimento} exige contrapartida.")
     return warnings
+
+
+def _direcao_contabil(valor_original: Decimal) -> str:
+    """Deriva direcao contabil canonica a partir do sinal do valor."""
+
+    return "debito" if valor_original > 0 else "credito"
 
 
 def _resolve_status(warnings: list[str], contrapartida: int | None) -> str:
