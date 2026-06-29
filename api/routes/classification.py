@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from api.schemas import (
     MLClassificationInput,
     MLClassificationResponse,
+    MLStatusResponse,
     MLTrainResponse,
     PredictInput,
     PredictResponse,
@@ -188,6 +189,46 @@ def train_company_ml_model_from_canonical_razao(
         "contagem_por_target": metadata["contagem_por_target"],
         "treinavel": metadata["treinavel"],
         "status": "trained",
+    }
+
+
+@router.get(
+    "/companies/{company_id}/ml/status",
+    response_model=MLStatusResponse,
+)
+def get_company_ml_status(
+    company_id: int,
+    db: Session = DB_DEPENDENCY,
+    _empresa: Empresa = Depends(require_company_access("leitura")),
+):
+    """Consulta se a empresa tem dataset treinavel e modelo canonico salvo."""
+    dataset = build_dataset_treino_contrapartida(db, empresa_id=company_id)
+    metadata = dataset.metadata
+    engine_ml = ClassificadorContabil(db)
+    modelo_existente = engine_ml.model_exists_for_company(company_id)
+    treinavel = metadata["treinavel"]
+    dataset_total_linhas = metadata["total_linhas"]
+    if dataset_total_linhas == 0 and metadata["total_descartes"] == 0:
+        status = "sem_razao"
+    elif not treinavel:
+        status = "dataset_insuficiente"
+    elif not modelo_existente:
+        status = "treinavel_sem_modelo"
+    else:
+        status = "modelo_pronto"
+
+    return {
+        "empresa_id": company_id,
+        "dataset_total_linhas": dataset_total_linhas,
+        "dataset_total_descartes": metadata["total_descartes"],
+        "contagem_por_target": metadata["contagem_por_target"],
+        "treinavel": treinavel,
+        "modelo_existente": modelo_existente,
+        "modelo_path": f"empresa_{company_id}/model_.joblib"
+        if modelo_existente
+        else None,
+        "pode_classificar_movimentos": treinavel and modelo_existente,
+        "status": status,
     }
 
 

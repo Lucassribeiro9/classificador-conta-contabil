@@ -78,6 +78,15 @@ definida em issue propria.
 
 Estes endpoints representam o contrato novo de contrapartida:
 
+- `GET /companies/{company_id}/ml/status`
+  - consulta o status do dataset de contrapartida e do modelo salvo da empresa;
+  - nao recebe payload;
+  - retorna metadados agregados do dataset, existencia do artefato de modelo,
+    identificador seguro do modelo e se movimentos operacionais podem ser
+    classificados;
+  - permite distinguir `sem_razao`, `dataset_insuficiente`,
+    `treinavel_sem_modelo` e `modelo_pronto`;
+  - nao retorna historicos, documentos ou dados sensiveis.
 - `POST /companies/{company_id}/ml/train`
   - treina explicitamente o modelo canonico de contrapartida da empresa;
   - nao recebe payload no MVP;
@@ -139,6 +148,8 @@ contrapartida, sem reutilizar os endpoints legados baseados em `Transacao`.
 - O limiar de confianca inicial permanece `0.70`.
 - O modelo sera treinado por request explicito em
   `POST /companies/{company_id}/ml/train` na primeira versao.
+- O status operacional do dataset e do modelo sera consultado por
+  `GET /companies/{company_id}/ml/status`.
 - A arquitetura deve permitir cache por empresa futuramente, mas cache nao sera implementado nesta fase.
 - Feedback corrigido atualiza o lancamento/classificacao existente.
 - Feedback nao cria exemplo duplicado de treino.
