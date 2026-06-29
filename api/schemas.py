@@ -399,3 +399,12 @@ class MLClassificationResponse(BaseModel):
     empresa_id: int
     quantidade_processada: int
     results: list[MLClassificationResult]
+
+
+class MLTrainResponse(BaseModel):
+    empresa_id: int
+    total_linhas: int
+    total_descartes: int
+    contagem_por_target: dict[int, int]
+    treinavel: bool
+    status: str

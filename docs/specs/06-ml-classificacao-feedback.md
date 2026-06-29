@@ -78,6 +78,14 @@ definida em issue propria.
 
 Estes endpoints representam o contrato novo de contrapartida:
 
+- `POST /companies/{company_id}/ml/train`
+  - treina explicitamente o modelo canonico de contrapartida da empresa;
+  - nao recebe payload no MVP;
+  - monta o dataset com `build_dataset_treino_contrapartida` a partir de todo
+    o Razao valido da empresa;
+  - persiste o artefato em `data/models/empresa_{company_id}/model_.joblib`;
+  - retorna metadados do dataset e status do treino;
+  - retorna `422` quando o dataset for insuficiente.
 - `POST /companies/{company_id}/ml/classification`
   - classifica entradas normalizadas para predicao de contrapartida;
   - nao depende de `Transacao`;
@@ -129,7 +137,8 @@ contrapartida, sem reutilizar os endpoints legados baseados em `Transacao`.
 ## Decisoes Aprovadas
 
 - O limiar de confianca inicial permanece `0.70`.
-- O modelo sera treinado por request na primeira versao.
+- O modelo sera treinado por request explicito em
+  `POST /companies/{company_id}/ml/train` na primeira versao.
 - A arquitetura deve permitir cache por empresa futuramente, mas cache nao sera implementado nesta fase.
 - Feedback corrigido atualiza o lancamento/classificacao existente.
 - Feedback nao cria exemplo duplicado de treino.
