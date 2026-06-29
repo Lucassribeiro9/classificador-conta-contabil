@@ -190,3 +190,8 @@ n8n_workflows
 
 # AI
 .codex
+
+# Joblib
+data/models/
+*.joblib
+*.joblib.tmp

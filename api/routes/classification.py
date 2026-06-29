@@ -8,11 +8,13 @@ from sqlalchemy.orm import Session
 from api.schemas import (
     MLClassificationInput,
     MLClassificationResponse,
+    MLTrainResponse,
     PredictInput,
     PredictResponse,
 )
 from api.dependencies import DB_DEPENDENCY, require_company_access, verify_company
 from core.audit import record_audit_event
+from core.dataset_builder import build_dataset_treino_contrapartida
 from core.ml_engine import ClassificadorContabil
 from core.models import ContaContabil, Empresa, Transacao
 
@@ -154,6 +156,38 @@ def classify_lancamentos_with_saved_model(
         "empresa_id": company_id,
         "quantidade_processada": len(predictions),
         "results": predictions,
+    }
+
+
+@router.post(
+    "/companies/{company_id}/ml/train",
+    response_model=MLTrainResponse,
+)
+def train_company_ml_model_from_canonical_razao(
+    company_id: int,
+    db: Session = DB_DEPENDENCY,
+    _empresa: Empresa = Depends(require_company_access("operacao")),
+):
+    """Treina o modelo canonico de contrapartida a partir do Razao da empresa."""
+    dataset = build_dataset_treino_contrapartida(db, empresa_id=company_id)
+    engine_ml = ClassificadorContabil(db)
+    trained = engine_ml.train_from_dataset(dataset)
+    if not trained:
+        db.commit()
+        raise HTTPException(
+            status_code=422,
+            detail="Dataset insuficiente para treino do modelo",
+        )
+
+    db.commit()
+    metadata = dataset.metadata
+    return {
+        "empresa_id": company_id,
+        "total_linhas": metadata["total_linhas"],
+        "total_descartes": metadata["total_descartes"],
+        "contagem_por_target": metadata["contagem_por_target"],
+        "treinavel": metadata["treinavel"],
+        "status": "trained",
     }
 
 
