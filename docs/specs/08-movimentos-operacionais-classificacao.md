@@ -44,8 +44,7 @@ convergir para um contrato intermediario sem serem confundidos com o
 - Exportar TXT, OFX ou layout para Dominio.
 - Criar `LancamentoRazaoNormalizado` a partir de movimento operacional.
 - Copiar movimento operacional para `Transacao` legada.
-- Usar movimentos operacionais aprovados no dataset de treino nesta primeira
-  fase.
+- Gerar treino automaticamente no momento da importacao operacional.
 - Auto-aprovar sugestoes da ML.
 - Predizer `conta_financeira`.
 - Aprovar em lote movimentos que criem vinculos novos de conta por empresa.
@@ -402,10 +401,15 @@ Regras:
 - movimento importado sem contrapartida nao e treino;
 - movimento sugerido pela ML nao e treino por si so;
 - contrapartida preenchida na planilha nao e treino ate aprovacao;
-- movimento `aprovado` ou `corrigido` e candidato a treino futuro;
-- incluir movimentos operacionais aprovados no dataset fica para issue futura.
+- movimento `aprovado` ou `corrigido` com `elegivel_treino=True`,
+  `contrapartida_final`, `conta_debito` e `conta_credito` preenchidos pode ser
+  fonte complementar do dataset de contrapartida;
+- movimento pendente, sugerido, em revisao, pre-classificado, rejeitado ou sem
+  contas finais nao entra no dataset.
 
-No MVP, o dataset de treino permanece baseado no Razao canonico da empresa.
+O Razao canonico da empresa permanece a fonte principal do dataset de treino.
+Movimentos operacionais aprovados ou corrigidos entram apenas como complemento
+controlado apos decisao humana final.
 
 ## Auditoria
 
@@ -470,7 +474,8 @@ isso nao for necessario para auditoria.
 - Aprovacao individual define `contrapartida_final`.
 - Correcao define `contrapartida_final` diferente da sugestao/pre-classificacao.
 - Aprovacao em lote ignora movimentos nao elegiveis.
-- Movimentos aprovados/corrigidos ficam elegiveis para treino futuro.
+- Movimentos aprovados/corrigidos com `elegivel_treino=True` e contas finais
+  ficam elegiveis como fonte complementar de treino.
 
 ### API e Seguranca
 
@@ -489,7 +494,8 @@ isso nao for necessario para auditoria.
 - Sempre: ML prediz apenas contrapartida no MVP.
 - Sempre: `confidence < 0.70` exige revisao.
 - Sempre: aprovacao humana define quando um movimento vira confiavel.
-- Perguntar antes: usar movimentos operacionais aprovados no dataset.
+- Sempre: somente movimento `aprovado` ou `corrigido`, com
+  `elegivel_treino=True`, pode virar fonte complementar do dataset.
 - Perguntar antes: criar exportacao para Dominio.
 - Perguntar antes: importar OFX/PDF.
 - Nunca: transformar movimento operacional automaticamente em Razao canonico.
