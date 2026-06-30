@@ -7,6 +7,7 @@ from core.models import (
     ContaContabil,
     FeedbackClassificacao,
     LancamentoRazaoNormalizado,
+    MovimentoOperacionalImportado,
 )
 
 
@@ -61,13 +62,24 @@ def build_dataset_treino_contrapartida(
             for lancamento in lancamentos
         ],
     )
-    linhas = []
+    linhas_razao = []
     for lancamento in lancamentos:
         target = _target_for_lancamento(lancamento, feedback_por_lancamento)
         if target in contas_validas:
-            linhas.append(_to_dataset_row(lancamento, target=target))
+            linhas_razao.append(_to_dataset_row(lancamento, target=target))
+
+    movimentos_empresa = session.query(MovimentoOperacionalImportado).filter(
+        MovimentoOperacionalImportado.empresa_id == empresa_id
+    )
+    movimentos = (
+        movimentos_empresa.order_by(MovimentoOperacionalImportado.id.asc()).all()
+    )
+    linhas_movimentos = _dataset_rows_from_movimentos(session, movimentos)
+    linhas = linhas_razao + linhas_movimentos
     contagem_por_target = _count_targets(linhas)
-    total_descartes = lancamentos_empresa.count() - len(linhas)
+    total_descartes_razao = lancamentos_empresa.count() - len(linhas_razao)
+    total_descartes_movimentos = movimentos_empresa.count() - len(linhas_movimentos)
+    total_descartes = total_descartes_razao + total_descartes_movimentos
     treinavel = len(linhas) >= 10 and len(contagem_por_target) >= 2
 
     return DatasetTreinoContrapartida(
@@ -75,7 +87,11 @@ def build_dataset_treino_contrapartida(
         metadata={
             "empresa_id": empresa_id,
             "total_linhas": len(linhas),
+            "total_linhas_razao": len(linhas_razao),
+            "total_linhas_movimentos": len(linhas_movimentos),
             "total_descartes": total_descartes,
+            "total_descartes_razao": total_descartes_razao,
+            "total_descartes_movimentos": total_descartes_movimentos,
             "contagem_por_target": contagem_por_target,
             "treinavel": treinavel,
         },
@@ -96,6 +112,76 @@ def _to_dataset_row(
     return {
         "features": " ".join(token for token in feature_tokens if token),
         "target_conta_contrapartida": target,
+    }
+
+
+def _dataset_rows_from_movimentos(
+    session: Session,
+    movimentos: list[MovimentoOperacionalImportado],
+) -> list[dict[str, Any]]:
+    candidates = [
+        movimento for movimento in movimentos if _is_trainable_movimento(movimento)
+    ]
+    if not candidates:
+        return []
+
+    valid_accounts = _valid_target_accounts(
+        session,
+        [
+            codigo
+            for movimento in candidates
+            for codigo in (
+                movimento.conta_financeira,
+                movimento.contrapartida_final,
+                movimento.conta_debito,
+                movimento.conta_credito,
+            )
+            if codigo is not None
+        ],
+    )
+    financial_sources = _valid_financial_origin_accounts(
+        session,
+        [movimento.conta_financeira for movimento in candidates],
+    )
+
+    rows = []
+    for movimento in candidates:
+        required_accounts = {
+            movimento.conta_financeira,
+            movimento.contrapartida_final,
+            movimento.conta_debito,
+            movimento.conta_credito,
+        }
+        if not required_accounts.issubset(valid_accounts):
+            continue
+        if movimento.conta_financeira not in financial_sources:
+            continue
+        rows.append(_to_dataset_row_from_movimento(movimento))
+    return rows
+
+
+def _is_trainable_movimento(movimento: MovimentoOperacionalImportado) -> bool:
+    return (
+        movimento.status in {"aprovado", "corrigido"}
+        and movimento.elegivel_treino is True
+        and movimento.contrapartida_final is not None
+        and movimento.conta_debito is not None
+        and movimento.conta_credito is not None
+    )
+
+
+def _to_dataset_row_from_movimento(
+    movimento: MovimentoOperacionalImportado,
+) -> dict[str, Any]:
+    feature_tokens = [
+        movimento.historico_normalizado.strip(),
+        f"origem_{movimento.conta_financeira}",
+        f"direcao_{movimento.direcao}",
+    ]
+
+    return {
+        "features": " ".join(token for token in feature_tokens if token),
+        "target_conta_contrapartida": movimento.contrapartida_final,
     }
 
 
@@ -145,6 +231,21 @@ def _valid_target_accounts(session: Session, targets: list[int]) -> set[int]:
         .filter(ContaContabil.codigo.in_(set(targets)))
         .filter(ContaContabil.tipo == "A")
         .filter(ContaContabil.is_active.is_(True))
+        .all()
+    }
+
+
+def _valid_financial_origin_accounts(session: Session, accounts: list[int]) -> set[int]:
+    if not accounts:
+        return set()
+
+    return {
+        conta.codigo
+        for conta in session.query(ContaContabil)
+        .filter(ContaContabil.codigo.in_(set(accounts)))
+        .filter(ContaContabil.tipo == "A")
+        .filter(ContaContabil.is_active.is_(True))
+        .filter(ContaContabil.is_financial_origin.is_(True))
         .all()
     }
 

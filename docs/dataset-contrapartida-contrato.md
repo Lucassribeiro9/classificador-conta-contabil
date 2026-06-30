@@ -36,6 +36,18 @@ O builder usa a flag persistida `is_financial_origin` do catalogo. Ele nao
 recalcula heuristica textual de banco, caixa ou aplicacao a partir do nome ou
 classificacao da conta.
 
+Um movimento operacional importado entra como fonte complementar quando todos os
+criterios abaixo sao verdadeiros:
+
+- pertence a empresa informada em `empresa_id`;
+- `status` e `aprovado` ou `corrigido`;
+- `elegivel_treino=True`;
+- `contrapartida_final`, `conta_debito` e `conta_credito` estao preenchidas;
+- `conta_financeira` existe, esta ativa, e analitica;
+- `conta_financeira` esta marcada com `is_financial_origin=True`;
+- `contrapartida_final`, `conta_debito` e `conta_credito` existem, estao ativas
+  e sao analiticas.
+
 ## Quando Uma Linha E Descartada
 
 Uma linha normalizada da empresa e descartada quando nao vira exemplo valido do
@@ -46,10 +58,14 @@ dataset. Isso inclui, entre outros casos:
 - contrapartida ausente no catalogo;
 - contrapartida sintetica;
 - contrapartida inativa.
+- movimento operacional pendente, sugerido, em revisao, pre-classificado ou
+  rejeitado;
+- movimento operacional sem contrapartida final ou sem par debito/credito final;
+- movimento operacional sem conta financeira valida.
 
 Os descartes sao contabilizados em `metadata.total_descartes`. O total considera
-as linhas normalizadas da empresa que nao entraram no dataset, incluindo filtros
-de origem e validacoes de target.
+as linhas normalizadas e movimentos operacionais da empresa que nao entraram no
+dataset, incluindo filtros de origem, status e validacoes de target.
 
 ## Estrutura Das Linhas
 
@@ -65,7 +81,8 @@ Cada linha valida do dataset tem a forma:
 `features` e um texto deterministico composto, nesta ordem, por:
 
 1. `historico_normalizado`;
-2. token `origem_<conta_origem>`;
+2. token `origem_<conta_origem>` para Razao ou
+   `origem_<conta_financeira>` para movimento operacional;
 3. token `direcao_<direcao>`.
 
 Historico vazio ou minimo e permitido; nesse caso, os tokens estruturais
@@ -83,7 +100,11 @@ O builder sempre retorna `metadata` junto com `linhas`:
 {
     "empresa_id": 1,
     "total_linhas": 10,
+    "total_linhas_razao": 8,
+    "total_linhas_movimentos": 2,
     "total_descartes": 2,
+    "total_descartes_razao": 1,
+    "total_descartes_movimentos": 1,
     "contagem_por_target": {50057: 5, 70001: 5},
     "treinavel": True,
 }
@@ -93,8 +114,14 @@ Campos:
 
 - `empresa_id`: empresa usada como escopo da consulta.
 - `total_linhas`: quantidade de exemplos validos retornados em `linhas`.
-- `total_descartes`: quantidade de linhas normalizadas da empresa que nao
-  entraram no dataset.
+- `total_linhas_razao`: quantidade de exemplos validos vindos do Razao.
+- `total_linhas_movimentos`: quantidade de exemplos validos vindos de movimentos
+  operacionais.
+- `total_descartes`: quantidade de linhas normalizadas e movimentos da empresa
+  que nao entraram no dataset.
+- `total_descartes_razao`: quantidade de linhas do Razao descartadas.
+- `total_descartes_movimentos`: quantidade de movimentos operacionais
+  descartados.
 - `contagem_por_target`: agregacao por `target_conta_contrapartida`.
 - `treinavel`: indicador de suficiencia recomendado para treino.
 
@@ -113,6 +140,7 @@ Gerar o dataset nao significa treinar um modelo.
 Responsabilidades do builder:
 
 - consultar lancamentos normalizados por empresa;
+- consultar movimentos operacionais aprovados/corrigidos por empresa;
 - aplicar filtros de elegibilidade;
 - montar features iniciais;
 - definir target de contrapartida;

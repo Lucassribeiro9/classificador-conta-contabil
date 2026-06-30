@@ -13,6 +13,8 @@ from core.models import (
     Empresa,
     LancamentoRazaoNormalizado,
     LoteImportacaoRazao,
+    LoteImportacaoMovimentoOperacional,
+    MovimentoOperacionalImportado,
     Transacao,
     Usuario,
 )
@@ -97,6 +99,59 @@ def _lancamento(
     }
     data.update(overrides)
     return LancamentoRazaoNormalizado(**data)
+
+
+def _lote_movimentos(
+    empresa: Empresa,
+    usuario: Usuario | None = None,
+) -> LoteImportacaoMovimentoOperacional:
+    return LoteImportacaoMovimentoOperacional(
+        empresa=empresa,
+        usuario=usuario or _usuario(),
+        original_filename="movimentos-dataset.xlsx",
+        file_hash=f"sha256:movimentos-dataset-{empresa.cod_dominio}",
+        status="completed",
+        total_linhas=1,
+        total_importadas=1,
+        total_invalidas=0,
+        warnings_metadata={"warnings": []},
+        periodo_inicio=date(2026, 1, 1),
+        periodo_fim=date(2026, 1, 31),
+        cnpj_cpf_arquivo=empresa.cnpj_cpf,
+        codigo_dominio_arquivo=str(empresa.cod_dominio),
+    )
+
+
+def _movimento(
+    lote: LoteImportacaoMovimentoOperacional,
+    empresa: Empresa,
+    **overrides,
+) -> MovimentoOperacionalImportado:
+    data = {
+        "lote": lote,
+        "empresa": empresa,
+        "data": date(2026, 1, 20),
+        "conta_financeira": 10046,
+        "historico": "Pagamento operacional",
+        "historico_normalizado": "pagamento operacional",
+        "valor_original": Decimal("-150.00"),
+        "valor_absoluto": Decimal("150.00"),
+        "direcao": "credito",
+        "tipo_movimento": "saida",
+        "documento": "DOC-NAO-DEVE-ENTRAR",
+        "observacao": "Observacao nao deve entrar",
+        "contrapartida_informada": 50057,
+        "contrapartida_sugerida": None,
+        "contrapartida_final": 50057,
+        "confidence_sugerida": None,
+        "status": "aprovado",
+        "elegivel_treino": True,
+        "mensagens_validacao": [],
+        "conta_debito": 50057,
+        "conta_credito": 10046,
+    }
+    data.update(overrides)
+    return MovimentoOperacionalImportado(**data)
 
 
 def _seed_valid_dataset(
@@ -229,7 +284,11 @@ def test_dataset_builder_returns_explicit_lines_and_metadata(session):
     assert dataset.metadata == {
         "empresa_id": empresa.id,
         "total_linhas": 1,
+        "total_linhas_razao": 1,
+        "total_linhas_movimentos": 0,
         "total_descartes": 0,
+        "total_descartes_razao": 0,
+        "total_descartes_movimentos": 0,
         "contagem_por_target": {50057: 1},
         "treinavel": False,
     }
@@ -246,7 +305,11 @@ def test_dataset_builder_returns_empty_dataset_when_company_has_no_lines(session
     assert dataset.metadata == {
         "empresa_id": empresa.id,
         "total_linhas": 0,
+        "total_linhas_razao": 0,
+        "total_linhas_movimentos": 0,
         "total_descartes": 0,
+        "total_descartes_razao": 0,
+        "total_descartes_movimentos": 0,
         "contagem_por_target": {},
         "treinavel": False,
     }
@@ -602,7 +665,11 @@ def test_dataset_builder_metadata_counts_discards_from_filters_and_validations(
     assert dataset.metadata == {
         "empresa_id": empresa.id,
         "total_linhas": 1,
+        "total_linhas_razao": 1,
+        "total_linhas_movimentos": 0,
         "total_descartes": 2,
+        "total_descartes_razao": 2,
+        "total_descartes_movimentos": 0,
         "contagem_por_target": {50057: 1},
         "treinavel": False,
     }
@@ -674,3 +741,172 @@ def test_dataset_builder_marks_ten_lines_with_two_targets_as_trainable(session):
     assert dataset.metadata["total_linhas"] == 10
     assert dataset.metadata["contagem_por_target"] == {50057: 5, 70001: 5}
     assert dataset.metadata["treinavel"] is True
+
+
+def test_dataset_builder_includes_only_approved_and_corrected_operational_movements(
+    session,
+):
+    empresa = _empresa()
+    lote = _lote_movimentos(empresa)
+    session.add_all(
+        [
+            _conta(10046, is_financial_origin=True),
+            _conta(50057, is_financial_origin=False),
+            _conta(70001, is_financial_origin=False),
+            _movimento(
+                lote=lote,
+                empresa=empresa,
+                historico_normalizado="pagamento aprovado",
+                contrapartida_final=50057,
+                status="aprovado",
+                conta_debito=50057,
+                conta_credito=10046,
+            ),
+            _movimento(
+                lote=lote,
+                empresa=empresa,
+                historico_normalizado="pagamento corrigido",
+                contrapartida_final=70001,
+                status="corrigido",
+                conta_debito=70001,
+                conta_credito=10046,
+            ),
+            _movimento(
+                lote=lote,
+                empresa=empresa,
+                historico_normalizado="pagamento pendente",
+                status="pendente",
+                elegivel_treino=True,
+            ),
+            _movimento(
+                lote=lote,
+                empresa=empresa,
+                historico_normalizado="pagamento sugerido",
+                status="sugerido",
+                elegivel_treino=True,
+            ),
+            _movimento(
+                lote=lote,
+                empresa=empresa,
+                historico_normalizado="pagamento revisao",
+                status="revisao",
+                elegivel_treino=True,
+            ),
+            _movimento(
+                lote=lote,
+                empresa=empresa,
+                historico_normalizado="pagamento pre classificado",
+                status="pre_classificado",
+                elegivel_treino=True,
+            ),
+            _movimento(
+                lote=lote,
+                empresa=empresa,
+                historico_normalizado="pagamento rejeitado",
+                status="rejeitado",
+                elegivel_treino=True,
+            ),
+        ]
+    )
+    session.commit()
+
+    dataset = build_dataset_treino_contrapartida(session, empresa_id=empresa.id)
+
+    assert dataset.linhas == [
+        {
+            "features": "pagamento aprovado origem_10046 direcao_credito",
+            "target_conta_contrapartida": 50057,
+        },
+        {
+            "features": "pagamento corrigido origem_10046 direcao_credito",
+            "target_conta_contrapartida": 70001,
+        },
+    ]
+    assert dataset.metadata["total_linhas"] == 2
+    assert dataset.metadata["total_linhas_razao"] == 0
+    assert dataset.metadata["total_linhas_movimentos"] == 2
+    assert dataset.metadata["total_descartes"] == 5
+    assert dataset.metadata["total_descartes_movimentos"] == 5
+    assert dataset.metadata["contagem_por_target"] == {50057: 1, 70001: 1}
+    assert "DOC-NAO-DEVE-ENTRAR" not in str(dataset.linhas)
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"status": "aprovado", "elegivel_treino": False},
+        {"status": "aprovado", "contrapartida_final": None},
+        {"status": "aprovado", "conta_debito": None},
+        {"status": "aprovado", "conta_credito": None},
+        {"status": "corrigido", "contrapartida_final": 88888},
+        {"status": "corrigido", "conta_financeira": 90001},
+    ],
+)
+def test_dataset_builder_discards_operational_movements_without_final_approval_contract(
+    session,
+    overrides,
+):
+    empresa = _empresa()
+    lote = _lote_movimentos(empresa)
+    session.add_all(
+        [
+            _conta(10046, is_financial_origin=True),
+            _conta(50057, is_financial_origin=False),
+            _conta(90001, is_financial_origin=True, is_active=False),
+            _movimento(lote=lote, empresa=empresa, **overrides),
+        ]
+    )
+    session.commit()
+
+    dataset = build_dataset_treino_contrapartida(session, empresa_id=empresa.id)
+
+    assert dataset.linhas == []
+    assert dataset.metadata["total_linhas_movimentos"] == 0
+    assert dataset.metadata["total_descartes_movimentos"] == 1
+
+
+def test_dataset_builder_keeps_operational_movements_isolated_by_company(session):
+    empresa_a = _empresa()
+    empresa_b = _empresa(
+        nome_empresa="Empresa Movimento Vizinha LTDA",
+        cnpj_cpf="99888777000166",
+        api_key="api-key-movimento-vizinha",
+        cod_dominio=9908,
+    )
+    usuario = _usuario()
+    lote_a = _lote_movimentos(empresa_a, usuario=usuario)
+    lote_b = _lote_movimentos(empresa_b, usuario=usuario)
+    session.add_all(
+        [
+            _conta(10046, is_financial_origin=True),
+            _conta(50057, is_financial_origin=False),
+            _conta(70001, is_financial_origin=False),
+            _movimento(
+                lote=lote_a,
+                empresa=empresa_a,
+                historico_normalizado="pagamento empresa a",
+                contrapartida_final=50057,
+                conta_debito=50057,
+                conta_credito=10046,
+            ),
+            _movimento(
+                lote=lote_b,
+                empresa=empresa_b,
+                historico_normalizado="pagamento empresa b",
+                contrapartida_final=70001,
+                conta_debito=70001,
+                conta_credito=10046,
+            ),
+        ]
+    )
+    session.commit()
+
+    dataset = build_dataset_treino_contrapartida(session, empresa_id=empresa_a.id)
+
+    assert dataset.linhas == [
+        {
+            "features": "pagamento empresa a origem_10046 direcao_credito",
+            "target_conta_contrapartida": 50057,
+        }
+    ]
+    assert dataset.metadata["contagem_por_target"] == {50057: 1}

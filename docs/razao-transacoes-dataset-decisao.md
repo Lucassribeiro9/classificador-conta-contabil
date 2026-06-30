@@ -20,7 +20,10 @@ historico normalizado, valor, data e numero externo do lancamento.
 
 O dataset de treino de contrapartida deve consumir diretamente
 `LancamentoRazaoNormalizado`, filtrando origens financeiras conforme a spec
-`docs/specs/05-dataset-treino-contrapartida.md`.
+`docs/specs/05-dataset-treino-contrapartida.md`. Movimentos operacionais podem
+entrar como fonte complementar quando estiverem totalmente classificados,
+aprovados ou corrigidos por decisao humana e marcados como elegiveis para
+treino.
 
 `Transacao` permanece como legado/compatibilidade do classificador antigo e nao
 deve ser usada como destino automatico da importacao do razao nesta fase.
@@ -58,9 +61,12 @@ razao. Ela nao cria `Transacao`.
 ### Dataset de Treino
 
 O builder de dataset deve continuar consultando `LancamentoRazaoNormalizado` por
-`empresa_id`. A contrapartida contabil e o target inicial. Feedback humano
-aplicado ao lancamento pode sobrescrever o target em treinos futuros, conforme o
-contrato atual do dataset.
+`empresa_id` como fonte principal. A contrapartida contabil e o target inicial.
+Feedback humano aplicado ao lancamento pode sobrescrever o target em treinos
+futuros, conforme o contrato atual do dataset. O builder tambem pode consultar
+`MovimentoOperacionalImportado` da mesma empresa como fonte complementar, desde
+que o movimento tenha decisao final humana, contas finais preenchidas e
+elegibilidade explicita para treino.
 
 ### Classificacao ML
 
@@ -109,6 +115,8 @@ As seguintes implementacoes devem ser tratadas separadamente:
   API precisar expor diagnostico de lote/lancamentos.
 - #221: documentar politica de descontinuacao de `Transacao` quando o fluxo
   novo estiver completo.
+- #260: permitir movimentos operacionais aprovados/corrigidos como fonte
+  complementar do dataset.
 
 ## Fora de Escopo
 

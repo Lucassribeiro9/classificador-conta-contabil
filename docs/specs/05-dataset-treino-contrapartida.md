@@ -2,7 +2,12 @@
 
 ## Objetivo
 
-Gerar dataset de treino a partir de lancamentos normalizados cujo bloco de origem seja banco, caixa ou aplicacao financeira. O alvo inicial do modelo sera a conta de contrapartida.
+Gerar dataset de treino a partir de lancamentos normalizados cujo bloco de
+origem seja banco, caixa ou aplicacao financeira. O alvo inicial do modelo sera
+a conta de contrapartida.
+
+Movimentos operacionais aprovados ou corrigidos por decisao humana podem entrar
+como fonte complementar de treino quando estiverem completamente classificados.
 
 Sucesso significa que o dataset evita ambiguidade do razao completo e fornece exemplos consistentes para o ML prever o outro lado de movimentos financeiros.
 
@@ -52,6 +57,19 @@ Lancamento normalizado do Razao (`LancamentoRazaoNormalizado`):
 - `historico_normalizado`: historico ja persistido pela importacao do Razao,
   gerado por `normalize_razao_historico`.
 
+Movimento operacional importado (`MovimentoOperacionalImportado`):
+
+- fonte complementar do dataset quando houver decisao final humana;
+- `empresa_id`: escopo obrigatorio do dataset;
+- `conta_financeira`: conta de origem operacional usada como contexto;
+- `contrapartida_final`: alvo do dataset;
+- `direcao`: `debito` ou `credito`, usada como contexto da feature;
+- `historico_normalizado`: historico normalizado pela importacao operacional;
+- `status`: apenas `aprovado` ou `corrigido`;
+- `elegivel_treino`: deve ser `true`;
+- `conta_debito` e `conta_credito`: devem estar preenchidas para indicar
+  partida final validada.
+
 Campos minimos do dataset:
 
 - Filtros: `empresa_id`, `conta_origem`, `conta_contrapartida`.
@@ -80,7 +98,11 @@ Exemplo de metadados esperados:
 {
     "empresa_id": 1,
     "total_linhas": 120,
+    "total_linhas_razao": 110,
+    "total_linhas_movimentos": 10,
     "total_descartes": 3,
+    "total_descartes_razao": 2,
+    "total_descartes_movimentos": 1,
     "contagem_por_target": {50057: 14, 10722: 40},
     "treinavel": True,
 }
@@ -98,6 +120,12 @@ Exemplo de metadados esperados:
 - Testar que target precisa ser conta analitica existente.
 - Testar que valor bruto nao entra nas features da primeira versao.
 - Testar que metadados retornam total, descartes e contagem por target.
+- Testar que movimentos operacionais entram apenas quando `aprovado` ou
+  `corrigido`, com `elegivel_treino=True`, contrapartida final e contas finais.
+- Testar que movimentos pendentes, sugeridos, em revisao, pre-classificados ou
+  rejeitados nao entram no dataset.
+- Testar que metadados distinguem linhas e descartes vindos do Razao e de
+  movimentos operacionais.
 
 ## Boundaries
 
@@ -106,6 +134,8 @@ Exemplo de metadados esperados:
 - Sempre: evitar misturar lancamentos de empresas diferentes.
 - Sempre: usar a flag persistida `is_financial_origin` do catalogo para identificar origem financeira.
 - Sempre: usar apenas lancamentos normalizados validos.
+- Sempre: usar movimentos operacionais apenas quando aprovados ou corrigidos por
+  decisao humana e marcados como elegiveis para treino.
 - Sempre: usar apenas contas analiticas existentes como target.
 - Sempre: retornar metadados do dataset.
 - Perguntar antes: usar qualquer bloco do razao como treino.
@@ -148,6 +178,13 @@ Exemplo de metadados esperados:
 - Minimo recomendado para treinar modelo: pelo menos 10 linhas totais e pelo menos 2 classes de contrapartida.
 - O builder retornara metadados: total de linhas, descartes, contagem por target e empresa.
 - Empresas nao serao misturadas no dataset inicial.
+- Movimentos operacionais aprovados ou corrigidos entram como fonte
+  complementar somente quando `elegivel_treino=True`, `contrapartida_final`,
+  `conta_debito` e `conta_credito` estiverem preenchidos.
+- Movimentos pendentes, pre-classificados, sugeridos, em revisao, rejeitados ou
+  sem contas finais nao entram no dataset.
+- Metadados distinguem quantidade de linhas validas e descartes por fonte:
+  Razao e movimentos operacionais.
 
 ## Open Questions
 
