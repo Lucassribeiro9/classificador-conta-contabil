@@ -35,6 +35,10 @@ Sucesso significa que o dataset evita ambiguidade do razao completo e fornece ex
 O builder deve usar os nomes finais ja persistidos pelos dominios de plano de
 contas e Razao. Estes nomes sao contrato para as issues funcionais desta spec.
 
+O treino canonico usa todo o Razao valido da empresa e nao deve ser filtrado por
+lote isolado. O lote permanece informacao de auditoria, diagnostico e
+reprocessamento, nao recorte do dataset de treino.
+
 Catalogo de contas (`ContaContabil`):
 
 - `codigo`: identificador unico da conta contabil no catalogo.
@@ -158,6 +162,8 @@ Exemplo de metadados esperados:
 ## Decisoes Aprovadas
 
 - O dataset sera gerado por empresa.
+- O treino canonico usa todo o Razao valido da empresa e nao deve ser filtrado
+  por lote isolado.
 - O dataset de contrapartida consome diretamente `LancamentoRazaoNormalizado`;
   `Transacao` permanece como legado/compatibilidade e nao e fonte do novo
   dataset.
