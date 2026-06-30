@@ -27,6 +27,7 @@ from core.movimentos_operacionais_importer import (
     import_movimentos_operacionais,
 )
 from core.movimentos_operacionais_classification import (
+    MovimentoOperacionalModelNotFound,
     classificar_movimentos_operacionais_pendentes,
 )
 from core.movimentos_operacionais_parser import MovimentoOperacionalParseError
@@ -253,12 +254,16 @@ def classify_company_pending_operational_movements(
     if denial_detail is not None:
         raise HTTPException(status_code=403, detail=denial_detail)
 
-    result = classificar_movimentos_operacionais_pendentes(
-        db,
-        empresa_id=empresa.id,
-    )
-    db.commit()
-    return ClassificacaoMovimentoOperacionalResponse(**result)
+    try:
+        result = classificar_movimentos_operacionais_pendentes(
+            db,
+            empresa_id=empresa.id,
+        )
+        db.commit()
+        return ClassificacaoMovimentoOperacionalResponse(**result)
+    except MovimentoOperacionalModelNotFound as exc:
+        db.commit()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.post(
