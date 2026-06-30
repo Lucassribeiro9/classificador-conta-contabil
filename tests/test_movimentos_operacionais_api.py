@@ -528,6 +528,59 @@ def test_user_with_operacao_permission_classifies_pending_operational_movements(
     }
 
 
+def test_classificar_movimentos_returns_controlled_error_when_model_is_missing(
+    client,
+    monkeypatch,
+    tmp_path,
+):
+    from tests.conftest import TestingSessionLocal
+
+    usuario, empresa_id, _ = _seed_operational_lote_with_movements(
+        permissao="operacao",
+        movimentos=[
+            {
+                "data": date(2026, 1, 3),
+                "conta_financeira": 10046,
+                "historico": "Pagamento pendente sensivel",
+                "historico_normalizado": "pagamento pendente",
+                "valor_original": -100,
+                "valor_absoluto": 100,
+                "direcao": "credito",
+                "tipo_movimento": "saida",
+                "documento": "DOC-SENSIVEL-MODELO-AUSENTE",
+                "observacao": "Nao deve ir para auditoria",
+                "contrapartida_informada": None,
+                "status": "pendente",
+                "mensagens_validacao": [],
+            },
+        ],
+    )
+    monkeypatch.setattr(settings, "MODEL_DIR", str(tmp_path))
+
+    response = client.post(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/classificar",
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Modelo treinado não encontrado para a empresa"
+
+    with TestingSessionLocal() as session:
+        event = session.query(AuditEvent).one()
+
+    assert event.event_type == "operational_movements.classification_failed"
+    assert event.user_id == usuario.id
+    assert event.empresa_id == empresa_id
+    assert event.resource_id == "operational_movements_classification"
+    assert event.metadata_json == {
+        "total_pendentes": 1,
+        "error_type": "ModelNotFound",
+        "reason": "model_not_found",
+    }
+    assert "Pagamento pendente sensivel" not in str(event.metadata_json)
+    assert "DOC-SENSIVEL-MODELO-AUSENTE" not in str(event.metadata_json)
+
+
 def test_review_movimento_approve_success(client):
     from tests.conftest import TestingSessionLocal
     from core.models import ContaContabil

@@ -8,6 +8,10 @@ from core.ml_engine import ClassificadorContabil
 from core.models import MovimentoOperacionalImportado
 
 
+class MovimentoOperacionalModelNotFound(RuntimeError):
+    """Indica ausencia de modelo treinado para classificar movimentos."""
+
+
 def classificar_movimentos_operacionais_pendentes(
     session: Session,
     *,
@@ -34,6 +38,23 @@ def classificar_movimentos_operacionais_pendentes(
         return result
 
     engine = ClassificadorContabil(session, model_dir=model_dir)
+    if not engine.model_exists_for_company(empresa_id):
+        record_audit_event(
+            session,
+            event_type="operational_movements.classification_failed",
+            empresa_id=empresa_id,
+            resource_id="operational_movements_classification",
+            metadata={
+                "total_pendentes": len(movimentos),
+                "error_type": "ModelNotFound",
+                "reason": "model_not_found",
+            },
+        )
+        session.flush()
+        raise MovimentoOperacionalModelNotFound(
+            "Modelo treinado não encontrado para a empresa"
+        )
+
     predictions = engine.classify_operational_movements_from_saved_model(
         empresa_id=empresa_id,
         movimentos=[
