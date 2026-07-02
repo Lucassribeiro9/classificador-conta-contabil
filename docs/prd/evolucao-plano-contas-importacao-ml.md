@@ -6,7 +6,7 @@ O escritorio precisa evoluir o classificador contabil de um modelo que apenas ap
 
 Isso limita a qualidade do modelo, dificulta explicar previsoes, aumenta o risco de sugerir contas que nao sao usadas por uma empresa especifica e torna nebulosa a interpretacao de lancamentos do livro-razao. O escritorio tambem precisa fortalecer seguranca, controle de acesso, auditoria e persistencia antes de ampliar importacoes e treinar modelos com dados reais dos clientes.
 
-O sistema sera usado apenas em ambiente interno do escritorio, por usuarios individuais, com acesso restrito as empresas que cada usuario tem permissao para operar. A primeira entrega deve priorizar API, testes e importadores confiaveis antes de construir uma interface operacional completa.
+O sistema sera usado apenas em ambiente interno do escritorio, por usuarios individuais, com acesso restrito as empresas que cada usuario tem permissao para operar. A primeira entrega priorizou API, testes e importadores confiaveis. A fase seguinte deve disponibilizar uma interface grafica interna para operar os fluxos ja implementados sem depender de chamadas diretas a API.
 
 ## Solucao
 
@@ -16,7 +16,7 @@ O plano de contas do escritorio sera importado como catalogo unico. Cada empresa
 
 Para a primeira versao do ML, o sistema usara como fonte principal de treino os lancamentos cujo bloco de origem seja banco, caixa ou aplicacao financeira. Nesses casos, o alvo do modelo sera a contrapartida contabil. Essa abordagem reduz ambiguidade, evita misturar o mesmo lancamento em diferentes blocos do razao e gera valor operacional mais rapidamente para classificacao de movimentos financeiros.
 
-A interface Streamlit ou outro painel interno podera ser reaproveitada no futuro, mas a primeira entrega deve estabilizar a API, dominio, importacao, seguranca, auditoria e testes. O n8n continuara fora do caminho critico desta fase e sera tratado como integracao posterior com credenciais e escopos proprios.
+A nova interface sera um frontend separado, mantido no mesmo repositorio, consumindo a API FastAPI. O n8n continuara fora do caminho critico desta fase e sera tratado como integracao posterior com credenciais e escopos proprios.
 
 ## Historias de Usuario
 
@@ -60,11 +60,41 @@ A interface Streamlit ou outro painel interno podera ser reaproveitada no futuro
 38. Como desenvolvedor, quero TDD para parsers, autorizacao, importacoes e geracao de dataset de ML, para testar comportamentos de risco antes da implementacao.
 39. Como desenvolvedor, quero issues derivadas das specs, para que cada pull request seja focado e revisavel.
 40. Como revisor, quero que cada pull request traga evidencias de validacao, para que mudancas sejam integradas com seguranca.
+41. Como operador, quero fazer login em uma interface interna simples, para operar o sistema com meu usuario individual.
+42. Como operador, quero cair sempre na lista de empresas apos o login, para escolher conscientemente o cliente que vou operar.
+43. Como operador, quero ver apenas as empresas vinculadas ao meu usuario, para evitar acesso indevido a dados de outros clientes.
+44. Como admin, quero visualizar todas as empresas na interface, para apoiar operacao e diagnostico.
+45. Como usuario sem empresas vinculadas, quero receber uma mensagem clara orientando contato com o administrador, para entender por que nao consigo operar.
+46. Como operador, quero abrir um painel operacional da empresa, para consultar contexto de razao, contas vinculadas, movimentos e status do modelo.
+47. Como operador, quero importar movimentos operacionais por `.xlsx`, para classificar dados recebidos fora do livro-razao canonico.
+48. Como operador, quero ver um resumo apos importar movimentos, para decidir se abro o lote ou corrijo o arquivo.
+49. Como operador, quero classificar todos os movimentos pendentes da empresa, para reduzir trabalho manual.
+50. Como operador, quero revisar movimentos em lista, para aprovar, rejeitar ou enviar varios itens para revisao sem abrir um por um.
+51. Como operador, quero revisar um movimento individualmente, para corrigir a conta sugerida quando necessario.
+52. Como operador, quero buscar primeiro nas contas vinculadas da empresa e, quando necessario, no plano completo, para manter classificacoes consistentes.
+53. Como contador, quero consultar razoes importados e contas vinculadas da empresa, para entender a base usada pelo modelo.
+54. Como responsavel pelo negocio, quero homologar a interface com dados sanitizados, para validar o fluxo com usuarios sem expor dados reais.
+55. Como desenvolvedor, quero specs de frontend, UX, ambientes e homologacao antes de implementar telas, para manter o fluxo SDD/TDD do projeto.
 
 ## Decisoes de Implementacao
 
-- O sistema permanecera API-first na primeira entrega. Trabalho de UI fica adiado ate os fluxos de backend estarem estaveis e testados.
-- A interface interna podera reaproveitar Streamlit futuramente, mas Streamlit nao deve acessar o banco diretamente. Ferramentas de usuario devem chamar a API.
+- O sistema permanece API-first: a interface interna deve consumir a API e nunca acessar o banco diretamente.
+- A fase de interface grafica sera implementada como frontend separado em `frontend/`, no mesmo repositorio.
+- O frontend aprovado para a fase 2 usara React, TypeScript, Vite, Tailwind CSS, React Router e TanStack Query.
+- A interface sera uma SPA interna, voltada a uso na rede do escritorio.
+- O login inicial sera simples, usando autenticacao JWT ja exposta pela API.
+- Apos login, o usuario deve sempre cair na tela de empresas.
+- Usuario comum visualiza apenas empresas vinculadas; admin visualiza todas.
+- Se o usuario nao possuir empresas vinculadas, a interface deve exibir estado vazio orientando contato com o administrador.
+- O MVP visual da fase 2 cobre: Login, Empresas, Operacao da Empresa, Importar Movimentos, Lote de Movimentos, Revisar Movimento, Razao e Contas Vinculadas.
+- CRUD administrativo de usuarios e permissoes fica fora do MVP inicial de frontend.
+- A aprovacao em lote de movimentos operacionais faz parte do MVP, mas deve respeitar elegibilidade e nao alterar decisoes finais.
+- Rejeicao de movimento tera motivo opcional.
+- A busca de conta em revisao deve priorizar contas vinculadas a empresa e permitir busca no plano completo.
+- A primeira homologacao da interface sera focada no perfil operador/contador; admin prepara ambiente, usuarios, empresas e dados.
+- Homologacao e producao devem ser ambientes separados, com bancos e variaveis de ambiente proprios.
+- A massa inicial de homologacao deve ser sanitizada e conter plano de contas, razao e movimentos operacionais coerentes.
+- As proximas implementacoes devem seguir issues pequenas, branch sugerida antes de editar arquivos e PR seguindo `.github/pull_request_template.md`.
 - O sistema rodara no servidor Ubuntu existente com Docker, restrito a rede do escritorio.
 - A aplicacao nao deve ser exposta via Streamlit Community Cloud nem via ngrok permanente para este fluxo interno.
 - PostgreSQL substituira SQLite como banco-alvo desta evolucao.
@@ -105,6 +135,9 @@ A interface Streamlit ou outro painel interno podera ser reaproveitada no futuro
 - Testes de seguranca devem cobrir usuario inativo, acesso entre empresas e tentativa de importacao sem permissao.
 - Os testes de API existentes servem como referencia para uso do TestClient, escopo por empresa e fluxos de predicao/feedback.
 - Os testes de ML existentes servem como referencia para treino, formato de predicao e atualizacao de transacoes.
+- A interface deve ter validacoes proprias: typecheck, lint, build, testes de componentes e Playwright nos fluxos principais quando aplicavel.
+- Testes de frontend devem validar comportamento percebido pelo usuario e integracao com contratos da API, evitando acoplamento a detalhes internos dos componentes.
+- A primeira homologacao so deve ser liberada quando backend tests relevantes estiverem verdes, frontend build/typecheck/lint estiverem verdes e o fluxo principal tiver validacao manual ou automatizada registrada.
 
 ## Fora de Escopo
 
@@ -114,7 +147,12 @@ A interface Streamlit ou outro painel interno podera ser reaproveitada no futuro
 - Deploy publico no Streamlit Community Cloud.
 - Exposicao permanente por ngrok para a aplicacao contabil.
 - Mudancas no workflow n8n na primeira entrega.
-- Frontend completo na primeira entrega.
+- Frontend completo fora do MVP aprovado.
+- CRUD administrativo de usuarios e permissoes no MVP inicial da interface.
+- Importacao OFX no MVP inicial da interface.
+- Geracao de TXT ou OFX para importacao no Dominio na fase 2 inicial.
+- Uso de dados reais ou sensiveis na primeira massa de homologacao.
+- Redesenhar regras contabeis ja implementadas no backend durante a criacao do frontend.
 - Predicoes avancadas de lancamentos compostos ou multiplas partidas.
 - Uso de todos os blocos do razao como fonte principal de treino inicial.
 - Decisoes automaticas de politica contabil que exigem julgamento humano.
@@ -141,6 +179,7 @@ A ordem recomendada de implementacao e:
 11. Predicao de contrapartida pelo ML.
 12. Feedback e trilha de auditoria.
 13. Interface interna apos estabilizacao dos fluxos de backend.
+14. Homologacao da interface com massa sanitizada.
 
 Itens em aberto para specs futuras:
 
@@ -149,3 +188,14 @@ Itens em aberto para specs futuras:
 - Regra precisa para identificar contas de banco, caixa e aplicacao financeira a partir do plano de contas.
 - Contratos de API para cada endpoint de importacao e revisao.
 - Caminho de migracao para dados SQLite existentes que precisem ser preservados.
+- Detalhes finais de deploy da SPA interna no ambiente do escritorio.
+- Escopo da futura tela administrativa de usuarios e permissoes.
+- Momento adequado para evoluir OFX, PDF/OCR e exportacao TXT/OFX para Dominio.
+
+## Atualizacao da Fase 2: Interface Grafica Interna
+
+A fase 2 transforma a fundacao API-first em uma ferramenta operacional para usuarios internos. O objetivo nao e reabrir decisoes de dominio, mas oferecer uma interface segura e eficiente para operar empresas, razao, contas vinculadas, movimentos operacionais, classificacao, revisao e homologacao.
+
+O frontend deve nascer separado do backend, dentro de `frontend/`, mantendo a API FastAPI como fronteira de integracao. A stack aprovada e React, TypeScript, Vite, Tailwind CSS, React Router e TanStack Query. A direcao visual aprovada usa branco como base, a cor institucional `#007693`, apoio em `#004E61`, cinzas neutros e uma interface operacional compacta.
+
+O MVP da interface inclui Login, Empresas, Operacao da Empresa, Importar Movimentos, Lote de Movimentos, Revisar Movimento, Razao e Contas Vinculadas. A primeira homologacao deve priorizar operadores/contadores, com dados sanitizados e ambientes separados de producao. Telas administrativas, OFX, PDF/OCR e exportacao para Dominio continuam como evolucoes posteriores.

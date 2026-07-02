@@ -10,12 +10,13 @@ Este guia define a sequencia recomendada para continuar o projeto usando PRD, sp
 4. Priorizar issues.
 5. Escolher uma issue por vez.
 6. Fazer review da issue antes de implementar.
-7. Escrever teste falhando.
-8. Implementar o minimo necessario.
-9. Rodar testes.
-10. Refatorar se necessario.
-11. Atualizar docs/specs apenas se alguma decisao mudar.
-12. Abrir PR pequeno vinculado a issue.
+7. Sugerir branch seguindo `.github/BRANCHING.md`.
+8. Escrever teste falhando.
+9. Implementar o minimo necessario.
+10. Rodar testes.
+11. Refatorar se necessario.
+12. Atualizar docs/specs apenas se alguma decisao mudar.
+13. Preparar PR em bloco unico Markdown ou draft no GitHub seguindo `.github/pull_request_template.md`.
 
 Fluxo resumido:
 
@@ -24,6 +25,7 @@ PRD aprovado
 -> Specs revisadas
 -> Issues pequenas
 -> Task Review
+-> Branch sugerida
 -> Teste falhando
 -> Implementacao minima
 -> Testes verdes
@@ -67,6 +69,8 @@ Regras:
 4. Cada issue deve caber em um PR focado.
 5. Separe issues funcionais, tecnicas, testes e docs quando fizer sentido.
 6. Aponte quais issues devem usar TDD obrigatoriamente.
+7. Quando gerar texto para GitHub, siga o template correspondente em `.github/ISSUE_TEMPLATE/`.
+8. Seja conciso para economizar tokens, sem remover criterios de aceite e validacao.
 ```
 
 ## Prompt Para Revisar Uma Issue Antes de Implementar
@@ -89,7 +93,8 @@ Separe:
 2. testes que devem ser escritos primeiro;
 3. riscos;
 4. arquivos provaveis;
-5. perguntas bloqueantes.
+5. branch sugerida seguindo `.github/BRANCHING.md`;
+6. perguntas bloqueantes.
 
 Nao implemente nada ainda. Quero responder as decisoes primeiro.
 ```
@@ -112,14 +117,43 @@ Contexto:
 Regras:
 1. Nao implemente nada fora do escopo da issue.
 2. Comece revisando PRD, spec e issue.
-3. Liste um plano curto.
-4. Escreva ou ajuste testes primeiro.
-5. Rode os testes e confirme que falham pelo motivo esperado.
-6. Implemente o minimo necessario.
-7. Rode os testes novamente.
-8. Refatore apenas se necessario.
-9. Atualize docs/spec somente se alguma decisao mudar.
-10. No final, informe arquivos alterados, testes executados e riscos restantes.
+3. Antes de editar arquivos, sugira o nome da branch seguindo `.github/BRANCHING.md`.
+4. Liste um plano curto.
+5. Escreva ou ajuste testes primeiro.
+6. Rode os testes e confirme que falham pelo motivo esperado.
+7. Implemente o minimo necessario.
+8. Rode os testes novamente.
+9. Refatore apenas se necessario.
+10. Atualize docs/spec somente se alguma decisao mudar.
+11. No final, informe arquivos alterados, testes executados e riscos restantes.
+
+Nao avance para outra issue.
+```
+
+## Prompt Para Implementar Uma Issue Frontend
+
+Use depois que PRD, spec e issue de frontend ja estiverem revisados.
+
+```text
+Use spec-driven-development, frontend-design e TDD.
+
+Implemente a issue:
+<titulo-da-issue>
+
+Contexto:
+- PRD: docs/prd/evolucao-plano-contas-importacao-ml.md
+- Spec: <caminho-da-spec-frontend>
+- Issue: <cole aqui o texto da issue ou informe o caminho do arquivo>
+- Figma: <cole o link do frame, se aplicavel>
+
+Regras:
+1. Nao implemente nada fora do escopo da issue.
+2. Antes de editar arquivos, sugira a branch seguindo `.github/BRANCHING.md`.
+3. Preserve a direcao visual aprovada: branco, #007693, #004E61, cinzas neutros e UI operacional compacta.
+4. Comece pelos testes/validacoes cabiveis: typecheck, lint, teste de componente ou Playwright quando houver fluxo.
+5. Implemente o minimo necessario em `frontend/`.
+6. Rode as validacoes relevantes.
+7. Informe arquivos alterados, validacoes executadas e riscos restantes.
 
 Nao avance para outra issue.
 ```
@@ -173,20 +207,148 @@ Regras:
 Use depois de implementar e testar uma issue.
 
 ```text
-Prepare um resumo de PR para a issue:
+Prepare o PR para a issue:
 <titulo-da-issue>
 
 Contexto:
 - Spec: <caminho-da-spec>
 - Issue: <numero-ou-titulo>
+- Branch: <branch-usada>
+- Template: .github/pull_request_template.md
 
-Inclua:
-1. resumo da mudanca;
-2. arquivos alterados;
-3. testes executados;
-4. riscos e rollback;
-5. checklist de validacao;
-6. referencia `Closes #<numero>` se houver numero de issue.
+Regras:
+1. Siga `.github/pull_request_template.md`.
+2. Entregue o corpo do PR em um unico bloco de codigo Markdown.
+3. Nao quebre a formatacao fora do bloco.
+4. Inclua `Closes #<numero>` quando houver numero de issue.
+5. Seja conciso, mas mantenha resumo, escopo, evidencias, riscos e rollback.
+6. Se tiver acesso ao GitHub e eu pedir, crie o PR como draft em vez de apenas gerar o texto.
+```
+
+## Prompt Para Criar Draft PR no GitHub
+
+Use quando a implementacao ja estiver validada e houver acesso ao GitHub.
+
+```text
+Use github:yeet ou github:github.
+
+Crie um draft PR para a issue:
+<titulo-da-issue>
+
+Contexto:
+- Issue: #<numero>
+- Branch: <branch-usada>
+- Template: .github/pull_request_template.md
+
+Regras:
+1. Confirme que a branch atual e a branch esperada.
+2. Use o template de PR do repositorio.
+3. Inclua `Closes #<numero>`.
+4. Crie como draft.
+5. No final, informe o link do PR, testes executados e riscos restantes.
+```
+
+## Fase 2 - Interface Grafica Interna
+
+Use esta fase para PRD, specs, issues e implementacao do frontend separado em `frontend/`.
+
+### Skills por Etapa
+
+- `brainstorming`: antes de alterar escopo, fluxo de usuario ou experiencia operacional.
+- `grill-me`: para fechar decisoes de produto, permissoes, homologacao e riscos.
+- `to-prd`: para consolidar decisoes aprovadas em PRD.
+- `spec-driven-development`: para criar specs, revisar issues e manter escopo.
+- `frontend-design`: para design system, telas, Figma e aderencia visual.
+- `tdd`: para implementacao guiada por testes e validacoes.
+- `github:github` ou `github:yeet`: para publicar issues, branches, PRs e revisar fluxo GitHub.
+
+### Specs Previstas
+
+1. PRD da interface grafica interna.
+2. Spec de UX e fluxos do frontend.
+3. Spec de arquitetura tecnica React/Vite/SPA.
+4. Spec de Docker, ambientes e homologacao.
+5. Spec de padroes de codigo, comentarios e documentacao.
+6. Spec de massa sanitizada de homologacao.
+
+### Prompt Para Consolidar PRD da Interface
+
+```text
+Use to-prd, brainstorming e grill-me.
+
+Consolide o PRD da interface grafica interna com base nas decisoes ja aprovadas.
+
+Contexto:
+- PRD atual: docs/prd/evolucao-plano-contas-importacao-ml.md
+- Frontend separado em `frontend/`
+- Stack aprovada: React, TypeScript, Vite, Tailwind, React Router e TanStack Query
+- MVP: Login, Empresas, Operacao da Empresa, Importar Movimentos, Lote de Movimentos, Revisar Movimento, Razao e Contas Vinculadas
+
+Regras:
+1. Nao implemente codigo.
+2. Preserve o fluxo operador/contador como foco da primeira homologacao.
+3. Deixe CRUD admin de usuarios fora do MVP inicial.
+4. Liste criterios de aceite e fora de escopo.
+5. Mantenha texto conciso e pronto para virar issue/spec.
+```
+
+### Prompt Para Gerar Specs do Frontend
+
+```text
+Use spec-driven-development.
+
+Gere as specs da fase de interface grafica interna.
+
+Contexto:
+- PRD: docs/prd/evolucao-plano-contas-importacao-ml.md
+- Figma: <link-do-figma>
+- Stack: React, TypeScript, Vite, Tailwind, React Router, TanStack Query
+
+Regras:
+1. Nao implemente codigo.
+2. Separe specs de UX, tecnica frontend, Docker/ambientes, padroes de codigo e homologacao.
+3. Inclua boundaries, decisoes aprovadas, success criteria, riscos e perguntas abertas.
+4. Use portugues tecnico, ASCII e seco o suficiente para economizar tokens.
+```
+
+### Prompt Para Validar Aderencia ao Figma
+
+```text
+Use frontend-design.
+
+Valide a tela implementada contra o Figma:
+<link-do-frame>
+
+Contexto:
+- Issue: <titulo-da-issue>
+- Spec: <caminho-da-spec>
+- Tela/rota: <rota>
+
+Regras:
+1. Verifique layout, hierarquia visual, cores, estados, responsividade e textos.
+2. Aponte apenas divergencias acionaveis.
+3. Nao proponha redesign fora do escopo da issue.
+4. Indique validacoes executadas ou pendentes.
+```
+
+### Prompt Para Homologacao
+
+```text
+Use spec-driven-development e TDD.
+
+Prepare a validacao de homologacao para:
+<escopo>
+
+Contexto:
+- Ambiente: homologacao
+- Perfil testado: operador/contador
+- Dados sanitizados: plano de contas, razao e movimentos operacionais
+
+Regras:
+1. Nao use dados reais ou sensiveis.
+2. Liste checklist objetivo de aceite.
+3. Inclua comandos de validacao e evidencias esperadas.
+4. Separe falhas bloqueantes de melhorias futuras.
 ```
 
 ## Casos de Uso
@@ -256,6 +418,106 @@ Regras:
 6. No final, informe arquivos alterados, testes executados e riscos restantes.
 ```
 
+### Caso 4: Atualizar PRD e Criar Specs da Interface
+
+```text
+Use spec-driven-development, to-prd e documentation-writer.
+
+Implemente a issue:
+spec(frontend): atualizar PRD e criar specs da interface grafica interna
+
+Contexto:
+- PRD: docs/prd/evolucao-plano-contas-importacao-ml.md
+- Guia de prompts: docs/prompts-fluxo-sdd-tdd.md
+- Template de issue: .github/ISSUE_TEMPLATE/prd_spec.md
+- Branching: .github/BRANCHING.md
+- PR template: .github/pull_request_template.md
+- Figma: <link-do-figma>
+- Issue: <cole aqui a issue completa>
+
+Regras:
+1. Nao implemente codigo de aplicacao.
+2. Antes de editar arquivos, sugira a branch seguindo `.github/BRANCHING.md`.
+3. Atualize o PRD existente com a fase de interface grafica interna.
+4. Crie as specs necessarias em `docs/specs/`.
+5. Use portugues tecnico e ASCII.
+6. Preserve o MVP aprovado: Login, Empresas, Operacao da Empresa, Importar Movimentos, Lote de Movimentos, Revisar Movimento, Razao e Contas Vinculadas.
+7. Registre fora de escopo: CRUD admin no MVP, OFX, TXT/Dominio e implementacao do frontend.
+8. Nao altere endpoints, banco, testes ou codigo backend.
+9. Ao final, informe arquivos alterados, validacoes executadas e riscos restantes.
+```
+
+### Caso 5: Gerar Issues a Partir das Specs do Frontend
+
+```text
+Use spec-driven-development.
+
+Vamos gerar issues pequenas a partir das specs da interface grafica interna:
+- <spec-ux>
+- <spec-tecnica-frontend>
+- <spec-docker-ambientes>
+- <spec-padroes-codigo>
+- <spec-homologacao>
+
+Contexto:
+- PRD: docs/prd/evolucao-plano-contas-importacao-ml.md
+- Template de issue: .github/ISSUE_TEMPLATE/
+- Branching: .github/BRANCHING.md
+
+Regras:
+1. Nao implemente nada.
+2. Gere issues pequenas, ordenadas por dependencia.
+3. Cada issue deve caber em um PR focado.
+4. Cada issue deve conter contexto, escopo, criterios de aceite, validacoes, riscos e branch sugerida.
+5. Separe docs/spec, setup frontend, telas, integracao API, testes, Docker e homologacao.
+6. Aponte quais issues devem usar TDD, frontend-design ou Playwright.
+7. Seja conciso para economizar tokens.
+```
+
+### Caso 6: Implementar Primeira Issue do Frontend
+
+```text
+Use spec-driven-development, frontend-design e TDD.
+
+Implemente a issue:
+<titulo-da-issue-frontend>
+
+Contexto:
+- PRD: docs/prd/evolucao-plano-contas-importacao-ml.md
+- Spec: <caminho-da-spec-frontend>
+- Issue: <cole aqui a issue>
+- Figma: <link-do-frame>
+
+Regras:
+1. Nao implemente nada fora do escopo da issue.
+2. Antes de editar arquivos, sugira a branch seguindo `.github/BRANCHING.md`.
+3. Preserve a direcao visual aprovada: branco, #007693, #004E61, cinzas neutros e UI operacional compacta.
+4. Comece por validacoes cabiveis: typecheck, lint, teste de componente ou Playwright quando houver fluxo.
+5. Implemente o minimo necessario em `frontend/`.
+6. Rode as validacoes relevantes.
+7. No final, informe arquivos alterados, validacoes executadas e riscos restantes.
+```
+
+### Caso 7: Preparar PR em Bloco Markdown ou Draft
+
+```text
+Prepare o PR para a issue:
+<titulo-da-issue>
+
+Contexto:
+- Spec: <caminho-da-spec>
+- Issue: #<numero>
+- Branch: <branch-usada>
+- Template: .github/pull_request_template.md
+
+Regras:
+1. Siga `.github/pull_request_template.md`.
+2. Entregue o corpo do PR em um unico bloco de codigo Markdown.
+3. Inclua `Closes #<numero>`.
+4. Mantenha resumo, escopo, evidencias, riscos e rollback.
+5. Se eu pedir publicacao e houver acesso ao GitHub, crie como draft.
+```
+
 ## Checklist Antes de Implementar
 
 - [ ] A issue vem de uma spec revisada.
@@ -264,6 +526,7 @@ Regras:
 - [ ] As perguntas bloqueantes foram respondidas.
 - [ ] Os testes esperados foram definidos.
 - [ ] A implementacao nao mistura outra spec.
+- [ ] A branch sugerida segue `.github/BRANCHING.md`.
 
 ## Checklist Depois de Implementar
 
@@ -272,3 +535,5 @@ Regras:
 - [ ] Docs/specs foram atualizados apenas se alguma decisao mudou.
 - [ ] PR referencia a issue.
 - [ ] Riscos e rollback estao descritos.
+- [ ] Corpo do PR segue `.github/pull_request_template.md`.
+- [ ] Se o PR for apenas texto, ele foi entregue em um unico bloco Markdown.
