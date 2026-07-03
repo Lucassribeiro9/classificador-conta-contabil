@@ -139,6 +139,23 @@ Mensagens devem ser curtas, operacionais e orientadas a proxima acao.
 - Acoes em lote seguem as regras aprovadas.
 - A spec pode gerar issues pequenas de frontend.
 
+## Decisoes Aprovadas Apos Task Review #271
+
+- O mapa detalhado de tela, contrato, estados e gaps fica em
+  `docs/frontend-mapa-telas-contratos-api.md`.
+- A validacao visual usa o Figma informado na issue #271 como referencia.
+- O mapa deve listar contratos reais ja existentes e contratos esperados ainda
+  ausentes.
+- A tela Operacao da Empresa deve priorizar um hub operacional enxuto com
+  identificacao da empresa, permissoes, status do dataset/modelo,
+  status/resumo do Razao, contas vinculadas, movimentos operacionais por estado
+  quando disponiveis e atalhos operacionais.
+- Dados como ultimo lote, warnings recentes e metricas de confianca sao
+  melhoria futura quando a API ainda nao expuser o contrato.
+- A consulta de Razao e Contas Vinculadas tem paginacao obrigatoria no MVP.
+- Novas issues para gaps devem ser abertas apenas quando o gap bloquear uma
+  feature futura ou exigir mudanca de API separada.
+
 ## Proximas Issues Recomendadas
 
 1. `spec(frontend): validar UX do MVP contra Figma`
@@ -153,5 +170,6 @@ Mensagens devem ser curtas, operacionais e orientadas a proxima acao.
 
 ## Open Questions
 
-- O backend ja expoe todos os metadados necessarios para os resumos da tela Operacao da Empresa?
-- A consulta de razao/contas vinculadas deve ter paginacao obrigatoria no MVP?
+- A tela Operacao da Empresa usara um endpoint agregado de resumo ou uma
+  composicao de endpoints existentes?
+- Quais gaps de API encontrados no mapa devem virar issues antes das telas?
