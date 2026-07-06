@@ -56,10 +56,9 @@ def test_frontend_shell_protects_internal_routes_and_shows_company_context():
     assert "empresaId" in app_shell
 
 
-def test_frontend_pages_are_placeholders_without_api_implementation():
+def test_frontend_non_login_pages_are_placeholders_without_api_implementation():
     pages = "\n".join(
         [
-            _read("src/routes/pages/LoginPage.tsx"),
             _read("src/routes/pages/EmpresasPage.tsx"),
             _read("src/routes/pages/OperacaoEmpresaPage.tsx"),
             _read("src/routes/pages/ImportarMovimentosPage.tsx"),
@@ -69,7 +68,9 @@ def test_frontend_pages_are_placeholders_without_api_implementation():
         ]
     )
     placeholder = _read("src/routes/pages/PagePlaceholder.tsx")
+    login_page = _read("src/routes/pages/LoginPage.tsx")
 
-    assert pages.count("<PagePlaceholder") == 7
+    assert pages.count("<PagePlaceholder") == 6
+    assert "<PagePlaceholder" not in login_page
     assert "Placeholder da issue #272" in placeholder
     assert "chamada real da API fica fora do escopo" in placeholder

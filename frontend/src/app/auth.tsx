@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 export type AuthSession = {
   accessToken: string;
+  userEmail: string;
 };
 
 type AuthContextValue = {
