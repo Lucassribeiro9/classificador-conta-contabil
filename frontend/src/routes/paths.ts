@@ -12,8 +12,14 @@ export const ROUTES = {
       `/empresas/${empresaId}/movimentos/importar`,
     loteMovimentos: (empresaId: string, loteId: string) =>
       `/empresas/${empresaId}/movimentos/lotes/${loteId}`,
-    revisarMovimento: (empresaId: string, movimentoId: string) =>
-      `/empresas/${empresaId}/movimentos/${movimentoId}`,
+    revisarMovimento: (
+      empresaId: string,
+      movimentoId: string,
+      loteId?: string,
+    ) =>
+      `/empresas/${empresaId}/movimentos/${movimentoId}${
+        loteId ? `?loteId=${loteId}` : ""
+      }`,
     razaoContas: (empresaId: string) => `/empresas/${empresaId}/razao`,
   },
 } as const;

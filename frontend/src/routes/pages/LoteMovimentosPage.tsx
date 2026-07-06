@@ -380,6 +380,7 @@ export function LoteMovimentosPage() {
                       to={ROUTES.empresa.revisarMovimento(
                         empresaId ?? "",
                         String(movimento.id),
+                        loteId,
                       )}
                     >
                       Abrir revisao
