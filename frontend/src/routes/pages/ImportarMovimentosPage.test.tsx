@@ -11,7 +11,6 @@ import {
 } from "../../lib/api/importarMovimentosClient";
 import { ROUTES } from "../paths";
 import { ImportarMovimentosPage } from "./ImportarMovimentosPage";
-import { LoteMovimentosPage } from "./LoteMovimentosPage";
 
 vi.mock("../../lib/api/importarMovimentosClient", async (importOriginal) => {
   const actual =
@@ -50,7 +49,7 @@ function renderImportarMovimentosPage(accessToken = "jwt-de-teste") {
             />
             <Route
               path={ROUTES.empresa.loteMovimentosPath}
-              element={<LoteMovimentosPage />}
+              element={<h1>Lote de Movimentos</h1>}
             />
           </Routes>
         </MemoryRouter>
