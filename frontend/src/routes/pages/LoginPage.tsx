@@ -8,6 +8,10 @@ import {
   NetworkAuthError,
   authClient,
 } from "../../lib/api/authClient";
+import {
+  DEMO_PREVIEW_EMAIL,
+  DEMO_PREVIEW_TOKEN,
+} from "../../lib/demoPreview";
 import { ROUTES } from "../paths";
 
 export function LoginPage() {
@@ -53,6 +57,14 @@ export function LoginPage() {
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  function handleDemoLogin() {
+    setSession({
+      accessToken: DEMO_PREVIEW_TOKEN,
+      userEmail: DEMO_PREVIEW_EMAIL,
+    });
+    navigate(ROUTES.empresas, { replace: true });
   }
 
   return (
@@ -135,6 +147,16 @@ export function LoginPage() {
                 {isSubmitting ? "Entrando..." : "Entrar"}
               </button>
             </form>
+
+            {import.meta.env.DEV ? (
+              <button
+                className="mt-3 w-full border border-[#007693] bg-white px-4 py-2.5 text-sm font-semibold text-[#004E61] transition hover:bg-[#007693]/5 focus:outline-none focus:ring-2 focus:ring-[#007693] focus:ring-offset-2"
+                onClick={handleDemoLogin}
+                type="button"
+              >
+                Entrar em modo demo
+              </button>
+            ) : null}
 
             <p className="mt-5 text-sm leading-6 text-slate-600">
               Problemas de acesso devem ser tratados com o administrador interno.
