@@ -9,6 +9,7 @@ import {
   loteMovimentosClient,
 } from "../../lib/api/loteMovimentosClient";
 import type { MovimentoOperacional } from "../../lib/api/loteMovimentosClient";
+import { revisarMovimentoClient } from "../../lib/api/revisarMovimentoClient";
 import { ROUTES } from "../paths";
 import { LoteMovimentosPage } from "./LoteMovimentosPage";
 import { RevisarMovimentoPage } from "./RevisarMovimentoPage";
@@ -27,11 +28,26 @@ vi.mock("../../lib/api/loteMovimentosClient", async (importOriginal) => {
   };
 });
 
+vi.mock("../../lib/api/revisarMovimentoClient", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../../lib/api/revisarMovimentoClient")>();
+
+  return {
+    ...actual,
+    revisarMovimentoClient: {
+      getMovimento: vi.fn(),
+      reviewMovimento: vi.fn(),
+      searchContas: vi.fn(),
+    },
+  };
+});
+
 const listMovimentosMock = vi.mocked(loteMovimentosClient.listMovimentos);
 const reviewMovimentosMock = vi.mocked(loteMovimentosClient.reviewMovimentos);
 const classificarPendentesMock = vi.mocked(
   loteMovimentosClient.classificarPendentes,
 );
+const getMovimentoMock = vi.mocked(revisarMovimentoClient.getMovimento);
 
 const movimentos: MovimentoOperacional[] = [
   {
@@ -125,6 +141,7 @@ describe("LoteMovimentosPage", () => {
     listMovimentosMock.mockReset();
     reviewMovimentosMock.mockReset();
     classificarPendentesMock.mockReset();
+    getMovimentoMock.mockReset();
   });
 
   it("lista movimentos do lote e filtra por status", async () => {
@@ -179,6 +196,7 @@ describe("LoteMovimentosPage", () => {
       failureCount: 0,
       failures: [],
     });
+    getMovimentoMock.mockResolvedValueOnce(movimentos[0]);
 
     renderLoteMovimentosPage();
 
@@ -206,6 +224,7 @@ describe("LoteMovimentosPage", () => {
     expect(
       await screen.findByRole("heading", { name: "Revisar Movimento" }),
     ).toBeInTheDocument();
+    expect(getMovimentoMock).toHaveBeenCalledWith("jwt-de-teste", "7", "15", "91");
   });
 
   it("rejeita selecionados e exibe falha parcial", async () => {
