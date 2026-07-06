@@ -108,4 +108,15 @@ describe("LoginPage", () => {
 
     expect(screen.getByText(/Sessao expirada/)).toBeInTheDocument();
   });
+
+  it("permite entrar em modo demo somente no ambiente de desenvolvimento", async () => {
+    renderLogin();
+
+    fireEvent.click(screen.getByRole("button", { name: "Entrar em modo demo" }));
+
+    expect(loginMock).not.toHaveBeenCalled();
+    expect(
+      await screen.findByRole("heading", { name: "Empresas" }),
+    ).toBeInTheDocument();
+  });
 });

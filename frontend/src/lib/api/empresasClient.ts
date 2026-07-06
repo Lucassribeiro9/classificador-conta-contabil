@@ -1,3 +1,5 @@
+import { isDemoPreviewToken } from "../demoPreview";
+
 export type EmpresaResumo = {
   id: number;
   nome: string;
@@ -38,6 +40,14 @@ export class EmpresasSessionExpiredError extends Error {
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 const EMPRESAS_PATH = "/api/v1/companies";
+const DEMO_EMPRESAS: EmpresaResumo[] = [
+  {
+    id: 7,
+    nome: "Comercial Alfa LTDA",
+    documento: "12.345.678/0001-90",
+    papel: "operador",
+  },
+];
 
 function mapEmpresa(data: EmpresaApiResponse): EmpresaResumo {
   return {
@@ -49,6 +59,10 @@ function mapEmpresa(data: EmpresaApiResponse): EmpresaResumo {
 }
 
 async function list(accessToken: string): Promise<EmpresaResumo[]> {
+  if (isDemoPreviewToken(accessToken)) {
+    return DEMO_EMPRESAS;
+  }
+
   let response: Response;
 
   try {

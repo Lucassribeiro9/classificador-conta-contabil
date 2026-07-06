@@ -56,4 +56,19 @@ describe("empresasClient", () => {
       EmpresasNetworkError,
     );
   });
+
+  it("retorna empresas demo em desenvolvimento sem chamar a API", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(empresasClient.list("demo-preview-token")).resolves.toEqual([
+      {
+        id: 7,
+        nome: "Comercial Alfa LTDA",
+        documento: "12.345.678/0001-90",
+        papel: "operador",
+      },
+    ]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
