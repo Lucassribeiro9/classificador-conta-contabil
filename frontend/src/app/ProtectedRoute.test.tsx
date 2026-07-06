@@ -8,7 +8,16 @@ import { ROUTES } from "../routes/paths";
 
 function renderProtectedRoute(session: { accessToken: string } | null) {
   render(
-    <AuthProvider initialSession={session}>
+    <AuthProvider
+      initialSession={
+        session
+          ? {
+              accessToken: session.accessToken,
+              userEmail: "teste@interno.local",
+            }
+          : null
+      }
+    >
       <MemoryRouter initialEntries={[ROUTES.empresas]}>
         <Routes>
           <Route path={ROUTES.login} element={<h1>Login</h1>} />
