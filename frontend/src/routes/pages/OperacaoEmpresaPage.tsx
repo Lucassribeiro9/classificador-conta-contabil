@@ -9,6 +9,7 @@ import {
   operacaoEmpresaClient,
 } from "../../lib/api/operacaoEmpresaClient";
 import type { OperacaoEmpresaHub } from "../../lib/api/operacaoEmpresaClient";
+import { PageState, operationalMessages } from "../../ui/operationalMessages";
 import { ROUTES } from "../paths";
 
 type SummaryCardProps = {
@@ -55,21 +56,6 @@ function Alert({ children }: { children: string }) {
     <p className="border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
       {children}
     </p>
-  );
-}
-
-function PageState({
-  title,
-  description,
-}: {
-  title: string;
-  description: string;
-}) {
-  return (
-    <section className="border border-slate-200 bg-white p-6 shadow-sm">
-      <h1 className="text-lg font-semibold text-slate-950">{title}</h1>
-      <p className="mt-2 max-w-2xl text-sm text-slate-600">{description}</p>
-    </section>
   );
 }
 
@@ -215,39 +201,19 @@ export function OperacaoEmpresaPage() {
   }, [hub.error, setSession]);
 
   if (hub.isLoading) {
-    return (
-      <PageState
-        title="Carregando operacao"
-        description="Buscando resumo da empresa, razao, movimentos e modelo."
-      />
-    );
+    return <PageState message={operationalMessages.loading.operacao} />;
   }
 
   if (hub.error instanceof OperacaoEmpresaAccessDeniedError) {
-    return (
-      <PageState
-        title="Acesso negado"
-        description="Seu usuario nao tem permissao para consultar esta empresa."
-      />
-    );
+    return <PageState message={operationalMessages.accessDenied.empresa} />;
   }
 
   if (hub.isError) {
-    return (
-      <PageState
-        title="Nao foi possivel carregar a operacao"
-        description="Verifique a conexao com a API interna e tente novamente."
-      />
-    );
+    return <PageState message={operationalMessages.error.operacao} />;
   }
 
   if (!hub.data) {
-    return (
-      <PageState
-        title="Empresa nao encontrada"
-        description="Volte para Empresas e selecione um cliente disponivel."
-      />
-    );
+    return <PageState message={operationalMessages.empty.empresaNaoEncontrada} />;
   }
 
   return <HubContent hub={hub.data} />;

@@ -11,15 +11,11 @@ import {
   importarMovimentosClient,
 } from "../../lib/api/importarMovimentosClient";
 import type { ImportarMovimentosResumo } from "../../lib/api/importarMovimentosClient";
+import {
+  getImportStatusMessage,
+  operationalMessages,
+} from "../../ui/operationalMessages";
 import { ROUTES } from "../paths";
-
-function statusTitle(resumo: ImportarMovimentosResumo) {
-  if (resumo.status === "completed_with_warnings" || resumo.warnings.length) {
-    return "Importacao com warnings";
-  }
-
-  return "Importacao concluida";
-}
 
 function SummaryMetric({ label, value }: { label: string; value: string }) {
   return (
@@ -41,14 +37,17 @@ function ImportSummary({
   onReset: () => void;
   resumo: ImportarMovimentosResumo;
 }) {
+  const statusMessage = getImportStatusMessage(resumo);
+
   return (
     <section className="border border-slate-200 bg-white p-5 shadow-sm">
       <p className="text-xs font-semibold uppercase tracking-wide text-brand-dark">
         Lote {resumo.loteId}
       </p>
       <h2 className="mt-1 text-lg font-semibold text-slate-950">
-        {statusTitle(resumo)}
+        {statusMessage.title}
       </h2>
+      <p className="mt-1 text-sm text-slate-600">{statusMessage.description}</p>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         <SummaryMetric
@@ -67,7 +66,9 @@ function ImportSummary({
 
       {resumo.warnings.length ? (
         <div className="mt-4 border border-amber-200 bg-amber-50 px-4 py-3">
-          <p className="text-sm font-semibold text-amber-950">Warnings</p>
+          <p className="text-sm font-semibold text-amber-950">
+            Avisos da importacao
+          </p>
           <ul className="mt-2 grid gap-1 text-sm text-amber-900">
             {resumo.warnings.map((warning) => (
               <li key={warning}>{warning}</li>
@@ -115,7 +116,7 @@ export function ImportarMovimentosPage() {
     }
 
     if (!session?.accessToken || !empresaId) {
-      setMessage("Sessao indisponivel. Entre novamente para continuar.");
+      setMessage(operationalMessages.sessionExpired.unavailable.description);
       return;
     }
 
@@ -136,16 +137,16 @@ export function ImportarMovimentosPage() {
           state: { reason: "Sessao expirada" },
         });
       } else if (error instanceof ImportarMovimentosAccessDeniedError) {
-        setMessage("Seu usuario nao tem permissao para importar nesta empresa.");
+        setMessage("Seu usuario nao pode importar nesta empresa.");
       } else if (error instanceof ImportarMovimentosBlockedError) {
         setMessage(error.message);
       } else if (
         error instanceof ImportarMovimentosNetworkError ||
         error instanceof TypeError
       ) {
-        setMessage("Nao foi possivel conectar a API interna.");
+        setMessage(operationalMessages.error.network.description);
       } else {
-        setMessage("Importacao bloqueada pela API.");
+        setMessage(operationalMessages.importacao.blocked.description);
       }
     } finally {
       setIsSubmitting(false);

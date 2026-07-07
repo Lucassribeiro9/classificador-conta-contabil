@@ -96,7 +96,7 @@ describe("LoginPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Entrar" }));
 
     expect(
-      await screen.findByText(/Nao foi possivel conectar/),
+      await screen.findByText("Verifique a API interna e tente novamente."),
     ).toBeInTheDocument();
   });
 

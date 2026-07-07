@@ -158,7 +158,7 @@ describe("ImportarMovimentosPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Importar arquivo" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Nao foi possivel conectar a API interna.",
+      "Verifique a API interna e tente novamente.",
     );
   });
 });

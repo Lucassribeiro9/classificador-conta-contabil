@@ -189,6 +189,8 @@ describe("OperacaoEmpresaPage", () => {
         name: "Nao foi possivel carregar a operacao",
       }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Verifique a conexao/)).toBeInTheDocument();
+    expect(
+      screen.getByText("Verifique a API interna e tente novamente."),
+    ).toBeInTheDocument();
   });
 });
