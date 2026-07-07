@@ -73,6 +73,12 @@ Responsabilidades:
 ## Estado e Dados
 
 - Autenticacao deve manter token e usuario atual em fronteira clara.
+- No MVP, o access token JWT deve ser persistido em `sessionStorage`, nao em
+  `localStorage`.
+- O estado React pode refletir a sessao ativa e ser reidratado a partir do
+  `sessionStorage` ao recarregar a aba.
+- Sessao expirada ou resposta `401` da API deve limpar estado, limpar
+  `sessionStorage` e retornar o usuario ao login.
 - Dados remotos devem ser carregados com TanStack Query.
 - Mutations devem invalidar queries afetadas.
 - Erros da API devem ser normalizados para mensagens operacionais.
@@ -105,6 +111,10 @@ export function EmpresasPage() {
 ```
 
 Componentes devem expressar estados de usuario. Hooks e services devem concentrar integracao com API.
+
+Formularios iniciais devem ser controlados simples em React. Bibliotecas de
+formularios ou validacao externa ficam fora do MVP e exigem issue propria se a
+complexidade crescer.
 
 ## Testing Strategy
 
@@ -143,7 +153,19 @@ Componentes devem expressar estados de usuario. Hooks e services devem concentra
 5. `chore(frontend): configurar testes e lint`
 6. `test(frontend): criar smoke test de roteamento`
 
+## Decisoes Aprovadas Apos Task Review #283
+
+- O token JWT sera persistido em `sessionStorage` no MVP para preservar a
+  sessao durante refresh da aba sem usar persistencia longa em `localStorage`.
+- O timeout da sessao continua definido pelo `exp` do JWT emitido pela API. A
+  primeira versao usa access token de 12 horas e nao implementa refresh token.
+- `401` da API representa sessao expirada para a UI: limpar sessao e retornar
+  ao login.
+- Formularios iniciais usam formularios controlados simples em React, sem
+  biblioteca dedicada.
+- Refresh token, troca de estrategia de storage ou biblioteca de formularios
+  exigem issue propria.
+
 ## Open Questions
 
-- O token JWT ficara apenas em memoria ou havera persistencia em storage no MVP?
-- O projeto usara biblioteca de formularios ou formularios controlados simples inicialmente?
+- Nenhuma em aberto para persistencia JWT e estrategia inicial de formularios.
