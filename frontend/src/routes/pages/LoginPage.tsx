@@ -12,6 +12,7 @@ import {
   DEMO_PREVIEW_EMAIL,
   DEMO_PREVIEW_TOKEN,
 } from "../../lib/demoPreview";
+import { operationalMessages } from "../../ui/operationalMessages";
 import { ROUTES } from "../paths";
 
 export function LoginPage() {
@@ -22,7 +23,7 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState<string | null>(
     location.state?.reason === "Sessao expirada"
-      ? "Sessao expirada. Entre novamente para continuar."
+      ? `${operationalMessages.sessionExpired.login.title}. ${operationalMessages.sessionExpired.login.description}`
       : null,
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -42,9 +43,7 @@ export function LoginPage() {
         error instanceof TypeError ||
         String(error).includes("Failed to fetch")
       ) {
-        setMessage(
-          "Nao foi possivel conectar ao servidor. Tente novamente em instantes.",
-        );
+        setMessage(operationalMessages.error.network.description);
       } else if (error instanceof InvalidCredentialsError) {
         setMessage(
           "Credenciais invalidas. Verifique os dados ou contate o administrador.",

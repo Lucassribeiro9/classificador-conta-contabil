@@ -13,21 +13,7 @@ import type {
   LoteRazaoResumo,
   PaginatedResult,
 } from "../../lib/api/razaoContasClient";
-
-function PageState({
-  title,
-  description,
-}: {
-  title: string;
-  description: string;
-}) {
-  return (
-    <section className="border border-slate-200 bg-white p-6 shadow-sm">
-      <h1 className="text-lg font-semibold text-slate-950">{title}</h1>
-      <p className="mt-2 max-w-2xl text-sm text-slate-600">{description}</p>
-    </section>
-  );
-}
+import { PageState, operationalMessages } from "../../ui/operationalMessages";
 
 function formatStatus(status: string) {
   const labels: Record<string, string> = {
@@ -203,10 +189,10 @@ function LancamentosPanel({
         ) : (
           <div className="border border-slate-200 bg-slate-50 p-4">
             <h3 className="text-sm font-semibold text-slate-950">
-              Sem lancamentos neste filtro
+              {operationalMessages.empty.semLancamentosFiltro.title}
             </h3>
             <p className="mt-1 text-sm text-slate-600">
-              Ajuste a busca por codigo ou historico para consultar o lote.
+              {operationalMessages.empty.semLancamentosFiltro.description}
             </p>
           </div>
         )}
@@ -284,39 +270,19 @@ export function RazaoContasPage() {
   }, [lotes.error, lancamentos.error, setSession]);
 
   if (lotes.isLoading) {
-    return (
-      <PageState
-        title="Carregando razao"
-        description="Buscando lotes importados e dados de apoio."
-      />
-    );
+    return <PageState message={operationalMessages.loading.razao} />;
   }
 
   if (lotes.error instanceof RazaoContasAccessDeniedError) {
-    return (
-      <PageState
-        title="Acesso negado"
-        description="Seu usuario nao tem permissao para consultar o razao desta empresa."
-      />
-    );
+    return <PageState message={operationalMessages.accessDenied.razao} />;
   }
 
   if (lotes.isError) {
-    return (
-      <PageState
-        title="Nao foi possivel carregar o razao"
-        description="Verifique a conexao com a API interna e tente novamente."
-      />
-    );
+    return <PageState message={operationalMessages.error.razao} />;
   }
 
   if (!lotes.data?.items.length) {
-    return (
-      <PageState
-        title="Sem razao importado"
-        description="Importe um lote de razao para consultar lancamentos normalizados."
-      />
-    );
+    return <PageState message={operationalMessages.empty.semRazao} />;
   }
 
   return (
@@ -348,15 +314,9 @@ export function RazaoContasPage() {
         </div>
 
         {lancamentos.error instanceof RazaoContasAccessDeniedError ? (
-          <PageState
-            title="Acesso negado"
-            description="Seu usuario nao tem permissao para consultar os lancamentos deste lote."
-          />
+          <PageState message={operationalMessages.accessDenied.lancamentos} />
         ) : lancamentos.isError ? (
-          <PageState
-            title="Nao foi possivel carregar os lancamentos"
-            description="Verifique a conexao com a API interna e tente novamente."
-          />
+          <PageState message={operationalMessages.error.lancamentos} />
         ) : (
           <LancamentosPanel
             data={lancamentos.data}

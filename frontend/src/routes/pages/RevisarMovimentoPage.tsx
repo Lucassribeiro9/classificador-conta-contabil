@@ -13,22 +13,8 @@ import type {
   MovimentoRevisao,
   RevisaoMovimentoRequest,
 } from "../../lib/api/revisarMovimentoClient";
+import { PageState, operationalMessages } from "../../ui/operationalMessages";
 import { ROUTES } from "../paths";
-
-function PageState({
-  title,
-  description,
-}: {
-  title: string;
-  description: string;
-}) {
-  return (
-    <section className="border border-slate-200 bg-white p-6 shadow-sm">
-      <h1 className="text-lg font-semibold text-slate-950">{title}</h1>
-      <p className="mt-2 max-w-2xl text-sm text-slate-600">{description}</p>
-    </section>
-  );
-}
 
 function formatConfidence(value: number | null) {
   if (value === null) return "Sem confianca calculada";
@@ -178,37 +164,24 @@ export function RevisarMovimentoPage() {
   if (!loteId) {
     return (
       <PageState
-        title="Lote nao informado"
-        description="Abra a revisao a partir da lista do lote para manter o contrato da API."
+        message={{
+          title: "Lote nao informado",
+          description: "Abra a revisao pela lista do lote.",
+        }}
       />
     );
   }
 
   if (movimento.isLoading) {
-    return (
-      <PageState
-        title="Carregando movimento"
-        description="Buscando dados, sugestao de ML e historico relevante."
-      />
-    );
+    return <PageState message={operationalMessages.loading.movimento} />;
   }
 
   if (movimento.error instanceof RevisarMovimentoAccessDeniedError) {
-    return (
-      <PageState
-        title="Acesso negado"
-        description="Seu usuario nao tem permissao para revisar este movimento."
-      />
-    );
+    return <PageState message={operationalMessages.accessDenied.movimento} />;
   }
 
   if (movimento.isError || !movimento.data) {
-    return (
-      <PageState
-        title="Nao foi possivel carregar o movimento"
-        description="Verifique a conexao com a API interna e tente novamente."
-      />
-    );
+    return <PageState message={operationalMessages.error.movimento} />;
   }
 
   const isGlobalNaoVinculada = !isContaVinculada(selectedConta, vinculadas);

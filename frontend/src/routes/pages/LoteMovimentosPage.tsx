@@ -13,6 +13,7 @@ import type {
   ReviewMovimentoRequest,
   StatusMovimentoFiltro,
 } from "../../lib/api/loteMovimentosClient";
+import { PageState, operationalMessages } from "../../ui/operationalMessages";
 import { ROUTES } from "../paths";
 
 const STATUS_FILTERS: Array<{ value: StatusMovimentoFiltro; label: string }> = [
@@ -23,21 +24,6 @@ const STATUS_FILTERS: Array<{ value: StatusMovimentoFiltro; label: string }> = [
   { value: "aprovado", label: "Aprovados" },
   { value: "rejeitado", label: "Rejeitados" },
 ];
-
-function PageState({
-  title,
-  description,
-}: {
-  title: string;
-  description: string;
-}) {
-  return (
-    <section className="border border-slate-200 bg-white p-6 shadow-sm">
-      <h1 className="text-lg font-semibold text-slate-950">{title}</h1>
-      <p className="mt-2 max-w-2xl text-sm text-slate-600">{description}</p>
-    </section>
-  );
-}
 
 function formatStatus(status: string) {
   const labels: Record<string, string> = {
@@ -143,30 +129,15 @@ export function LoteMovimentosPage() {
   }, [movimentos.error, navigate, setSession]);
 
   if (movimentos.isLoading) {
-    return (
-      <PageState
-        title="Carregando lote"
-        description="Buscando movimentos operacionais e status de revisao."
-      />
-    );
+    return <PageState message={operationalMessages.loading.lote} />;
   }
 
   if (movimentos.error instanceof LoteMovimentosAccessDeniedError) {
-    return (
-      <PageState
-        title="Acesso negado"
-        description="Seu usuario nao tem permissao para consultar este lote."
-      />
-    );
+    return <PageState message={operationalMessages.accessDenied.lote} />;
   }
 
   if (movimentos.isError) {
-    return (
-      <PageState
-        title="Nao foi possivel carregar o lote"
-        description="Verifique a conexao com a API interna e tente novamente."
-      />
-    );
+    return <PageState message={operationalMessages.error.lote} />;
   }
 
   const items = movimentos.data?.items ?? [];
@@ -393,10 +364,10 @@ export function LoteMovimentosPage() {
         ) : (
           <div className="p-6">
             <h2 className="text-lg font-semibold text-slate-950">
-              Sem movimentos neste filtro
+              {operationalMessages.empty.semMovimentosFiltro.title}
             </h2>
             <p className="mt-2 text-sm text-slate-600">
-              Altere o status para consultar outros movimentos do lote.
+              {operationalMessages.empty.semMovimentosFiltro.description}
             </p>
           </div>
         )}

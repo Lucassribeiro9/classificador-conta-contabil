@@ -9,6 +9,7 @@ import {
   empresasClient,
 } from "../../lib/api/empresasClient";
 import type { EmpresaResumo } from "../../lib/api/empresasClient";
+import { PageState, operationalMessages } from "../../ui/operationalMessages";
 import { ROUTES } from "../paths";
 
 function EmpresaCard({ empresa }: { empresa: EmpresaResumo }) {
@@ -49,21 +50,6 @@ function EmpresaCard({ empresa }: { empresa: EmpresaResumo }) {
   );
 }
 
-function PageState({
-  title,
-  description,
-}: {
-  title: string;
-  description: string;
-}) {
-  return (
-    <section className="border border-slate-200 bg-white p-6 shadow-sm">
-      <h2 className="text-base font-semibold text-slate-950">{title}</h2>
-      <p className="mt-2 max-w-2xl text-sm text-slate-600">{description}</p>
-    </section>
-  );
-}
-
 export function EmpresasPage() {
   const { session, setSession } = useAuth();
   const accessToken = session?.accessToken ?? "";
@@ -83,8 +69,8 @@ export function EmpresasPage() {
   if (empresas.isLoading) {
     return (
       <PageState
-        title="Carregando empresas"
-        description="Buscando as empresas liberadas para o seu usuario."
+        message={operationalMessages.loading.empresas}
+        titleAs="h2"
       />
     );
   }
@@ -92,8 +78,8 @@ export function EmpresasPage() {
   if (empresas.error instanceof EmpresasAccessDeniedError) {
     return (
       <PageState
-        title="Acesso negado"
-        description="Seu usuario nao tem permissao para consultar empresas. Contate o administrador."
+        message={operationalMessages.accessDenied.empresas}
+        titleAs="h2"
       />
     );
   }
@@ -101,8 +87,8 @@ export function EmpresasPage() {
   if (empresas.isError) {
     return (
       <PageState
-        title="Nao foi possivel carregar empresas"
-        description="Verifique a conexao com a API interna e tente novamente."
+        message={operationalMessages.error.empresas}
+        titleAs="h2"
       />
     );
   }
@@ -110,8 +96,8 @@ export function EmpresasPage() {
   if (!empresas.data?.length) {
     return (
       <PageState
-        title="Sem empresas vinculadas"
-        description="Nenhuma empresa esta liberada para o seu usuario. Contate o administrador."
+        message={operationalMessages.empty.semEmpresas}
+        titleAs="h2"
       />
     );
   }
