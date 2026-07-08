@@ -19,12 +19,28 @@ def test_frontend_package_declares_expected_stack_and_scripts():
         "typecheck": "tsc --noEmit",
         "lint": "eslint .",
         "test": "vitest run",
+        "test:e2e": "playwright test",
     }
     dependencies = package["dependencies"]
     assert "react" in dependencies
     assert "react-dom" in dependencies
     assert "react-router-dom" in dependencies
     assert "@tanstack/react-query" in dependencies
+
+
+def test_frontend_source_tree_matches_spec_10_base_structure():
+    expected_dirs = [
+        "src/app",
+        "src/components",
+        "src/features",
+        "src/lib",
+        "src/routes",
+        "src/styles",
+        "src/test",
+    ]
+
+    missing = [path for path in expected_dirs if not (FRONTEND / path).is_dir()]
+    assert missing == []
 
 
 def test_frontend_route_constants_cover_mvp_paths():
@@ -56,7 +72,7 @@ def test_frontend_shell_protects_internal_routes_and_shows_company_context():
     assert "empresaId" in app_shell
 
 
-def test_frontend_non_login_pages_are_placeholders_without_api_implementation():
+def test_frontend_routes_are_real_pages_not_scaffold_placeholders():
     pages = "\n".join(
         [
             _read("src/routes/pages/EmpresasPage.tsx"),
@@ -67,10 +83,6 @@ def test_frontend_non_login_pages_are_placeholders_without_api_implementation():
             _read("src/routes/pages/RazaoContasPage.tsx"),
         ]
     )
-    placeholder = _read("src/routes/pages/PagePlaceholder.tsx")
-    login_page = _read("src/routes/pages/LoginPage.tsx")
 
-    assert pages.count("<PagePlaceholder") == 6
-    assert "<PagePlaceholder" not in login_page
-    assert "Placeholder da issue #272" in placeholder
-    assert "chamada real da API fica fora do escopo" in placeholder
+    assert "<PagePlaceholder" not in pages
+    assert "Placeholder da issue #272" not in pages
