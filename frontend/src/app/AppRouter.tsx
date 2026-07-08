@@ -42,6 +42,7 @@ export function AppRouter() {
             />
           </Route>
         </Route>
+        <Route path="*" element={<Navigate to={ROUTES.empresas} replace />} />
       </Routes>
     </BrowserRouter>
   );
