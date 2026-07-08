@@ -1,12 +1,11 @@
-import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useAuth } from "../../app/auth";
+import { useEmpresasAutorizadasQuery } from "../../features/empresas/useEmpresasAutorizadasQuery";
 import {
   EmpresasAccessDeniedError,
   EmpresasSessionExpiredError,
-  empresasClient,
 } from "../../lib/api/empresasClient";
 import type { EmpresaResumo } from "../../lib/api/empresasClient";
 import { PageState, operationalMessages } from "../../ui/operationalMessages";
@@ -54,11 +53,7 @@ export function EmpresasPage() {
   const { session, setSession } = useAuth();
   const accessToken = session?.accessToken ?? "";
 
-  const empresas = useQuery({
-    queryKey: ["empresas", "autorizadas"],
-    queryFn: () => empresasClient.list(accessToken),
-    enabled: Boolean(accessToken),
-  });
+  const empresas = useEmpresasAutorizadasQuery(accessToken);
 
   useEffect(() => {
     if (empresas.error instanceof EmpresasSessionExpiredError) {
