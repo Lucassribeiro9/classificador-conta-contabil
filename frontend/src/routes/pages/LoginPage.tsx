@@ -147,7 +147,7 @@ export function LoginPage() {
               </button>
             </form>
 
-            {import.meta.env.DEV ? (
+            {import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEMO_LOGIN === "true" ? (
               <button
                 className="mt-3 w-full border border-[#007693] bg-white px-4 py-2.5 text-sm font-semibold text-[#004E61] transition hover:bg-[#007693]/5 focus:outline-none focus:ring-2 focus:ring-[#007693] focus:ring-offset-2"
                 onClick={handleDemoLogin}
