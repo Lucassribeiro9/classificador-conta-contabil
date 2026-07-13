@@ -133,6 +133,7 @@ celerybeat.pid
 .env
 .env.*
 !.env.example
+!.env.hml.example
 frontend/.env
 frontend/.env.*
 !frontend/.env.example
