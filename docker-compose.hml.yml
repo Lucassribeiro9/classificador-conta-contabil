@@ -1,0 +1,82 @@
+name: classificador-hml
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Defina POSTGRES_DB no ambiente de homologacao}
+      POSTGRES_USER: ${POSTGRES_USER:?Defina POSTGRES_USER no ambiente de homologacao}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no ambiente de homologacao}
+    volumes:
+      - postgres-hml-data:/var/lib/postgresql/data
+    networks:
+      - hml-db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -h 127.0.0.1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      APP_ENV: hml
+      DATABASE_URL: ${DATABASE_URL:?Defina DATABASE_URL no ambiente de homologacao}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?Defina ADMIN_TOKEN no ambiente de homologacao}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Defina JWT_SECRET_KEY no ambiente de homologacao}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://classificador-hml.interno}
+    command: >-
+      sh -c "alembic upgrade head &&
+      uvicorn api.main:app --host 0.0.0.0 --port 8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - hml-db
+      - hml-edge
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import json, urllib.request; assert json.load(urllib.request.urlopen('http://127.0.0.1:8000/health'))['status'] == 'online'"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - hml-edge
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+networks:
+  hml-db:
+    internal: true
+  hml-edge:
+    external: true
+    name: classificador-hml-edge
+
+volumes:
+  postgres-hml-data:
+    name: classificador-hml-postgres-data
