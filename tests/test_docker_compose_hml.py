@@ -53,11 +53,11 @@ def test_hml_environment_example_and_validation_commands_are_sanitized():
         "APP_ENV=hml",
         "FRONTEND_PUBLIC_URL=https://classificador-hml.interno",
         "API_PUBLIC_URL=https://classificador-hml.interno/api",
-        "POSTGRES_DB=classificador_hml",
-        "POSTGRES_USER=classificador_hml",
-        "DATABASE_URL=postgresql+psycopg://classificador_hml:CHANGE_ME",
-        "ADMIN_TOKEN=CHANGE_ME",
-        "JWT_SECRET_KEY=CHANGE_ME",
+        "POSTGRES_DB_HML=classificador_hml",
+        "POSTGRES_USER_HML=classificador_hml",
+        "DATABASE_URL_HML=postgresql+psycopg://classificador_hml:CHANGE_ME",
+        "ADMIN_TOKEN_HML=CHANGE_ME",
+        "JWT_SECRET_KEY_HML=CHANGE_ME",
         "CORS_ALLOWED_ORIGINS=https://classificador-hml.interno",
     }
     assert all(variable in env_example for variable in expected_variables)

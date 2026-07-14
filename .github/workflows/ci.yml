@@ -18,6 +18,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Prepare test environment
+        run: cp .env.example .env
+
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
