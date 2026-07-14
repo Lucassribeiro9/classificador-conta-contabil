@@ -91,26 +91,49 @@ describe("revisarMovimentoClient", () => {
       "/api/v1/companies/7/movimentos-operacionais/lotes/15/movimentos?limit=100",
       { headers: { Authorization: "Bearer jwt-de-teste" } },
     );
-    expect(fetchMock).toHaveBeenCalledWith("/api/v1/plano-contas?nome=fornecedor", {
-      headers: { Authorization: "Bearer jwt-de-teste" },
-    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/plano-contas?nome=fornecedor",
+      {
+        headers: { Authorization: "Bearer jwt-de-teste" },
+      },
+    );
   });
 
   it("envia aprovar, corrigir e rejeitar para o endpoint de review", async () => {
-    const fetchMock = vi.fn().mockImplementation(() => jsonResponse(movimentoApi));
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(() => jsonResponse(movimentoApi));
     vi.stubGlobal("fetch", fetchMock);
 
-    await revisarMovimentoClient.reviewMovimento("jwt-de-teste", "7", "15", "91", {
-      action: "approve",
-      contaFinal: 20001,
-    });
-    await revisarMovimentoClient.reviewMovimento("jwt-de-teste", "7", "15", "91", {
-      action: "correct",
-      contaFinal: 30001,
-    });
-    await revisarMovimentoClient.reviewMovimento("jwt-de-teste", "7", "15", "91", {
-      action: "reject",
-    });
+    await revisarMovimentoClient.reviewMovimento(
+      "jwt-de-teste",
+      "7",
+      "15",
+      "91",
+      {
+        action: "approve",
+        contaFinal: 20001,
+      },
+    );
+    await revisarMovimentoClient.reviewMovimento(
+      "jwt-de-teste",
+      "7",
+      "15",
+      "91",
+      {
+        action: "correct",
+        contaFinal: 30001,
+      },
+    );
+    await revisarMovimentoClient.reviewMovimento(
+      "jwt-de-teste",
+      "7",
+      "15",
+      "91",
+      {
+        action: "reject",
+      },
+    );
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
@@ -139,7 +162,10 @@ describe("revisarMovimentoClient", () => {
   });
 
   it("normaliza acesso negado e erro de rede", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 403 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(null, { status: 403 })),
+    );
 
     await expect(
       revisarMovimentoClient.getMovimento("jwt-de-teste", "7", "15", "91"),
@@ -157,7 +183,12 @@ describe("revisarMovimentoClient", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(
-      revisarMovimentoClient.getMovimento("demo-preview-token", "7", "15", "91"),
+      revisarMovimentoClient.getMovimento(
+        "demo-preview-token",
+        "7",
+        "15",
+        "91",
+      ),
     ).resolves.toMatchObject({
       id: 91,
       contrapartidaSugerida: 20001,

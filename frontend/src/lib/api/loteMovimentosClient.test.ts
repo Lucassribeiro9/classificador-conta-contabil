@@ -49,7 +49,12 @@ describe("loteMovimentosClient", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(
-      loteMovimentosClient.listMovimentos("jwt-de-teste", "7", "15", "pre_classificado"),
+      loteMovimentosClient.listMovimentos(
+        "jwt-de-teste",
+        "7",
+        "15",
+        "pre_classificado",
+      ),
     ).resolves.toMatchObject({
       total: 1,
       items: [
@@ -109,7 +114,9 @@ describe("loteMovimentosClient", () => {
       vi
         .fn()
         .mockResolvedValueOnce(jsonResponse({ id: 91, status: "aprovado" }))
-        .mockResolvedValueOnce(jsonResponse({ detail: "Conta final invalida" }, 400)),
+        .mockResolvedValueOnce(
+          jsonResponse({ detail: "Conta final invalida" }, 400),
+        ),
     );
 
     await expect(
@@ -148,7 +155,10 @@ describe("loteMovimentosClient", () => {
       expect.objectContaining({ method: "POST" }),
     );
 
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 403 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(null, { status: 403 })),
+    );
     await expect(
       loteMovimentosClient.classificarPendentes("jwt-de-teste", "7"),
     ).rejects.toBeInstanceOf(LoteMovimentosAccessDeniedError);

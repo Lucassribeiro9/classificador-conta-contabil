@@ -80,13 +80,14 @@ describe("operacaoEmpresaClient", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/v1/companies/7", {
       headers: { Authorization: "Bearer jwt-de-teste" },
     });
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/v1/companies/7/ml/status",
-      { headers: { Authorization: "Bearer jwt-de-teste" } },
-    );
+    expect(fetchMock).toHaveBeenCalledWith("/api/v1/companies/7/ml/status", {
+      headers: { Authorization: "Bearer jwt-de-teste" },
+    });
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/v1/companies/7/razao/lotes?limit=5",
-      { headers: { Authorization: "Bearer jwt-de-teste" } },
+      {
+        headers: { Authorization: "Bearer jwt-de-teste" },
+      },
     );
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/v1/companies/7/movimentos-operacionais/lotes?limit=5",
@@ -95,7 +96,10 @@ describe("operacaoEmpresaClient", () => {
   });
 
   it("normaliza acesso negado e falha de rede", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 403 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(null, { status: 403 })),
+    );
 
     await expect(
       operacaoEmpresaClient.getHub("jwt-de-teste", "7"),

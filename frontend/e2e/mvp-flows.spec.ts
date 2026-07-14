@@ -11,23 +11,23 @@ async function enterDemo(page: Parameters<typeof test>[0]["page"]) {
 test("login demo abre empresas e hub operacional", async ({ page }) => {
   await enterDemo(page);
 
-  await page
-    .getByRole("button", { name: "Abrir Comercial Alfa LTDA" })
-    .click();
+  await page.getByRole("button", { name: "Abrir Comercial Alfa LTDA" }).click();
 
   await expect(
     page.getByRole("heading", { name: "Comercial Alfa LTDA" }),
   ).toBeVisible();
   await expect(page.getByText("Modelo pronto")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Importar movimentos" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Consultar razao" })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Importar movimentos" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Consultar razao" }),
+  ).toBeVisible();
 });
 
 test("importa movimentos em demo e abre o lote", async ({ page }) => {
   await enterDemo(page);
-  await page
-    .getByRole("button", { name: "Abrir Comercial Alfa LTDA" })
-    .click();
+  await page.getByRole("button", { name: "Abrir Comercial Alfa LTDA" }).click();
   await page.getByRole("link", { name: "Importar movimentos" }).click();
 
   await page.getByLabel("Arquivo .xlsx").setInputFiles({
@@ -55,9 +55,7 @@ test("revisa movimento com aprovacao, correcao e rejeicao explicitas", async ({
   page,
 }) => {
   await enterDemo(page);
-  await page
-    .getByRole("button", { name: "Abrir Comercial Alfa LTDA" })
-    .click();
+  await page.getByRole("button", { name: "Abrir Comercial Alfa LTDA" }).click();
   await page.getByRole("link", { name: "Abrir ultimo lote" }).click();
 
   const fornecedorRow = page.getByRole("row", { name: /pagamento fornecedor/ });
@@ -92,9 +90,7 @@ test("revisa movimento com aprovacao, correcao e rejeicao explicitas", async ({
 
 test("consulta razao e filtra lancamentos normalizados", async ({ page }) => {
   await enterDemo(page);
-  await page
-    .getByRole("button", { name: "Abrir Comercial Alfa LTDA" })
-    .click();
+  await page.getByRole("button", { name: "Abrir Comercial Alfa LTDA" }).click();
   await page.getByRole("link", { name: "Consultar razao" }).click();
 
   await expect(

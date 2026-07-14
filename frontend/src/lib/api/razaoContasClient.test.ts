@@ -90,7 +90,9 @@ describe("razaoContasClient", () => {
     });
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/v1/companies/7/razao/lotes?page=1&limit=10",
-      { headers: { Authorization: "Bearer jwt-de-teste" } },
+      {
+        headers: { Authorization: "Bearer jwt-de-teste" },
+      },
     );
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/v1/companies/7/razao/lotes/15/lancamentos?page=1&limit=10",
@@ -99,7 +101,10 @@ describe("razaoContasClient", () => {
   });
 
   it("normaliza acesso negado e erro de rede", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 403 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(null, { status: 403 })),
+    );
 
     await expect(
       razaoContasClient.listLotes("jwt-de-teste", "7", 1),

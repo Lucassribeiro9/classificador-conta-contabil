@@ -35,7 +35,7 @@ def test_global_styles_expose_base_tokens_and_tailwind_layers():
     assert "@tailwind components;" in global_css
     assert "@tailwind utilities;" in global_css
     assert "--color-brand: #007693;" in global_css
-    assert "--color-brand-dark: #004E61;" in global_css
+    assert "--color-brand-dark: #004e61;" in global_css
     assert "--color-surface: #ffffff;" in global_css
 
 

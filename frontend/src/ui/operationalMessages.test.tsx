@@ -32,7 +32,9 @@ describe("operationalMessages", () => {
   });
 
   it("distingue importacao concluida, com warnings e bloqueada", () => {
-    expect(getImportStatusMessage({ status: "completed", warnings: [] })).toEqual({
+    expect(
+      getImportStatusMessage({ status: "completed", warnings: [] }),
+    ).toEqual({
       title: "Importacao concluida",
       description: "Abra o lote ou importe outro arquivo.",
     });
@@ -45,12 +47,12 @@ describe("operationalMessages", () => {
       title: "Importacao com warnings",
       description: "Revise os avisos antes de abrir o lote.",
     });
-    expect(
-      getImportStatusMessage({ status: "blocked", warnings: [] }),
-    ).toEqual({
-      title: "Importacao bloqueada",
-      description: "Corrija o arquivo e tente novamente.",
-    });
+    expect(getImportStatusMessage({ status: "blocked", warnings: [] })).toEqual(
+      {
+        title: "Importacao bloqueada",
+        description: "Corrija o arquivo e tente novamente.",
+      },
+    );
   });
 });
 

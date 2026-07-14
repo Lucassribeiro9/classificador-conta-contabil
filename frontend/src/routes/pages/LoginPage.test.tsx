@@ -18,8 +18,7 @@ vi.mock("../../lib/api/authClient", () => ({
 const loginMock = vi.mocked(authClient.login);
 
 type LoginInitialEntry =
-  | string
-  | { pathname: string; state?: { reason: string } };
+  string | { pathname: string; state?: { reason: string } };
 
 function renderLogin(initialEntry: LoginInitialEntry = ROUTES.login) {
   render(
@@ -79,7 +78,9 @@ describe("LoginPage", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Entrar" }));
 
-    expect(await screen.findByText(/Credenciais invalidas/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Credenciais invalidas/),
+    ).toBeInTheDocument();
   });
 
   it("exibe orientacao para erro de rede", async () => {
@@ -112,7 +113,9 @@ describe("LoginPage", () => {
   it("permite entrar em modo demo somente no ambiente de desenvolvimento", async () => {
     renderLogin();
 
-    fireEvent.click(screen.getByRole("button", { name: "Entrar em modo demo" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Entrar em modo demo" }),
+    );
 
     expect(loginMock).not.toHaveBeenCalled();
     expect(

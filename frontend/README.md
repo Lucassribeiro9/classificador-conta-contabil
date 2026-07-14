@@ -7,15 +7,17 @@ Query. O frontend consome somente a API FastAPI.
 
 Execute a partir de `frontend/`:
 
-| Comando | Uso |
-| --- | --- |
-| `npm run dev` | Sobe o Vite em modo desenvolvimento. |
-| `npm run build` | Gera o build estatico da SPA. |
-| `npm run preview` | Serve o build localmente para validacao. |
-| `npm run typecheck` | Executa `tsc --noEmit`. |
-| `npm run lint` | Executa ESLint. |
-| `npm test` | Executa Vitest. |
-| `npm run test:e2e` | Executa Playwright. |
+| Comando                | Uso                                           |
+| ---------------------- | --------------------------------------------- |
+| `npm run dev`          | Sobe o Vite em modo desenvolvimento.          |
+| `npm run build`        | Gera o build estatico da SPA.                 |
+| `npm run preview`      | Serve o build localmente para validacao.      |
+| `npm run typecheck`    | Executa `tsc --noEmit`.                       |
+| `npm run lint`         | Executa ESLint.                               |
+| `npm run format`       | Formata os arquivos do frontend com Prettier. |
+| `npm run format:check` | Verifica a formatacao sem alterar arquivos.   |
+| `npm test`             | Executa Vitest.                               |
+| `npm run test:e2e`     | Executa Playwright.                           |
 
 ## Estrutura
 

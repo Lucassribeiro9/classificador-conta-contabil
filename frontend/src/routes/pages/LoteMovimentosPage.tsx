@@ -71,8 +71,9 @@ export function LoteMovimentosPage() {
 
   const selectedMovimentos = useMemo(() => {
     return (
-      movimentos.data?.items.filter((movimento) => selectedIds.has(movimento.id)) ??
-      []
+      movimentos.data?.items.filter((movimento) =>
+        selectedIds.has(movimento.id),
+      ) ?? []
     );
   }, [movimentos.data?.items, selectedIds]);
 
@@ -141,7 +142,8 @@ export function LoteMovimentosPage() {
   }
 
   const items = movimentos.data?.items ?? [];
-  const allSelected = items.length > 0 && items.every((item) => selectedIds.has(item.id));
+  const allSelected =
+    items.length > 0 && items.every((item) => selectedIds.has(item.id));
   const canApprove =
     selectedMovimentos.length > 0 &&
     selectedMovimentos.every((movimento) => contaParaAprovar(movimento));
@@ -327,7 +329,9 @@ export function LoteMovimentosPage() {
                     {movimento.data}
                   </td>
                   <td className="min-w-[240px] px-3 py-3 text-slate-950">
-                    <p className="font-medium">{movimento.historicoNormalizado}</p>
+                    <p className="font-medium">
+                      {movimento.historicoNormalizado}
+                    </p>
                     {movimento.mensagensValidacao.length ? (
                       <p className="mt-1 text-xs text-amber-700">
                         {movimento.mensagensValidacao.join(" ")}

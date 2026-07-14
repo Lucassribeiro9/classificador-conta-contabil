@@ -140,7 +140,8 @@ function mapLotes(data: LoteListApiResponse): LotesHubResumo {
   return {
     totalLotes: data.total,
     totalLinhas: data.items.reduce(
-      (total, lote) => total + (lote.total_importadas ?? lote.total_linhas ?? 0),
+      (total, lote) =>
+        total + (lote.total_importadas ?? lote.total_linhas ?? 0),
       0,
     ),
     ultimoStatus: ultimo?.status,
@@ -190,7 +191,10 @@ async function getHub(
   }
 
   const [empresa, ml, razao, movimentos] = await Promise.all([
-    fetchJson<EmpresaApiResponse>(`/api/v1/companies/${empresaId}`, accessToken),
+    fetchJson<EmpresaApiResponse>(
+      `/api/v1/companies/${empresaId}`,
+      accessToken,
+    ),
     fetchJson<MLStatusApiResponse>(
       `/api/v1/companies/${empresaId}/ml/status`,
       accessToken,
