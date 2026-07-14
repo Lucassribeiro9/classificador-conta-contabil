@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 
@@ -15,6 +16,26 @@ def test_frontend_scripts_expose_required_validation_commands():
     assert '"lint": "eslint ."' in package_json
     assert '"typecheck": "tsc --noEmit"' in package_json
     assert '"test": "vitest run"' in package_json
+
+
+def test_frontend_exposes_dedicated_format_commands_and_base_config():
+    package = json.loads(read_frontend("package.json"))
+    prettier_config = json.loads(read_frontend(".prettierrc.json"))
+    prettier_ignore = read_frontend(".prettierignore")
+
+    assert package["scripts"]["format"] == "prettier --write ."
+    assert package["scripts"]["format:check"] == "prettier --check ."
+    assert "prettier" in package["devDependencies"]
+    assert prettier_config == {
+        "endOfLine": "lf",
+        "semi": True,
+        "singleQuote": False,
+        "trailingComma": "all",
+    }
+    assert "package-lock.json" in prettier_ignore
+    assert "dist/" in prettier_ignore
+    assert "playwright-report/" in prettier_ignore
+    assert "test-results/" in prettier_ignore
 
 
 def test_vitest_uses_jsdom_and_testing_library_setup():

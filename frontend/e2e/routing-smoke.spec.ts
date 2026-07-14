@@ -10,7 +10,9 @@ test("smoke de rotas MVP abre SPA e navegacao principal sem dados reais", async 
   page,
 }) => {
   await page.goto("/login");
-  await expect(page.getByRole("button", { name: "Entrar", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Entrar", exact: true }),
+  ).toBeVisible();
 
   await enterDemo(page);
   await page.getByRole("button", { name: "Abrir Comercial Alfa LTDA" }).click();

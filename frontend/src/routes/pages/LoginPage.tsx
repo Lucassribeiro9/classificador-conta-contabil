@@ -8,10 +8,7 @@ import {
   NetworkAuthError,
   authClient,
 } from "../../lib/api/authClient";
-import {
-  DEMO_PREVIEW_EMAIL,
-  DEMO_PREVIEW_TOKEN,
-} from "../../lib/demoPreview";
+import { DEMO_PREVIEW_EMAIL, DEMO_PREVIEW_TOKEN } from "../../lib/demoPreview";
 import { operationalMessages } from "../../ui/operationalMessages";
 import { ROUTES } from "../paths";
 
@@ -85,9 +82,7 @@ export function LoginPage() {
             <span className="border-l-2 border-[#007693] pl-3">
               Empresas permitidas
             </span>
-            <span className="border-l-2 border-[#007693] pl-3">
-              Sessao JWT
-            </span>
+            <span className="border-l-2 border-[#007693] pl-3">Sessao JWT</span>
           </div>
         </section>
 
@@ -147,7 +142,8 @@ export function LoginPage() {
               </button>
             </form>
 
-            {import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEMO_LOGIN === "true" ? (
+            {import.meta.env.DEV ||
+            import.meta.env.VITE_ENABLE_DEMO_LOGIN === "true" ? (
               <button
                 className="mt-3 w-full border border-[#007693] bg-white px-4 py-2.5 text-sm font-semibold text-[#004E61] transition hover:bg-[#007693]/5 focus:outline-none focus:ring-2 focus:ring-[#007693] focus:ring-offset-2"
                 onClick={handleDemoLogin}
@@ -158,7 +154,8 @@ export function LoginPage() {
             ) : null}
 
             <p className="mt-5 text-sm leading-6 text-slate-600">
-              Problemas de acesso devem ser tratados com o administrador interno.
+              Problemas de acesso devem ser tratados com o administrador
+              interno.
             </p>
           </div>
         </section>

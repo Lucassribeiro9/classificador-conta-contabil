@@ -46,10 +46,13 @@ describe("apiClient", () => {
 
     await apiClient.get("/api/v1/health");
 
-    expect(fetchMock).toHaveBeenCalledWith("https://api.interna.test/api/v1/health", {
-      headers: {},
-      method: "GET",
-    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.interna.test/api/v1/health",
+      {
+        headers: {},
+        method: "GET",
+      },
+    );
   });
 
   it("normaliza 401, 403 e erro de rede", async () => {
@@ -60,17 +63,26 @@ describe("apiClient", () => {
       apiClient,
     } = await import("./apiClient");
 
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 401 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(null, { status: 401 })),
+    );
     await expect(apiClient.get("/api/v1/companies")).rejects.toBeInstanceOf(
       ApiSessionExpiredError,
     );
 
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 403 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(null, { status: 403 })),
+    );
     await expect(apiClient.get("/api/v1/companies")).rejects.toBeInstanceOf(
       ApiAccessDeniedError,
     );
 
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    );
     await expect(apiClient.get("/api/v1/companies")).rejects.toBeInstanceOf(
       ApiNetworkError,
     );
@@ -80,20 +92,25 @@ describe("apiClient", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ detail: "Arquivo precisa estar em formato XLSX." }), {
-          status: 422,
-          headers: { "Content-Type": "application/json" },
-        }),
+        new Response(
+          JSON.stringify({ detail: "Arquivo precisa estar em formato XLSX." }),
+          {
+            status: 422,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
       ),
     );
     const { ApiValidationError, apiClient } = await import("./apiClient");
 
-    await expect(apiClient.post("/api/v1/import", { body: {} })).rejects.toMatchObject({
+    await expect(
+      apiClient.post("/api/v1/import", { body: {} }),
+    ).rejects.toMatchObject({
       name: "ApiValidationError",
       message: "Arquivo precisa estar em formato XLSX.",
     });
-    await expect(apiClient.post("/api/v1/import", { body: {} })).rejects.toBeInstanceOf(
-      ApiValidationError,
-    );
+    await expect(
+      apiClient.post("/api/v1/import", { body: {} }),
+    ).rejects.toBeInstanceOf(ApiValidationError);
   });
 });

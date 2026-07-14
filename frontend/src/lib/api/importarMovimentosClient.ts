@@ -52,7 +52,9 @@ export class ImportarMovimentosSessionExpiredError extends Error {
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
-function mapResumo(data: ImportarMovimentosApiResponse): ImportarMovimentosResumo {
+function mapResumo(
+  data: ImportarMovimentosApiResponse,
+): ImportarMovimentosResumo {
   return {
     loteId: data.lote_id,
     status: data.status,

@@ -136,7 +136,12 @@ describe("RazaoContasPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Abrir lote 15" }));
 
-    expect(listLancamentosMock).toHaveBeenCalledWith("jwt-de-teste", "7", "15", 1);
+    expect(listLancamentosMock).toHaveBeenCalledWith(
+      "jwt-de-teste",
+      "7",
+      "15",
+      1,
+    );
     expect(await screen.findByText("pagamento fornecedor")).toBeInTheDocument();
     expect(screen.getByText("recebimento cliente")).toBeInTheDocument();
 
@@ -157,7 +162,9 @@ describe("RazaoContasPage", () => {
     await screen.findByText("razao-consulta.xlsx");
     const painel = screen.getByRole("region", { name: "Contas vinculadas" });
 
-    expect(within(painel).getByText("Contrato ainda nao disponivel")).toBeInTheDocument();
+    expect(
+      within(painel).getByText("Contrato ainda nao disponivel"),
+    ).toBeInTheDocument();
     expect(
       within(painel).getByText(
         "A API ainda nao expoe busca paginada de contas vinculadas por empresa.",
@@ -191,7 +198,9 @@ describe("RazaoContasPage", () => {
     renderRazaoContasPage();
 
     expect(
-      await screen.findByRole("heading", { name: "Nao foi possivel carregar o razao" }),
+      await screen.findByRole("heading", {
+        name: "Nao foi possivel carregar o razao",
+      }),
     ).toBeInTheDocument();
   });
 });

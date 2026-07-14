@@ -18,7 +18,9 @@ import { RevisarMovimentoPage } from "./RevisarMovimentoPage";
 
 vi.mock("../../lib/api/revisarMovimentoClient", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("../../lib/api/revisarMovimentoClient")>();
+    await importOriginal<
+      typeof import("../../lib/api/revisarMovimentoClient")
+    >();
 
   return {
     ...actual,
@@ -74,7 +76,9 @@ const contas: ContaContabilResumo[] = [
   },
 ];
 
-function renderRevisarMovimentoPage(entry = `${ROUTES.empresa.revisarMovimento("7", "91")}?loteId=15`) {
+function renderRevisarMovimentoPage(
+  entry = `${ROUTES.empresa.revisarMovimento("7", "91")}?loteId=15`,
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -116,18 +120,31 @@ describe("RevisarMovimentoPage", () => {
     expect(
       await screen.findByRole("heading", { name: "Revisar Movimento" }),
     ).toBeInTheDocument();
-    expect(getMovimentoMock).toHaveBeenCalledWith("jwt-de-teste", "7", "15", "91");
+    expect(getMovimentoMock).toHaveBeenCalledWith(
+      "jwt-de-teste",
+      "7",
+      "15",
+      "91",
+    );
     expect(screen.getByText("pagamento fornecedor")).toBeInTheDocument();
     expect(screen.getByText("91% de confianca")).toBeInTheDocument();
-    expect(screen.getByText("Conferencia humana obrigatoria.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Usar 20001/ })).toBeInTheDocument();
+    expect(
+      screen.getByText("Conferencia humana obrigatoria."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Usar 20001/ }),
+    ).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Buscar conta"), {
       target: { value: "fornecedor" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Buscar no plano completo" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Buscar no plano completo" }),
+    );
 
-    expect(await screen.findByRole("button", { name: /Usar 30001/ })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: /Usar 30001/ }),
+    ).toBeInTheDocument();
     expect(searchContasMock).toHaveBeenCalledWith("jwt-de-teste", "fornecedor");
   });
 
@@ -146,20 +163,30 @@ describe("RevisarMovimentoPage", () => {
     fireEvent.change(screen.getByLabelText("Buscar conta"), {
       target: { value: "servicos" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Buscar no plano completo" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Buscar no plano completo" }),
+    );
     fireEvent.click(await screen.findByRole("button", { name: /Usar 30001/ }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "O vinculo desta conta sera criado pelo backend ao salvar a revisao.",
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Corrigir com conta selecionada" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Corrigir com conta selecionada" }),
+    );
 
     await waitFor(() => {
-      expect(reviewMovimentoMock).toHaveBeenCalledWith("jwt-de-teste", "7", "15", "91", {
-        action: "correct",
-        contaFinal: 30001,
-      });
+      expect(reviewMovimentoMock).toHaveBeenCalledWith(
+        "jwt-de-teste",
+        "7",
+        "15",
+        "91",
+        {
+          action: "correct",
+          contaFinal: 30001,
+        },
+      );
     });
     expect(await screen.findByRole("status")).toHaveTextContent(
       "Movimento corrigido.",
@@ -184,10 +211,16 @@ describe("RevisarMovimentoPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Aprovar sugestao" }));
 
     await waitFor(() => {
-      expect(reviewMovimentoMock).toHaveBeenCalledWith("jwt-de-teste", "7", "15", "91", {
-        action: "approve",
-        contaFinal: 20001,
-      });
+      expect(reviewMovimentoMock).toHaveBeenCalledWith(
+        "jwt-de-teste",
+        "7",
+        "15",
+        "91",
+        {
+          action: "approve",
+          contaFinal: 20001,
+        },
+      );
     });
 
     fireEvent.change(screen.getByLabelText("Motivo de rejeicao"), {
@@ -201,13 +234,17 @@ describe("RevisarMovimentoPage", () => {
         "7",
         "15",
         "91",
-        { action: "reject" },
+        {
+          action: "reject",
+        },
       );
     });
   });
 
   it("exibe acesso negado, erro de rede e lote ausente", async () => {
-    getMovimentoMock.mockRejectedValueOnce(new RevisarMovimentoAccessDeniedError());
+    getMovimentoMock.mockRejectedValueOnce(
+      new RevisarMovimentoAccessDeniedError(),
+    );
     renderRevisarMovimentoPage();
 
     expect(

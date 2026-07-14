@@ -99,6 +99,12 @@ Quando houver acesso ao GitHub e o usuario pedir publicacao, o PR deve ser criad
 3. `docs(frontend): criar README inicial do frontend`
 4. `test(frontend): definir helpers de teste`
 
-## Open Questions
+## Decisoes Aprovadas Apos Issue #300
 
-- O frontend usara formatter automatico dedicado ou apenas regras de lint no primeiro momento?
+- O frontend usa Prettier como formatter automatico dedicado.
+- ESLint permanece responsavel por qualidade estatica e Prettier por
+  formatacao; os dois comandos nao sao acoplados.
+- `npm run format` aplica a formatacao e `npm run format:check` valida sem
+  alterar arquivos.
+- A configuracao inicial e conservadora e nao adiciona regras que exijam
+  refatoracao funcional.

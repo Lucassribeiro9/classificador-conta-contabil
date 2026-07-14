@@ -58,7 +58,11 @@ describe("importarMovimentosClient", () => {
   it("normaliza bloqueio da importacao, acesso negado e erro de rede", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValueOnce(jsonResponse({ detail: "Arquivo deve ser .xlsx" }, 400)),
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          jsonResponse({ detail: "Arquivo deve ser .xlsx" }, 400),
+        ),
     );
 
     await expect(
@@ -67,9 +71,14 @@ describe("importarMovimentosClient", () => {
         "7",
         new File(["csv"], "movimentos.csv", { type: "text/csv" }),
       ),
-    ).rejects.toMatchObject(new ImportarMovimentosBlockedError("Arquivo deve ser .xlsx"));
+    ).rejects.toMatchObject(
+      new ImportarMovimentosBlockedError("Arquivo deve ser .xlsx"),
+    );
 
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(new Response(null, { status: 403 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValueOnce(new Response(null, { status: 403 })),
+    );
 
     await expect(
       importarMovimentosClient.importar(

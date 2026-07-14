@@ -63,10 +63,7 @@ export function EmpresasPage() {
 
   if (empresas.isLoading) {
     return (
-      <PageState
-        message={operationalMessages.loading.empresas}
-        titleAs="h2"
-      />
+      <PageState message={operationalMessages.loading.empresas} titleAs="h2" />
     );
   }
 
@@ -81,19 +78,13 @@ export function EmpresasPage() {
 
   if (empresas.isError) {
     return (
-      <PageState
-        message={operationalMessages.error.empresas}
-        titleAs="h2"
-      />
+      <PageState message={operationalMessages.error.empresas} titleAs="h2" />
     );
   }
 
   if (!empresas.data?.length) {
     return (
-      <PageState
-        message={operationalMessages.empty.semEmpresas}
-        titleAs="h2"
-      />
+      <PageState message={operationalMessages.empty.semEmpresas} titleAs="h2" />
     );
   }
 

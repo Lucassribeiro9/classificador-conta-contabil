@@ -124,9 +124,7 @@ describe("OperacaoEmpresaPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Classificar pendentes")).toBeInTheDocument();
 
-    fireEvent.click(
-      screen.getByRole("link", { name: "Importar movimentos" }),
-    );
+    fireEvent.click(screen.getByRole("link", { name: "Importar movimentos" }));
     expect(
       await screen.findByRole("heading", { name: "Importar Movimentos" }),
     ).toBeInTheDocument();
@@ -160,7 +158,9 @@ describe("OperacaoEmpresaPage", () => {
     renderOperacaoEmpresaPage();
 
     expect(
-      await screen.findByText("Importe o razao antes de validar classificacao."),
+      await screen.findByText(
+        "Importe o razao antes de validar classificacao.",
+      ),
     ).toBeInTheDocument();
     expect(
       screen.getByText("Base insuficiente para classificacao automatica."),

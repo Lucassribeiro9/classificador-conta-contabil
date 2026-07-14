@@ -173,7 +173,11 @@ function HubContent({ hub }: { hub: OperacaoEmpresaHub }) {
         />
         <SummaryCard
           label="Movimentos"
-          value={pluralize(hub.movimentos.totalLinhas, "movimento", "movimentos")}
+          value={pluralize(
+            hub.movimentos.totalLinhas,
+            "movimento",
+            "movimentos",
+          )}
           detail={`${hub.movimentos.totalLotes} lotes operacionais`}
         />
       </div>
@@ -213,7 +217,9 @@ export function OperacaoEmpresaPage() {
   }
 
   if (!hub.data) {
-    return <PageState message={operationalMessages.empty.empresaNaoEncontrada} />;
+    return (
+      <PageState message={operationalMessages.empty.empresaNaoEncontrada} />
+    );
   }
 
   return <HubContent hub={hub.data} />;

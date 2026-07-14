@@ -67,7 +67,9 @@ function isContaVinculada(
   conta: ContaContabilResumo | null,
   vinculadas: ContaContabilResumo[],
 ) {
-  return Boolean(conta && vinculadas.some((item) => item.codigo === conta.codigo));
+  return Boolean(
+    conta && vinculadas.some((item) => item.codigo === conta.codigo),
+  );
 }
 
 export function RevisarMovimentoPage() {
@@ -80,15 +82,21 @@ export function RevisarMovimentoPage() {
   const loteId = searchParams.get("loteId") ?? "";
   const [query, setQuery] = useState("");
   const [resultados, setResultados] = useState<ContaContabilResumo[]>([]);
-  const [selectedConta, setSelectedConta] = useState<ContaContabilResumo | null>(
-    null,
-  );
+  const [selectedConta, setSelectedConta] =
+    useState<ContaContabilResumo | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [motivoRejeicao, setMotivoRejeicao] = useState("");
 
   const movimento = useQuery({
-    queryKey: ["empresas", empresaId, "lotes", loteId, "movimentos", movimentoId],
+    queryKey: [
+      "empresas",
+      empresaId,
+      "lotes",
+      loteId,
+      "movimentos",
+      movimentoId,
+    ],
     queryFn: () =>
       revisarMovimentoClient.getMovimento(
         accessToken,
@@ -408,7 +416,9 @@ export function RevisarMovimentoPage() {
                     <p className="text-sm font-semibold text-slate-950">
                       {conta.codigo} · {conta.nome}
                     </p>
-                    <p className="text-xs text-slate-500">{conta.classificacao}</p>
+                    <p className="text-xs text-slate-500">
+                      {conta.classificacao}
+                    </p>
                   </div>
                   <button
                     className="border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"

@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -30,7 +36,9 @@ vi.mock("../../lib/api/loteMovimentosClient", async (importOriginal) => {
 
 vi.mock("../../lib/api/revisarMovimentoClient", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("../../lib/api/revisarMovimentoClient")>();
+    await importOriginal<
+      typeof import("../../lib/api/revisarMovimentoClient")
+    >();
 
   return {
     ...actual,
@@ -119,7 +127,9 @@ function renderLoteMovimentosPage() {
           userEmail: "operador@interno.test",
         }}
       >
-        <MemoryRouter initialEntries={[ROUTES.empresa.loteMovimentos("7", "15")]}>
+        <MemoryRouter
+          initialEntries={[ROUTES.empresa.loteMovimentos("7", "15")]}
+        >
           <Routes>
             <Route
               path={ROUTES.empresa.loteMovimentosPath}
@@ -166,8 +176,15 @@ describe("LoteMovimentosPage", () => {
       await screen.findByRole("heading", { name: "Lote de Movimentos" }),
     ).toBeInTheDocument();
     expect(screen.getByText("pagamento fornecedor")).toBeInTheDocument();
-    expect(screen.getByText("transferencia sem contrapartida")).toBeInTheDocument();
-    expect(listMovimentosMock).toHaveBeenCalledWith("jwt-de-teste", "7", "15", "todos");
+    expect(
+      screen.getByText("transferencia sem contrapartida"),
+    ).toBeInTheDocument();
+    expect(listMovimentosMock).toHaveBeenCalledWith(
+      "jwt-de-teste",
+      "7",
+      "15",
+      "todos",
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Revisao" }));
 
@@ -206,7 +223,9 @@ describe("LoteMovimentosPage", () => {
     fireEvent.click(within(fornecedorRow).getByRole("checkbox"));
     expect(screen.getByText("1 selecionado")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Aprovar selecionados" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Aprovar selecionados" }),
+    );
 
     await waitFor(() => {
       expect(reviewMovimentosMock).toHaveBeenCalledWith(
@@ -220,11 +239,18 @@ describe("LoteMovimentosPage", () => {
       "1 movimento atualizado.",
     );
 
-    fireEvent.click(within(fornecedorRow).getByRole("link", { name: "Abrir revisao" }));
+    fireEvent.click(
+      within(fornecedorRow).getByRole("link", { name: "Abrir revisao" }),
+    );
     expect(
       await screen.findByRole("heading", { name: "Revisar Movimento" }),
     ).toBeInTheDocument();
-    expect(getMovimentoMock).toHaveBeenCalledWith("jwt-de-teste", "7", "15", "91");
+    expect(getMovimentoMock).toHaveBeenCalledWith(
+      "jwt-de-teste",
+      "7",
+      "15",
+      "91",
+    );
   });
 
   it("rejeita selecionados e exibe falha parcial", async () => {
@@ -244,14 +270,18 @@ describe("LoteMovimentosPage", () => {
     renderLoteMovimentosPage();
 
     fireEvent.click(
-      within(await screen.findByRole("row", { name: /pagamento fornecedor/ }))
-        .getByRole("checkbox"),
+      within(
+        await screen.findByRole("row", { name: /pagamento fornecedor/ }),
+      ).getByRole("checkbox"),
     );
     fireEvent.click(
-      within(screen.getByRole("row", { name: /transferencia sem contrapartida/ }))
-        .getByRole("checkbox"),
+      within(
+        screen.getByRole("row", { name: /transferencia sem contrapartida/ }),
+      ).getByRole("checkbox"),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Rejeitar selecionados" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Rejeitar selecionados" }),
+    );
 
     await waitFor(() => {
       expect(reviewMovimentosMock).toHaveBeenCalledWith(
@@ -287,22 +317,31 @@ describe("LoteMovimentosPage", () => {
     renderLoteMovimentosPage();
 
     expect(
-      await screen.findByText("Classificar pendentes atua em todos os pendentes da empresa."),
+      await screen.findByText(
+        "Classificar pendentes atua em todos os pendentes da empresa.",
+      ),
     ).toBeInTheDocument();
     fireEvent.click(
       within(screen.getByRole("row", { name: /tarifa bancaria/ })).getByRole(
         "checkbox",
       ),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Enviar para revisao" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Enviar para revisao" }),
+    );
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Envio para revisao aguarda contrato da API.",
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Classificar pendentes da empresa" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Classificar pendentes da empresa" }),
+    );
 
     await waitFor(() => {
-      expect(classificarPendentesMock).toHaveBeenCalledWith("jwt-de-teste", "7");
+      expect(classificarPendentesMock).toHaveBeenCalledWith(
+        "jwt-de-teste",
+        "7",
+      );
     });
     expect(await screen.findByRole("status")).toHaveTextContent(
       "2 pendentes classificados.",

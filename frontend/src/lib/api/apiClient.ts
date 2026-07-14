@@ -58,7 +58,10 @@ function buildBody(body: ApiRequestOptions["body"]) {
   return JSON.stringify(body);
 }
 
-function buildRequestInit(method: string, options: ApiRequestOptions): RequestInit {
+function buildRequestInit(
+  method: string,
+  options: ApiRequestOptions,
+): RequestInit {
   const headers = buildHeaders(options);
   const body = buildBody(options.body);
 
@@ -101,7 +104,10 @@ async function request<T>(
   let response: Response;
 
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, buildRequestInit(method, options));
+    response = await fetch(
+      `${API_BASE_URL}${path}`,
+      buildRequestInit(method, options),
+    );
   } catch {
     throw new ApiNetworkError();
   }

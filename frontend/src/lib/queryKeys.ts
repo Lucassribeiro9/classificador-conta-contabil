@@ -12,9 +12,17 @@ const movimentosKeys = {
   lote: (empresaId: string, loteId: string) =>
     [...movimentosKeys.lotes(empresaId), loteId] as const,
   lista: (empresaId: string, loteId: string, status?: string) =>
-    [...movimentosKeys.lote(empresaId, loteId), "lista", status ?? "todos"] as const,
+    [
+      ...movimentosKeys.lote(empresaId, loteId),
+      "lista",
+      status ?? "todos",
+    ] as const,
   detalhe: (empresaId: string, loteId: string, movimentoId: string) =>
-    [...movimentosKeys.lote(empresaId, loteId), "movimentos", movimentoId] as const,
+    [
+      ...movimentosKeys.lote(empresaId, loteId),
+      "movimentos",
+      movimentoId,
+    ] as const,
 };
 
 const razaoKeys = {
@@ -22,7 +30,12 @@ const razaoKeys = {
     [...empresasKeys.detalhe(empresaId), "razao"] as const,
   lotes: (empresaId: string, page?: number) =>
     [...razaoKeys.all(empresaId), "lotes", page ?? 1] as const,
-  lancamentos: (empresaId: string, loteId: string, page?: number, search?: string) =>
+  lancamentos: (
+    empresaId: string,
+    loteId: string,
+    page?: number,
+    search?: string,
+  ) =>
     [
       ...razaoKeys.all(empresaId),
       "lotes",
