@@ -55,11 +55,11 @@ def test_prod_example_and_runbook_require_release_gate_without_real_secrets():
         "APP_ENV=prod",
         "FRONTEND_PUBLIC_URL=https://classificador.interno",
         "API_PUBLIC_URL=https://classificador.interno/api",
-        "POSTGRES_DB=classificador_prod",
-        "POSTGRES_USER=classificador_prod",
-        "DATABASE_URL=postgresql+psycopg://classificador_prod:CHANGE_ME",
-        "ADMIN_TOKEN=CHANGE_ME",
-        "JWT_SECRET_KEY=CHANGE_ME",
+        "POSTGRES_DB_PROD=classificador_prod",
+        "POSTGRES_USER_PROD=classificador_prod",
+        "DATABASE_URL_PROD=postgresql+psycopg://classificador_prod:CHANGE_ME",
+        "ADMIN_TOKEN_PROD=CHANGE_ME",
+        "JWT_SECRET_KEY_PROD=CHANGE_ME",
         "CORS_ALLOWED_ORIGINS=https://classificador.interno",
     }
     assert all(variable in env_example for variable in expected_variables)
