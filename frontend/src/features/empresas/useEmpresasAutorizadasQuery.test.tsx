@@ -1,10 +1,9 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
-import type { ReactNode } from "react";
+import { waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { empresasClient } from "../../lib/api/empresasClient";
 import { queryKeys } from "../../lib/queryKeys";
+import { renderHookWithProviders } from "../../test/testUtils";
 import { useEmpresasAutorizadasQuery } from "./useEmpresasAutorizadasQuery";
 
 vi.mock("../../lib/api/empresasClient", async (importOriginal) => {
@@ -21,16 +20,6 @@ vi.mock("../../lib/api/empresasClient", async (importOriginal) => {
 
 const listEmpresasMock = vi.mocked(empresasClient.list);
 
-function wrapper({ children }: { children: ReactNode }) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-
-  return (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-  );
-}
-
 describe("useEmpresasAutorizadasQuery", () => {
   beforeEach(() => {
     listEmpresasMock.mockReset();
@@ -46,9 +35,8 @@ describe("useEmpresasAutorizadasQuery", () => {
       },
     ]);
 
-    const { result } = renderHook(
-      () => useEmpresasAutorizadasQuery("jwt-de-teste"),
-      { wrapper },
+    const { result } = renderHookWithProviders(() =>
+      useEmpresasAutorizadasQuery("jwt-de-teste"),
     );
 
     expect(result.current.queryKey).toEqual(queryKeys.empresas.autorizadas());
@@ -68,9 +56,9 @@ describe("useEmpresasAutorizadasQuery", () => {
   });
 
   it("mantem query desabilitada sem token de sessao", () => {
-    const { result } = renderHook(() => useEmpresasAutorizadasQuery(""), {
-      wrapper,
-    });
+    const { result } = renderHookWithProviders(() =>
+      useEmpresasAutorizadasQuery(""),
+    );
 
     expect(result.current.queryKey).toEqual(queryKeys.empresas.autorizadas());
     expect(result.current.fetchStatus).toBe("idle");
@@ -81,9 +69,8 @@ describe("useEmpresasAutorizadasQuery", () => {
     const error = new Error("Falha operacional");
     listEmpresasMock.mockRejectedValueOnce(error);
 
-    const { result } = renderHook(
-      () => useEmpresasAutorizadasQuery("jwt-de-teste"),
-      { wrapper },
+    const { result } = renderHookWithProviders(() =>
+      useEmpresasAutorizadasQuery("jwt-de-teste"),
     );
 
     await waitFor(() => expect(result.current.isError).toBe(true));

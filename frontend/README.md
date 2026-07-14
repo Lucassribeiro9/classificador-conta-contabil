@@ -32,6 +32,13 @@ src/test       setup/utilitarios de teste
 src/ui         componentes operacionais compartilhados
 ```
 
+## Testes
+
+Use `renderWithProviders` e `renderHookWithProviders`, de `src/test/testUtils`,
+para testes que dependam de TanStack Query, autenticacao ou React Router. Passe
+apenas a sessao, as entradas de rota ou um Query Client especifico exigidos pelo
+cenario. Mantenha rotas de apoio e mocks de API no proprio teste.
+
 ## Variaveis De Ambiente
 
 - `VITE_API_BASE_URL`: URL base da API FastAPI consumida pelo frontend. Nao
