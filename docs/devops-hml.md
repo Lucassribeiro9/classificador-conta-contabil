@@ -66,8 +66,15 @@ sem duplicar a massa sanitizada. Nao adicione esses tres segredos ao arquivo
 
 ## Validacao
 
+Execute o gate completo definido em `docs/homologacao-smoke-aplicacao.md`:
+
+```bash
+python -m scripts.smoke_homologacao --base-url https://classificador-hml.interno
+```
+
 Depois que os healthchecks estiverem saudaveis e o proxy estiver configurado,
-valide a API e a rota de login usando uma estacao que confie na CA interna:
+use os comandos abaixo quando precisar diagnosticar cada rota separadamente em
+uma estacao que confie na CA interna:
 
 ```bash
 curl --fail --show-error --silent https://classificador-hml.interno/api/health
