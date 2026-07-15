@@ -36,6 +36,34 @@ docker compose --env-file .env.hml -f docker-compose.hml.yml ps
 O PostgreSQL nao publica porta no host. API e frontend tambem permanecem sem
 portas publicadas e recebem trafego apenas pela rede do proxy.
 
+## Gate e Seed Sanitizado
+
+Preencha os gates aplicaveis de `docs/homologacao-checklist-tecnico.md`. Confirme
+no resultado de `docker compose ... ps` que esta e a stack
+`classificador-hml`, sem portas publicadas e com o volume
+`classificador-hml-postgres-data`.
+
+Execute o seed somente depois que `postgres`, `api` e `frontend` estiverem
+`healthy`. Forneca os segredos apenas no ambiente do terminal:
+
+```bash
+export HML_ADMIN_PASSWORD='<senha-temporaria>'
+export HML_OPERATOR_PASSWORD='<senha-temporaria>'
+export HML_COMPANY_API_KEY='<chave-temporaria>'
+
+docker compose --env-file .env.hml -f docker-compose.hml.yml exec \
+  -e HML_ADMIN_PASSWORD \
+  -e HML_OPERATOR_PASSWORD \
+  -e HML_COMPANY_API_KEY \
+  api python -m scripts.seed_homologacao
+
+unset HML_ADMIN_PASSWORD HML_OPERATOR_PASSWORD HML_COMPANY_API_KEY
+```
+
+O seed exige `APP_ENV=hml`, usa o `DATABASE_URL` da API e pode ser reexecutado
+sem duplicar a massa sanitizada. Nao adicione esses tres segredos ao arquivo
+`.env.hml`.
+
 ## Validacao
 
 Depois que os healthchecks estiverem saudaveis e o proxy estiver configurado,
