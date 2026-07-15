@@ -23,3 +23,27 @@ Use os arquivos na ordem plano, razao e movimentos. O razao vincula a empresa
 as contas necessarias para que os movimentos sem inconsistencias sejam aceitos.
 O movimento `HML-004` omite deliberadamente a contrapartida de uma transferencia
 e deve seguir para revisao sem invalidar o lote.
+
+## Executar O Seed
+
+O banco de homologacao deve estar criado e com as migracoes aplicadas. Defina os
+segredos apenas no ambiente do terminal, execute o seed dentro do container da
+API e remova as variaveis ao terminar:
+
+```bash
+export HML_ADMIN_PASSWORD='<senha-temporaria>'
+export HML_OPERATOR_PASSWORD='<senha-temporaria>'
+export HML_COMPANY_API_KEY='<chave-temporaria>'
+
+docker compose --env-file .env.hml -f docker-compose.hml.yml exec \
+  -e HML_ADMIN_PASSWORD \
+  -e HML_OPERATOR_PASSWORD \
+  -e HML_COMPANY_API_KEY \
+  api-contabil python -m scripts.seed_homologacao
+
+unset HML_ADMIN_PASSWORD HML_OPERATOR_PASSWORD HML_COMPANY_API_KEY
+```
+
+O comando exige `APP_ENV=hml`, usa `DATABASE_URL` do container e pode ser
+reexecutado sem duplicar a massa. A reexecucao nao redefine senhas nem API key
+de identidades ja existentes.
