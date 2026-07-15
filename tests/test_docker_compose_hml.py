@@ -42,6 +42,28 @@ def test_hml_compose_isolates_database_and_exposes_services_only_to_edge_network
     )
 
 
+def test_hml_compose_uses_only_environment_scoped_runtime_variables():
+    compose = yaml.safe_load(COMPOSE_PATH.read_text(encoding="utf-8"))
+
+    assert compose["name"] == "classificador-hml"
+    assert compose["services"]["api"]["environment"] == {
+        "APP_ENV": "hml",
+        "DATABASE_URL": (
+            "${DATABASE_URL_HML:?Defina DATABASE_URL_HML no ambiente de homologacao}"
+        ),
+        "ADMIN_TOKEN": (
+            "${ADMIN_TOKEN_HML:?Defina ADMIN_TOKEN_HML no ambiente de homologacao}"
+        ),
+        "JWT_SECRET_KEY": (
+            "${JWT_SECRET_KEY_HML:?Defina JWT_SECRET_KEY_HML no ambiente de homologacao}"
+        ),
+        "JWT_ALGORITHM": "${JWT_ALGORITHM_HML:-HS256}",
+        "CORS_ALLOWED_ORIGINS": (
+            "${CORS_ALLOWED_ORIGINS_HML:-https://classificador-hml.interno}"
+        ),
+    }
+
+
 def test_hml_environment_example_and_validation_commands_are_sanitized():
     env_example = (PROJECT_ROOT / ".env.hml.example").read_text(encoding="utf-8")
     deployment_guide = (PROJECT_ROOT / "docs/devops-hml.md").read_text(
@@ -58,7 +80,7 @@ def test_hml_environment_example_and_validation_commands_are_sanitized():
         "DATABASE_URL_HML=postgresql+psycopg://classificador_hml:CHANGE_ME",
         "ADMIN_TOKEN_HML=CHANGE_ME",
         "JWT_SECRET_KEY_HML=CHANGE_ME",
-        "CORS_ALLOWED_ORIGINS=https://classificador-hml.interno",
+        "CORS_ALLOWED_ORIGINS_HML=https://classificador-hml.interno",
     }
     assert all(variable in env_example for variable in expected_variables)
     assert "!.env.hml.example" in gitignore
@@ -72,3 +94,24 @@ def test_hml_environment_example_and_validation_commands_are_sanitized():
     )
     assert "https://classificador-hml.interno/api/health" in deployment_guide
     assert "https://classificador-hml.interno/login" in deployment_guide
+
+
+def test_hml_guide_gates_seed_after_healthy_isolated_services():
+    deployment_guide = " ".join(
+        (PROJECT_ROOT / "docs/devops-hml.md")
+        .read_text(encoding="utf-8")
+        .split()
+    )
+
+    required_content = (
+        "docs/homologacao-checklist-tecnico.md",
+        "somente depois que `postgres`, `api` e `frontend` estiverem `healthy`",
+        "export HML_ADMIN_PASSWORD='<senha-temporaria>'",
+        "export HML_OPERATOR_PASSWORD='<senha-temporaria>'",
+        "export HML_COMPANY_API_KEY='<chave-temporaria>'",
+        "api python -m scripts.seed_homologacao",
+        "unset HML_ADMIN_PASSWORD HML_OPERATOR_PASSWORD HML_COMPANY_API_KEY",
+    )
+
+    for content in required_content:
+        assert content in deployment_guide
