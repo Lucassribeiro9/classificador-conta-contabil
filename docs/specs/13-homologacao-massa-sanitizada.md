@@ -147,12 +147,18 @@ O script de seed deve ser criado em issue propria. Esta spec apenas define o con
 4. `chore(homologacao): configurar ambiente hml separado`
 5. `test(homologacao): validar smoke test da aplicacao completa`
 
-## Open Questions
-
-- O seed de homologacao deve usar apenas API publica ou pode usar servicos internos controlados?
-
 ## Decisoes Aprovadas Apos Issue #304
 
 - A empresa ficticia padrao e `EMPRESA MODELO HOMOLOGACAO LTDA`.
 - O CNPJ sanitizado e deliberadamente invalido e `22.333.444/0001-55`.
 - O codigo Dominio da massa e `7701`.
+
+## Decisoes Aprovadas Apos Issue #305
+
+- O seed usa um orquestrador interno transacional sobre modelos e importadores
+  existentes.
+- A execucao exige `APP_ENV=hml` e segredos fornecidos somente em runtime.
+- Reexecucoes preservam credenciais existentes e nao duplicam identidades,
+  permissoes ou lotes concluidos.
+- O fluxo completo pela API, incluindo autenticacao, fica para o smoke test da
+  aplicacao completa.
