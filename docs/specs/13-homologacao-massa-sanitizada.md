@@ -150,4 +150,9 @@ O script de seed deve ser criado em issue propria. Esta spec apenas define o con
 ## Open Questions
 
 - O seed de homologacao deve usar apenas API publica ou pode usar servicos internos controlados?
-- Qual sera o identificador padrao da empresa ficticia de homologacao?
+
+## Decisoes Aprovadas Apos Issue #304
+
+- A empresa ficticia padrao e `EMPRESA MODELO HOMOLOGACAO LTDA`.
+- O CNPJ sanitizado e deliberadamente invalido e `22.333.444/0001-55`.
+- O codigo Dominio da massa e `7701`.
