@@ -126,11 +126,11 @@ def _razao_xlsx_with_metadata(cnpj: str) -> bytes:
     return buffer.read()
 
 
-def _upload_file(filename: str = "razao.xlsx") -> dict:
+def _upload_file(filename: str = "razao.xlsx", content: bytes | None = None) -> dict:
     return {
         "file": (
             filename,
-            _razao_xlsx(),
+            content if content is not None else _razao_xlsx(),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
     }
@@ -487,15 +487,16 @@ def test_duplicate_razao_file_hash_creates_failed_audit_event(client):
 
     usuario, empresa_id = _seed_user_company_and_catalog("operacao")
     headers = _auth_headers(usuario)
+    file_content = _razao_xlsx()
 
     first_response = client.post(
         f"/api/v1/companies/{empresa_id}/razao/import",
-        files=_upload_file(),
+        files=_upload_file(content=file_content),
         headers=headers,
     )
     second_response = client.post(
         f"/api/v1/companies/{empresa_id}/razao/import",
-        files=_upload_file(),
+        files=_upload_file(content=file_content),
         headers=headers,
     )
 

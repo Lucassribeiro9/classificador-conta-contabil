@@ -90,5 +90,8 @@ jobs:
       - name: Validate homologation Compose
         run: docker compose --env-file .env.hml.example -f docker-compose.hml.yml config --quiet
 
+      - name: Validate homologation edge Compose
+        run: docker compose --env-file .env.hml.example -f docker-compose.edge.yml config --quiet
+
       - name: Validate production Compose
         run: docker compose --env-file .env.prod.example -f docker-compose.prod.yml config --quiet

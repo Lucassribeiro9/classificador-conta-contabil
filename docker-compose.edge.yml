@@ -1,0 +1,26 @@
+name: classificador-edge-hml
+
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/nginx/hml.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${HML_TLS_CERT_PATH:?Defina HML_TLS_CERT_PATH no ambiente de homologacao}:/etc/nginx/certs/classificador-hml.crt:ro
+      - ${HML_TLS_KEY_PATH:?Defina HML_TLS_KEY_PATH no ambiente de homologacao}:/etc/nginx/certs/classificador-hml.key:ro
+    networks:
+      - hml-edge
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "nginx -t && wget --quiet --spider http://127.0.0.1/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+networks:
+  hml-edge:
+    external: true
+    name: classificador-hml-edge
