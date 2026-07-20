@@ -501,7 +501,7 @@ def test_duplicate_razao_file_hash_creates_failed_audit_event(client):
     )
 
     assert first_response.status_code == 200
-    assert second_response.status_code == 200
+    assert second_response.status_code == 400
     assert second_response.json()["detail"] == "Arquivo ja importado com sucesso para esta empresa."
 
     with TestingSessionLocal() as session:
