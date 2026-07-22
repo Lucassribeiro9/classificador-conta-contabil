@@ -23,6 +23,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    volumes:
+      - ./tests/fixtures/homologacao:/app/tests/fixtures/homologacao:ro
     environment:
       APP_ENV: hml
       DATABASE_URL: ${DATABASE_URL_HML:?Defina DATABASE_URL_HML no ambiente de homologacao}

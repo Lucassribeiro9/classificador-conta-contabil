@@ -64,6 +64,14 @@ def test_hml_compose_uses_only_environment_scoped_runtime_variables():
     }
 
 
+def test_hml_compose_mounts_only_sanitized_seed_fixtures_as_read_only():
+    compose = yaml.safe_load(COMPOSE_PATH.read_text(encoding="utf-8"))
+
+    assert compose["services"]["api"]["volumes"] == [
+        "./tests/fixtures/homologacao:/app/tests/fixtures/homologacao:ro"
+    ]
+
+
 def test_hml_environment_example_and_validation_commands_are_sanitized():
     env_example = (PROJECT_ROOT / ".env.hml.example").read_text(encoding="utf-8")
     deployment_guide = (PROJECT_ROOT / "docs/devops-hml.md").read_text(
