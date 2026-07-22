@@ -29,7 +29,7 @@ export class NetworkAuthError extends Error {
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
-const LOGIN_PATH = "/auth/login";
+const LOGIN_PATH = "/api/v1/auth/login";
 
 async function login(credentials: LoginCredentials): Promise<LoginSession> {
   let response: Response;
