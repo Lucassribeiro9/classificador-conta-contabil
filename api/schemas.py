@@ -109,6 +109,12 @@ class Empresa(EmpresaBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class EmpresaAutorizadaResponse(EmpresaBase):
+    id: int
+    papel: str
+    permissao: Optional[str] = None
+
+
 class LoginRequest(BaseModel):
     login: str
     senha: str

@@ -4,8 +4,17 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from api.dependencies import DB_DEPENDENCY, require_admin_token, require_global_admin
-from api.schemas import Empresa as EmpresaSchema, EmpresaCreate
+from api.dependencies import (
+    DB_DEPENDENCY,
+    get_current_user,
+    require_admin_token,
+    require_global_admin,
+)
+from api.schemas import (
+    Empresa as EmpresaSchema,
+    EmpresaAutorizadaResponse,
+    EmpresaCreate,
+)
 from core.audit import record_audit_event
 from core import models
 
@@ -101,6 +110,50 @@ def get_companies(_admin=Depends(require_admin_token), db: Session = DB_DEPENDEN
     Requer autenticação administrativa via `X-Admin-Token`.
     """
     return db.query(models.Empresa).all()
+
+
+@router.get(
+    "/companies/authorized",
+    response_model=list[EmpresaAutorizadaResponse],
+)
+def get_authorized_companies(
+    current_user: models.Usuario = Depends(get_current_user),
+    db: Session = DB_DEPENDENCY,
+):
+    """Lista empresas visiveis ao usuario interno autenticado."""
+    if current_user.papel == "admin":
+        companies_with_permission = [
+            (company, None)
+            for company in db.query(models.Empresa)
+            .order_by(models.Empresa.id)
+            .all()
+        ]
+    else:
+        companies_with_permission = (
+            db.query(models.Empresa, models.UsuarioEmpresaPermissao.permissao)
+            .join(
+                models.UsuarioEmpresaPermissao,
+                models.UsuarioEmpresaPermissao.empresa_id == models.Empresa.id,
+            )
+            .filter(
+                models.UsuarioEmpresaPermissao.usuario_id == current_user.id
+            )
+            .order_by(models.Empresa.id)
+            .all()
+        )
+
+    return [
+        {
+            "id": company.id,
+            "nome_empresa": company.nome_empresa,
+            "cnpj_cpf": company.cnpj_cpf,
+            "cod_dominio": company.cod_dominio,
+            "is_active": company.is_active,
+            "papel": current_user.papel,
+            "permissao": permission,
+        }
+        for company, permission in companies_with_permission
+    ]
 
 
 # GET - Listar empresa por ID
