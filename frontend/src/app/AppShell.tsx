@@ -1,8 +1,10 @@
 import { Link, Outlet, useParams } from "react-router-dom";
 
+import { useAuth } from "./auth";
 import { ROUTES } from "../routes/paths";
 
 export function AppShell() {
+  const { setSession } = useAuth();
   const { empresaId } = useParams();
   const companyLabel = empresaId
     ? `Empresa selecionada: ${empresaId}`
@@ -18,11 +20,21 @@ export function AppShell() {
             </p>
             <p className="text-xs text-slate-500">{companyLabel}</p>
           </div>
-          <nav aria-label="Navegacao principal" className="flex gap-4 text-sm">
+          <nav
+            aria-label="Navegacao principal"
+            className="flex items-center gap-4 text-sm"
+          >
             <Link to={ROUTES.empresas}>Empresas</Link>
             {empresaId ? (
               <Link to={ROUTES.empresa.operacao(empresaId)}>Operacao</Link>
             ) : null}
+            <button
+              className="border-l border-slate-300 pl-4 text-slate-600 hover:text-[#004E61]"
+              onClick={() => setSession(null)}
+              type="button"
+            >
+              Sair
+            </button>
           </nav>
         </div>
       </header>
