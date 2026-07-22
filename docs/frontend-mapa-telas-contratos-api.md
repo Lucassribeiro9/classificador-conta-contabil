@@ -76,17 +76,19 @@ consciente do cliente antes da operacao.
 
 Contratos reais:
 
+- `GET /api/v1/companies/authorized`
+  - exige JWT bearer;
+  - admin global recebe todas as empresas;
+  - demais usuarios recebem somente empresas vinculadas, com a permissao efetiva;
+  - nao expoe API key.
 - `GET /api/v1/companies`
-  - contrato atual administrativo com token de admin em parte dos fluxos
-    existentes.
+  - contrato administrativo legado com `X-Admin-Token`.
 - `GET /api/v1/companies/{company_id}`
   - consulta empresa especifica.
 
 Contratos esperados:
 
-- Endpoint autenticado por JWT para listar empresas permitidas ao usuario atual,
-  sem depender de token administrativo.
-- A resposta deve permitir distinguir usuario comum, admin e lista vazia.
+- Nenhum contrato adicional para a listagem inicial de empresas.
 
 Estados obrigatorios:
 
@@ -105,8 +107,7 @@ Permissoes:
 
 Gaps:
 
-- Confirmar ou criar contrato JWT para "minhas empresas" antes da issue da tela
-  de Empresas.
+- O frontend deve adotar o contrato JWT de empresas autorizadas na issue #355.
 
 ## 3. Operacao da Empresa
 
@@ -323,9 +324,8 @@ Gaps:
 
 Gaps que provavelmente bloqueiam features futuras:
 
-1. Endpoint JWT para listar empresas permitidas ao usuario atual.
-2. Contrato de contas vinculadas por empresa com busca e paginacao.
-3. Decisao de hub operacional: endpoint agregado ou composicao de endpoints.
+1. Contrato de contas vinculadas por empresa com busca e paginacao.
+2. Decisao de hub operacional: endpoint agregado ou composicao de endpoints.
 
 Gaps que podem ser registrados como melhoria futura:
 
