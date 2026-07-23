@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   EmpresasAccessDeniedError,
   EmpresasNetworkError,
+  EmpresasSessionExpiredError,
   empresasClient,
 } from "./empresasClient";
 
@@ -20,6 +21,7 @@ describe("empresasClient", () => {
             nome_empresa: "Comercial Alfa LTDA",
             cnpj_cpf: "12345678000190",
             papel: "operador",
+            permissao: "operacao",
           },
         ]),
         { status: 200 },
@@ -33,14 +35,24 @@ describe("empresasClient", () => {
         nome: "Comercial Alfa LTDA",
         documento: "12345678000190",
         papel: "operador",
+        permissao: "operacao",
       },
     ]);
-    expect(fetchMock).toHaveBeenCalledWith("/api/v1/companies", {
+    expect(fetchMock).toHaveBeenCalledWith("/api/v1/companies/authorized", {
       headers: { Authorization: "Bearer jwt-de-teste" },
     });
   });
 
-  it("normaliza acesso negado e falha de rede", async () => {
+  it("normaliza sessao expirada, acesso negado e falha de rede", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValueOnce(new Response(null, { status: 401 })),
+    );
+
+    await expect(empresasClient.list("jwt-de-teste")).rejects.toBeInstanceOf(
+      EmpresasSessionExpiredError,
+    );
+
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValueOnce(new Response(null, { status: 403 })),
