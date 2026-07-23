@@ -65,6 +65,7 @@ describe("EmpresasPage", () => {
         nome: "Comercial Alfa LTDA",
         documento: "12.345.678/0001-90",
         papel: "operador",
+        permissao: "operacao",
       },
       {
         id: 11,
@@ -82,6 +83,7 @@ describe("EmpresasPage", () => {
     expect(listEmpresasMock).toHaveBeenCalledWith("jwt-de-teste");
     expect(screen.getByText("Comercial Alfa LTDA")).toBeInTheDocument();
     expect(screen.getByText("Industria Beta SA")).toBeInTheDocument();
+    expect(screen.getByText("operacao")).toBeInTheDocument();
 
     fireEvent.click(
       screen.getByRole("button", { name: /Abrir Comercial Alfa LTDA/ }),

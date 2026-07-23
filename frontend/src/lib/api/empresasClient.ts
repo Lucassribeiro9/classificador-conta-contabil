@@ -5,6 +5,7 @@ export type EmpresaResumo = {
   nome: string;
   documento?: string;
   papel?: string;
+  permissao?: string;
 };
 
 type EmpresaApiResponse = {
@@ -14,6 +15,7 @@ type EmpresaApiResponse = {
   documento?: string;
   cnpj_cpf?: string;
   papel?: string;
+  permissao?: string;
   role?: string;
 };
 
@@ -39,7 +41,7 @@ export class EmpresasSessionExpiredError extends Error {
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
-const EMPRESAS_PATH = "/api/v1/companies";
+const EMPRESAS_PATH = "/api/v1/companies/authorized";
 const DEMO_EMPRESAS: EmpresaResumo[] = [
   {
     id: 7,
@@ -55,6 +57,7 @@ function mapEmpresa(data: EmpresaApiResponse): EmpresaResumo {
     nome: data.nome ?? data.nome_empresa ?? `Empresa ${data.id}`,
     documento: data.documento ?? data.cnpj_cpf,
     papel: data.papel ?? data.role,
+    permissao: data.permissao,
   };
 }
 

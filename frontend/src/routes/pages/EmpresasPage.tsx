@@ -13,6 +13,7 @@ import { ROUTES } from "../paths";
 
 function EmpresaCard({ empresa }: { empresa: EmpresaResumo }) {
   const navigate = useNavigate();
+  const acesso = empresa.permissao ?? empresa.papel;
 
   return (
     <article className="border border-slate-200 bg-white p-4 shadow-sm">
@@ -30,9 +31,9 @@ function EmpresaCard({ empresa }: { empresa: EmpresaResumo }) {
                 {empresa.documento}
               </span>
             ) : null}
-            {empresa.papel ? (
+            {acesso ? (
               <span className="border border-teal-100 bg-teal-50 px-2 py-1 text-brand-dark">
-                {empresa.papel}
+                {acesso}
               </span>
             ) : null}
           </div>
