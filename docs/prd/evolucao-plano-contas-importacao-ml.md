@@ -1,12 +1,69 @@
 # PRD: Evolucao do Classificador Contabil com Plano de Contas, Importacao do Razao e ML de Contrapartida
 
+Este e o PRD unico e vivo da evolucao do produto. Ele registra objetivos,
+limites e resultados esperados; contratos tecnicos detalhados permanecem nas
+specs especializadas.
+
+| Metadado | Valor |
+| --- | --- |
+| Versao do PRD | `3.0` |
+| Fase | `3` |
+| Release | `1` |
+| Status | `Em especificacao` |
+| Data da versao | `2026-07-28` |
+| Vigencia | Merge do PR vinculado a [issue #359](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/359) |
+
+## Historico de Versoes
+
+As versoes `1.0` e `2.0` foram atribuidas retrospectivamente na versao `3.0`
+para tornar a evolucao do PRD rastreavel. As datas correspondem aos commits que
+consolidaram cada marco documental.
+
+| Versao | Fase/Release | Data | Status atual | Resumo | Referencia |
+| --- | --- | --- | --- | --- | --- |
+| `1.0` | Fase 1 | 2026-06-09 | Entregue e em manutencao | Fundacao API-first, PostgreSQL, seguranca, plano de contas, Razao e ML de contrapartida. | Commit `e81da7f` |
+| `2.0` | Fase 2 | 2026-07-02 | Implementada, em homologacao/estabilizacao | Interface grafica interna, ambientes e massa sanitizada de homologacao. | Commit `195d153` / PR `#270` |
+| `3.0` | Fase 3 / Release 1 | 2026-07-28 | Em especificacao | Fundacao tecnica, saldos, dois layouts operacionais, planilha classificada e integracao n8n. | [Issue #359](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/359) |
+
+## Estado das Fases
+
+### Fase 1 - Entregue e em manutencao
+
+A fundacao API-first, a persistencia principal em PostgreSQL, autenticacao,
+permissoes por empresa, plano de contas, importacao do Razao, dataset de
+contrapartida, classificacao e auditoria foram entregues. Correcoes,
+compatibilidade e manutencao continuam permitidas sem reabrir o escopo
+historico.
+
+### Fase 2 - Implementada, em homologacao/estabilizacao
+
+O frontend e o ambiente de homologacao foram implementados. Existem checklists,
+smoke tests e roteiros, mas a homologacao operador/contador ainda nao foi
+executada integralmente com evidencia unica e rastreavel. A fase somente sera
+considerada concluida depois de registrar:
+
+- data, ambiente e commit homologado;
+- participantes ou responsaveis;
+- checklist preenchido e resultado por cenario;
+- falhas e limitacoes conhecidas;
+- decisao final de aprovacao ou correcao.
+
+Formalizar e executar essa homologacao da baseline e gate do Ciclo 0 da
+Release 1.
+
+### Fase 3 / Release 1 - Em especificacao
+
+A Release 1 inicia a nova etapa de confiabilidade operacional e conferencia
+contabil. Seu escopo e detalhado na secao
+[Fase 3 / Release 1](#fase-3--release-1).
+
 ## Problema
 
 O escritorio precisa evoluir o classificador contabil de um modelo que apenas aprende padroes de historico para um sistema interno capaz de usar contexto contabil estruturado. Hoje a conta contabil e tratada como um codigo isolado, sem catalogo de contas, sem descricao semantica, sem vinculo formal por cliente e sem normalizacao explicita de debito, credito e contrapartida.
 
 Isso limita a qualidade do modelo, dificulta explicar previsoes, aumenta o risco de sugerir contas que nao sao usadas por uma empresa especifica e torna nebulosa a interpretacao de lancamentos do livro-razao. O escritorio tambem precisa fortalecer seguranca, controle de acesso, auditoria e persistencia antes de ampliar importacoes e treinar modelos com dados reais dos clientes.
 
-O sistema sera usado apenas em ambiente interno do escritorio, por usuarios individuais, com acesso restrito as empresas que cada usuario tem permissao para operar. A primeira entrega priorizou API, testes e importadores confiaveis. A fase seguinte deve disponibilizar uma interface grafica interna para operar os fluxos ja implementados sem depender de chamadas diretas a API.
+O sistema sera usado apenas em ambiente interno do escritorio, por usuarios individuais, com acesso restrito as empresas que cada usuario tem permissao para operar. A primeira entrega priorizou API, testes e importadores confiaveis. A Fase 2 disponibilizou uma interface grafica interna, ainda em homologacao/estabilizacao, para operar os fluxos sem depender de chamadas diretas a API. A Fase 3 deve consolidar a baseline, incorporar saldos e dois layouts operacionais e devolver a classificacao em um arquivo reutilizavel.
 
 ## Solucao
 
@@ -16,7 +73,7 @@ O plano de contas do escritorio sera importado como catalogo unico. Cada empresa
 
 Para a primeira versao do ML, o sistema usara como fonte principal de treino os lancamentos cujo bloco de origem seja banco, caixa ou aplicacao financeira. Nesses casos, o alvo do modelo sera a contrapartida contabil. Essa abordagem reduz ambiguidade, evita misturar o mesmo lancamento em diferentes blocos do razao e gera valor operacional mais rapidamente para classificacao de movimentos financeiros.
 
-A nova interface sera um frontend separado, mantido no mesmo repositorio, consumindo a API FastAPI. O n8n continuara fora do caminho critico desta fase e sera tratado como integracao posterior com credenciais e escopos proprios.
+A interface e um frontend separado, mantido no mesmo repositorio, consumindo a API FastAPI. O n8n permaneceu fora do caminho critico das Fases 1 e 2. Na Release 1, o workflow existente sera adaptado depois da aprovacao dos contratos de planilha classificada, feedback e autenticacao de integracao.
 
 ## Historias de Usuario
 
@@ -34,7 +91,7 @@ A nova interface sera um frontend separado, mantido no mesmo repositorio, consum
 12. Como contador, quero que a importacao do razao detecte blocos de conta, para que o sistema saiba a conta de origem de cada linha.
 13. Como contador, quero que debitos e creditos sejam interpretados a partir da conta do bloco, para que cada lancamento seja normalizado corretamente.
 14. Como contador, quero capturar a conta de contrapartida, para que o sistema aprenda o outro lado dos movimentos de banco e caixa.
-15. Como contador, quero ignorar saldos anteriores, cabecalhos e linhas vazias, para que apenas movimentos reais sejam importados.
+15. Como contador, quero distinguir saldos anteriores, cabecalhos e linhas vazias dos movimentos reais, preservando os saldos necessarios para conferencia sem trata-los como lancamentos.
 16. Como contador, quero registrar lotes de importacao, para saber quando e por quem um arquivo foi processado.
 17. Como contador, quero mensagens claras de erro na importacao, para corrigir layouts invalidos sem corromper dados.
 18. Como contador, quero evitar duplicidade em reimportacoes, para que reprocessamentos acidentais nao poluam os dados de treino.
@@ -76,6 +133,24 @@ A nova interface sera um frontend separado, mantido no mesmo repositorio, consum
 54. Como responsavel pelo negocio, quero homologar a interface com dados sanitizados, para validar o fluxo com usuarios sem expor dados reais.
 55. Como desenvolvedor, quero specs de frontend, UX, ambientes e homologacao antes de implementar telas, para manter o fluxo SDD/TDD do projeto.
 
+### Historias de Usuario da Release 1
+
+As historias anteriores registram as Fases 1 e 2. As historias abaixo
+delimitam os resultados da Release 1.
+
+1. `R1-US01` - Como mantenedor, quero comandos e gates uniformes para dev, hml e prod, para reproduzir e validar o sistema com seguranca.
+2. `R1-US02` - Como revisor, quero PostgreSQL real e os fluxos Playwright relevantes em todo PR, para detectar regressao antes do merge.
+3. `R1-US03` - Como operador, quero mensagens de erro correlacionadas e documentacao clara da API, para diagnosticar falhas sem depender do frontend.
+4. `R1-US04` - Como contador, quero importar o Razao anual preservando saldo anterior, Saldo e Saldo-Exercicio, para derivar fechamentos mensais e identificar divergencias.
+5. `R1-US05` - Como operador, quero importar movimentos pelo layout de `valor` assinado ou pelo layout de `debito` e `credito`, para trabalhar com fontes diferentes sem preencher dados desnecessarios.
+6. `R1-US06` - Como contador, quero comparar saldo observado e calculado por conta, para reconhecer lacunas e inconsistencias sem bloquear classificacoes recuperaveis.
+7. `R1-US07` - Como operador, quero receber warnings de saldo sem perder o processamento das linhas validas, para continuar a operacao com os agravantes visiveis.
+8. `R1-US08` - Como responsavel pelo modelo, quero manter saldo fora das features de ML, para evitar peso sem valor classificatorio.
+9. `R1-US09` - Como operador, quero baixar a planilha no estado atual da classificacao, para revisar ou entregar o resultado sem depender da interface.
+10. `R1-US10` - Como contador, quero revisar individualmente pelo frontend ou em lote pela planilha, para aplicar aceite, rejeicao e correcao pela forma mais adequada.
+11. `R1-US11` - Como integracao n8n, quero consumir os contratos da API com identidade e escopos proprios, para automatizar o fluxo sem credenciais humanas ou globais excessivas.
+12. `R1-US12` - Como responsavel pelo negocio, quero homologacao formal e rastreavel da baseline e da Release 1, para saber quais resultados foram realmente validados.
+
 ## Decisoes de Implementacao
 
 - O sistema permanece API-first: a interface interna deve consumir a API e nunca acessar o banco diretamente.
@@ -102,7 +177,7 @@ A nova interface sera um frontend separado, mantido no mesmo repositorio, consum
 - A autenticacao usara usuarios internos individuais, nao credenciais compartilhadas.
 - A autorizacao tera permissoes por empresa, para que usuarios operem apenas empresas vinculadas.
 - API keys podem permanecer para integracoes futuras, mas acesso humano deve usar autenticacao de usuario interno.
-- n8n fica fora do escopo da primeira entrega e sera tratado depois como integracao com escopo proprio.
+- O n8n permaneceu fora das Fases 1 e 2; na Release 1, o workflow existente sera adaptado com identidade de integracao, escopos proprios e artefato sanitizado.
 - O plano de contas sera modelado como catalogo unico do escritorio.
 - O uso de contas por empresa sera representado por um relacionamento entre empresa e conta.
 - A importacao do plano de contas deve ser idempotente: contas existentes sao atualizadas e contas novas sao criadas.
@@ -139,24 +214,36 @@ A nova interface sera um frontend separado, mantido no mesmo repositorio, consum
 - Testes de frontend devem validar comportamento percebido pelo usuario e integracao com contratos da API, evitando acoplamento a detalhes internos dos componentes.
 - A primeira homologacao so deve ser liberada quando backend tests relevantes estiverem verdes, frontend build/typecheck/lint estiverem verdes e o fluxo principal tiver validacao manual ou automatizada registrada.
 
-## Fora de Escopo
+## Limites e Fora de Escopo
 
+### Limites Permanentes da Solucao
+
+- A interface e integracoes consomem a API; nao acessam o banco diretamente.
+- Aplicacao, banco e dados contabeis permanecem restritos aos ambientes internos autorizados.
+- Segredos, credenciais, IDs reais e dados de clientes nao sao versionados.
+- Previsao de ML nao substitui decisao contabil humana final.
+- O plano de contas permanece um catalogo unico do escritorio, com uso vinculado por empresa.
+- Razao canonico e movimentos operacionais permanecem fontes separadas.
+- Movimento operacional nao se transforma automaticamente em Razao canonico nem em `Transacao` legada.
+
+### Fora da Release 1 / Backlog Futuro
+
+- Importacao de PDF ou OCR.
+- Importacao de OFX.
+- Exportacao para o Dominio.
+- Dashboards e relatorios para clientes.
+- Conciliacao por pareamento entre Razao, extrato e movimentos operacionais.
+- CRUD administrativo completo de usuarios e permissoes no frontend.
 - Portal para clientes externos.
-- GraphQL.
-- Migracao para Django.
-- Deploy publico no Streamlit Community Cloud.
-- Exposicao permanente por ngrok para a aplicacao contabil.
-- Mudancas no workflow n8n na primeira entrega.
-- Frontend completo fora do MVP aprovado.
-- CRUD administrativo de usuarios e permissoes no MVP inicial da interface.
-- Importacao OFX no MVP inicial da interface.
-- Geracao de TXT ou OFX para importacao no Dominio na fase 2 inicial.
-- Uso de dados reais ou sensiveis na primeira massa de homologacao.
-- Redesenhar regras contabeis ja implementadas no backend durante a criacao do frontend.
-- Predicoes avancadas de lancamentos compostos ou multiplas partidas.
-- Uso de todos os blocos do razao como fonte principal de treino inicial.
-- Decisoes automaticas de politica contabil que exigem julgamento humano.
-- Substituir o catalogo unico do escritorio por planos independentes por cliente.
+- GraphQL ou migracao para Django.
+- Predicoes de lancamentos compostos ou multiplas partidas.
+- Uso de todos os blocos do Razao como fonte principal do treino inicial.
+
+### Limites por Ciclo
+
+Cada ciclo da Release 1 registra seu proprio fora de escopo. Um item excluido
+de um ciclo nao pode ser antecipado por uma issue de implementacao de outro
+ciclo sem nova decisao no PRD e na spec correspondente.
 
 ## Observacoes Finais
 
@@ -164,7 +251,7 @@ A decisao de produto mais importante e tratar esta evolucao como fundacao de dad
 
 A decisao contabil mais importante e evitar uma regra global como "debito significa banco". Debito e credito devem ser interpretados em relacao a conta do bloco do razao. Isso torna o par debito/credito normalizado confiavel e mantem o primeiro problema de ML focado na predicao de contrapartida para origens financeiras.
 
-A ordem recomendada de implementacao e:
+A sequencia historica das Fases 1 e 2 foi:
 
 1. Base de configuracao e migracao para PostgreSQL.
 2. Usuarios internos e autenticacao.
@@ -181,16 +268,13 @@ A ordem recomendada de implementacao e:
 13. Interface interna apos estabilizacao dos fluxos de backend.
 14. Homologacao da interface com massa sanitizada.
 
-Itens em aberto para specs futuras:
+Pendencias historicas foram resolvidas pelas specs ou encaminhadas para o backlog.
+Na Release 1:
 
-- Mecanismo exato de autenticacao de usuarios internos.
-- Estrategia operacional de backup do PostgreSQL.
-- Regra precisa para identificar contas de banco, caixa e aplicacao financeira a partir do plano de contas.
-- Contratos de API para cada endpoint de importacao e revisao.
-- Caminho de migracao para dados SQLite existentes que precisem ser preservados.
-- Detalhes finais de deploy da SPA interna no ambiente do escritorio.
-- Escopo da futura tela administrativa de usuarios e permissoes.
-- Momento adequado para evoluir OFX, PDF/OCR e exportacao TXT/OFX para Dominio.
+- a convivencia entre JWT, API keys, admin token e n8n e tratada pela issue [#351](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/351);
+- contratos de Razao e movimentos sao atualizados pelas issues [#364](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/364) e [#365](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/365);
+- download e feedback round-trip sao especificados pela issue [#366](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/366);
+- PDF, OFX, exportacao Dominio, dashboards e relatorios permanecem no backlog futuro.
 
 ## Atualizacao da Fase 2: Interface Grafica Interna
 
@@ -199,3 +283,218 @@ A fase 2 transforma a fundacao API-first em uma ferramenta operacional para usua
 O frontend deve nascer separado do backend, dentro de `frontend/`, mantendo a API FastAPI como fronteira de integracao. A stack aprovada e React, TypeScript, Vite, Tailwind CSS, React Router e TanStack Query. A direcao visual aprovada usa branco como base, a cor institucional `#007693`, apoio em `#004E61`, cinzas neutros e uma interface operacional compacta.
 
 O MVP da interface inclui Login, Empresas, Operacao da Empresa, Importar Movimentos, Lote de Movimentos, Revisar Movimento, Razao e Contas Vinculadas. A primeira homologacao deve priorizar operadores/contadores, com dados sanitizados e ambientes separados de producao. Telas administrativas, OFX, PDF/OCR e exportacao para Dominio continuam como evolucoes posteriores.
+
+## Fase 3 / Release 1
+
+### Objetivo
+
+Transformar a baseline implementada em uma operacao confiavel, conferivel e
+reutilizavel sem depender do frontend. A release fortalece o harness, incorpora
+saldos ao Razao e aos movimentos, aceita dois layouts operacionais, devolve a
+planilha no estado atual da classificacao e adapta o workflow n8n existente.
+
+Sucesso significa que operadores e contadores conseguem importar, classificar,
+conferir, revisar e entregar movimentos com rastreabilidade, enquanto o sistema
+preserva isolamento por empresa, decisao humana e compatibilidade com a
+baseline.
+
+### Estados e Atualizacao
+
+A Release 1 usa os estados:
+
+- `Em especificacao`: PRD e specs ainda estao sendo aprovados;
+- `Em implementacao`: ao menos um ciclo possui spec aprovada e implementacao autorizada;
+- `Em homologacao`: os tres ciclos foram implementados e aguardam validacao integrada;
+- `Concluida`: criterios de saida e homologacao formal foram aprovados;
+- `Suspensa`: trabalho interrompido por decisao explicita, com motivo e condicao de retomada registrados.
+
+Issues e sub-issues sao a fonte do progresso detalhado. O PRD e atualizado
+somente quando:
+
+- a release muda de estado;
+- uma issue-pai de ciclo cumpre seus criterios de saida;
+- o escopo, um limite permanente ou uma decisao de produto muda.
+
+Cada atualizacao entra por branch e PR. Quando nenhuma issue documental cobrir
+o marco, deve ser criada uma issue pequena `docs(release)`.
+
+### Governanca e Revisao do Backlog
+
+O backlog deve ser revisado:
+
+- antes de cada Task Review;
+- antes de criar ou atualizar uma spec;
+- antes de gerar issues de implementacao;
+- antes de encerrar cada ciclo.
+
+A revisao procura duplicidades, decisoes superadas, dependencias resolvidas,
+itens implementados e issues que mudaram de ciclo. Divergencias relevantes sao
+corrigidas no PRD ou na spec antes de prosseguir.
+
+Task Reviews e specs dos ciclos posteriores podem ser antecipadas depois do
+merge da issue #359. A implementacao e sequencial: Ciclo 0, Ciclo 1 e Ciclo 2.
+Uma spec antecipada nao autoriza antecipar sua implementacao.
+
+### Ciclo 0 - Fundacao, Harness e Documentacao
+
+Issue-pai: [#360](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/360).
+
+Objetivo: tornar o estado atual confiavel, documentado, reproduzivel e
+formalmente homologado antes das mudancas contabeis.
+
+Resultados esperados:
+
+- README geral para containers, stacks, notebooks, uso e workflows;
+- matriz de comandos `dev`, `hml`, `prod` e `all`, incluindo build, test, clean-cache e logs;
+- `make check` e `make check-full`;
+- PostgreSQL real e Playwright relevante em todo PR;
+- eliminacao de testes ignorados e dependentes de ordem;
+- lint backend e gates de CI explicitos;
+- docstrings e comentarios orientados a contrato ou complexidade, inclusive em testes;
+- OpenAPI como fonte canonica da API;
+- erros com `code`, `message`, `details` e `request_id`;
+- logs tecnicos JSON locais com rotacao, separados da auditoria;
+- auditoria com retencao indefinida;
+- Streamlit legado documentado como best-effort;
+- roteiro preenchivel e evidencia formal da homologacao da baseline da Fase 2.
+
+Fora do Ciclo 0:
+
+- mudancas nas regras contabeis;
+- dois layouts e saldos;
+- planilha classificada e feedback round-trip;
+- conciliacao.
+
+Criterios de saida:
+
+1. PRD 3.0 aprovado na `main`.
+2. Spec de fundacao/harness aprovada e implementada por issues focadas.
+3. README permite executar um clone novo.
+4. CI nao oculta falhas conhecidas nem depende de ordem de testes.
+5. Comandos e ambientes possuem validacao reproduzivel.
+6. Baseline da Fase 2 foi homologada formalmente com checklist e evidencias.
+7. Nenhuma regra contabil foi alterada inadvertidamente.
+
+### Ciclo 1 - Dois Layouts, Saldos e Normalizacao
+
+Issue-pai: [#361](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/361).
+
+Objetivo: aceitar dois layouts operacionais com saldo, ampliar os saldos do
+Razao e convergir as entradas para um contrato interno unico.
+
+Resultados esperados:
+
+- layout A com `valor` assinado e `saldo`;
+- layout B com `debito`, `credito` e `saldo` na convencao do extrato;
+- credito do extrato como entrada e debito como saida;
+- multiplas contas financeiras por lote, com sequencias independentes;
+- saldo observado separado do saldo calculado;
+- lacunas e divergencias recuperaveis registradas como warning;
+- continuidade do calculo atraves de lacunas;
+- normalizacao para valor assinado, valor absoluto e direcao contabil;
+- saldo fora das features de treino e predicao;
+- Razao anual com saldo anterior, Saldo e Saldo-Exercicio;
+- fechamentos mensais derivados por conta;
+- Razao e movimentos operacionais preservados como fontes separadas;
+- movimentos aprovados ou corrigidos como fonte incremental confiavel.
+
+Fora do Ciclo 1:
+
+- pareamento de conciliacao;
+- download da planilha classificada;
+- feedback round-trip;
+- PDF, OFX e exportacao Dominio.
+
+Criterios de saida:
+
+1. Specs 04 e 08 atualizadas e aprovadas.
+2. Dois templates oficiais e versionados.
+3. Implementacao validada para os dois layouts e para saldos do Razao.
+4. Compatibilidade retroativa com arquivos sem saldo ou no layout atual.
+5. Warnings nao bloqueiam classificacoes recuperaveis.
+6. Saldo nao participa do ML.
+7. Fechamentos mensais podem ser derivados do Razao anual.
+
+### Ciclo 2 - Planilha Classificada e Loop de Feedback
+
+Issue-pai: [#362](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/362).
+
+Objetivo: devolver o estado atual da classificacao, permitir revisao pelo
+frontend ou pelo round-trip do arquivo e adaptar com seguranca o workflow n8n
+existente.
+
+Resultados esperados:
+
+- saida reconstruida dos templates e dados persistidos, sem depender do binario original;
+- ordem e identificadores das linhas preservados;
+- `contrapartida` de entrada imutavel;
+- `contrapartida_sugerida` e `contrapartida_final` separadas;
+- um unico download representando o estado atual, preliminar ou final;
+- revisao individual pelo frontend e em lote pelo arquivo;
+- processamento parcial com resultado por linha;
+- idempotencia de reenvio e concorrencia otimista contra arquivo desatualizado;
+- endpoint individual preservado e endpoint separado para revisoes em lote;
+- regra de dominio compartilhada entre frontend, arquivo e integracao;
+- identidade e escopos de integracao definidos sem expor segredo ao frontend;
+- workflow n8n existente adaptado, sanitizado e validado em homologacao.
+
+Fora do Ciclo 2:
+
+- criar um workflow generico concorrente;
+- armazenar credenciais ou IDs reais;
+- autoaprovacao baseada apenas em confianca;
+- PDF, OFX e exportacao Dominio.
+
+Criterios de saida:
+
+1. Spec de planilha classificada e feedback round-trip aprovada e implementada.
+2. Decisao de autenticacao #351 incorporada aos contratos relevantes.
+3. Spec de adaptacao do n8n aprovada e implementada sobre o workflow existente.
+4. Download, revisao parcial, idempotencia e concorrencia possuem testes.
+5. Frontend e round-trip produzem a mesma decisao de dominio.
+6. Workflow sanitizado funciona em homologacao sem segredos ou dados reais.
+7. Fluxo completo possui evidencia formal de homologacao.
+
+### Dependencias e Ordem
+
+1. A issue #359 formaliza este PRD.
+2. O Ciclo 0 consolida o harness e homologa a baseline.
+3. Somente depois do Ciclo 0 a implementacao do Ciclo 1 e autorizada.
+4. O Ciclo 2 depende dos contratos implementados do Ciclo 1.
+5. A adaptacao n8n depende da decisao #351 e da spec de planilha #366.
+
+### Matriz de Rastreabilidade
+
+| Ciclo | Issue-pai | Issue de spec/decisao | Spec canonica | Estado documental |
+| --- | --- | --- | --- | --- |
+| Ciclo 0 | [#360](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/360) | [#363](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/363) | Sem arquivo canonico - issue de spec ainda nao executada | Planejada |
+| Ciclo 0 | [#360](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/360) | [#363](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/363) | [Spec 00](../specs/00-visao-fluxo-sdd.md), [Spec 07](../specs/07-auditoria-seguranca-operacional.md), [Spec 11](../specs/11-frontend-docker-ambientes.md) e [Spec 12](../specs/12-frontend-padroes-codigo-documentacao.md) | Existentes; atualizacao minima planejada |
+| Ciclo 1 | [#361](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/361) | [#364](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/364) | [Spec 04](../specs/04-importacao-razao-normalizacao.md) | Atualizacao planejada |
+| Ciclo 1 | [#361](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/361) | [#365](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/365) | [Spec 08](../specs/08-movimentos-operacionais-classificacao.md) | Atualizacao planejada |
+| Ciclo 2 | [#362](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/362) | [#366](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/366) | Sem arquivo canonico - issue de spec ainda nao executada | Planejada |
+| Ciclo 2 | [#362](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/362) | [#351](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/351) | [Spec 02](../specs/02-auth-usuarios-permissoes.md) | Atualizacao planejada |
+| Ciclo 2 | [#362](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/362) | [#367](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/367) | Sem arquivo canonico - issue de spec ainda nao executada | Planejada |
+
+### Evolucao das Decisoes
+
+| Decisao historica | Regra vigente na Release 1 | Responsavel pelo contrato |
+| --- | --- | --- |
+| Linhas de saldo eram ignoradas como movimentos. | Saldo anterior, Saldo e Saldo-Exercicio sao preservados para conferencia, sem virar lancamento nem feature de ML. | #364 / Spec 04 |
+| `saldo_exercicio_original` era apenas auxiliar visual. | Saldo e Saldo-Exercicio ganham semantica explicita, representacao normalizada e uso em fechamentos mensais. | #364 / Spec 04 |
+| O layout operacional oficial usava apenas `valor` assinado. | Dois layouts oficiais convergem para o mesmo contrato interno e ambos aceitam saldo. | #365 / Spec 08 |
+| O fluxo operacional era descrito a partir de uma conta financeira por linha. | Um lote pode conter varias contas financeiras, cada uma com sua sequencia de saldo. | #365 / Spec 08 |
+| O n8n estava adiado para depois da interface. | O workflow existente e parte da entrega do Ciclo 2, apos #351, #366 e #367. | #351, #366 e #367 |
+| A Fase 2 possuia checklists e roteiros sem gate unico de aceite. | Homologacao formal com ambiente, commit, responsaveis, resultados e decisao e gate do Ciclo 0. | #363 |
+
+### Criterios de Sucesso da Release 1
+
+1. Baseline da Fase 2 homologada formalmente.
+2. Harness e documentacao permitem reproduzir e validar os ambientes.
+3. Razao anual preserva os saldos necessarios e permite derivar fechamentos mensais.
+4. Ambos os layouts operacionais classificam pelo mesmo contrato interno.
+5. Warnings de saldo informam agravantes sem bloquear linhas recuperaveis.
+6. Saldo permanece fora do treino e da predicao.
+7. Planilha classificada pode ser baixada e revisada sem depender do frontend.
+8. Feedback individual e em lote compartilham regras, auditoria e concorrencia segura.
+9. Workflow n8n existente opera em homologacao com identidade adequada e artefato sanitizado.
+10. Os tres ciclos possuem criterios de saida e evidencias aprovados.
