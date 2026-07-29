@@ -1,0 +1,886 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Lucassribeiro9/classificador-conta-contabil/blob/main/.github/agent-protocol.schema.json",
+  "title": "Protocolo GitHub da esteira supervisionada",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "protocol_version",
+    "eligibility_label",
+    "no_operational_state",
+    "operational_labels",
+    "transitions",
+    "human_interventions",
+    "state_policies",
+    "rejection_codes",
+    "structured_confirmations",
+    "task_review_approval"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "const": "./agent-protocol.schema.json"
+    },
+    "protocol_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "eligibility_label": {
+      "type": "string",
+      "const": "ready-for-agent"
+    },
+    "no_operational_state": {
+      "type": "null"
+    },
+    "operational_labels": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "color",
+          "description"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^agent:[a-z][a-z-]+$"
+          },
+          "color": {
+            "type": "string",
+            "pattern": "^[0-9A-F]{6}$"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        }
+      }
+    },
+    "transitions": {
+      "type": "array",
+      "minItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "event",
+          "from_state",
+          "to_state",
+          "responsible",
+          "condition",
+          "required_evidence"
+        ],
+        "properties": {
+          "event": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]+$"
+          },
+          "from_state": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^agent:[a-z][a-z-]+$"
+              }
+            ]
+          },
+          "to_state": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^agent:[a-z][a-z-]+$"
+              }
+            ]
+          },
+          "responsible": {
+            "enum": [
+              "agent",
+              "maintainer",
+              "orchestrator",
+              "runner"
+            ]
+          },
+          "condition": {
+            "type": "string",
+            "minLength": 1
+          },
+          "required_evidence": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "human_interventions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authorized_actors",
+        "accepted_source",
+        "manual_homologation_location",
+        "first_line_only",
+        "exact_ascii_spacing",
+        "justification_allowed_after_first_line",
+        "unauthorized_events",
+        "commands"
+      ],
+      "properties": {
+        "authorized_actors": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "accepted_source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "event",
+            "location",
+            "edited_comments_authorize"
+          ],
+          "properties": {
+            "event": {
+              "const": "issue_comment.created"
+            },
+            "location": {
+              "const": "issue"
+            },
+            "edited_comments_authorize": {
+              "const": false
+            }
+          }
+        },
+        "manual_homologation_location": {
+          "const": "expected_draft_pr"
+        },
+        "first_line_only": {
+          "const": true
+        },
+        "exact_ascii_spacing": {
+          "const": true
+        },
+        "justification_allowed_after_first_line": {
+          "const": true
+        },
+        "unauthorized_events": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "public_response",
+            "state_change",
+            "future_private_audit"
+          ],
+          "properties": {
+            "public_response": {
+              "const": false
+            },
+            "state_change": {
+              "const": false
+            },
+            "future_private_audit": {
+              "const": true
+            }
+          }
+        },
+        "commands": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "first_line_pattern",
+              "allowed_states",
+              "initial_result",
+              "changes_state_on_acceptance"
+            ],
+            "properties": {
+              "name": {
+                "enum": [
+                  "approve-task-review",
+                  "decide",
+                  "retry",
+                  "cancel"
+                ]
+              },
+              "first_line_pattern": {
+                "type": "string",
+                "minLength": 1
+              },
+              "allowed_states": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "pattern": "^agent:[a-z][a-z-]+$"
+                }
+              },
+              "initial_result": {
+                "enum": [
+                  "accepted",
+                  "accepted_pending"
+                ]
+              },
+              "changes_state_on_acceptance": {
+                "type": "boolean"
+              },
+              "completion_event": {
+                "type": "string"
+              },
+              "completion_events_by_state": {
+                "type": "object",
+                "minProperties": 1,
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "required_task_review_result": {
+                "type": "string"
+              },
+              "required_context_evidence": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string"
+                }
+              },
+              "rejection_if_incomplete": {
+                "type": "string"
+              },
+              "normalization": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "type",
+                  "canonical_format",
+                  "case_insensitive",
+                  "examples"
+                ],
+                "properties": {
+                  "type": {
+                    "const": "option_token"
+                  },
+                  "canonical_format": {
+                    "const": "opcao-{slug}"
+                  },
+                  "case_insensitive": {
+                    "const": true
+                  },
+                  "examples": {
+                    "type": "object",
+                    "minProperties": 3,
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "option_must_be_offered": {
+                "type": "boolean"
+              },
+              "requires_single_pending_question": {
+                "type": "boolean"
+              },
+              "rejection_if_option_not_offered": {
+                "type": "string"
+              },
+              "rejection_if_no_pending_question": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "state_policies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operational_label_prefix",
+        "operational_state_is_exclusive",
+        "preserve_non_operational_labels",
+        "release_1_blocking",
+        "invalid_transition",
+        "multiple_operational_labels",
+        "native_issue_lifecycle"
+      ],
+      "properties": {
+        "operational_label_prefix": {
+          "const": "agent:"
+        },
+        "operational_state_is_exclusive": {
+          "const": true
+        },
+        "preserve_non_operational_labels": {
+          "const": true
+        },
+        "release_1_blocking": {
+          "const": false
+        },
+        "invalid_transition": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "result",
+            "code",
+            "preserve_state",
+            "preserve_labels"
+          ],
+          "properties": {
+            "result": {
+              "const": "rejected"
+            },
+            "code": {
+              "const": "transition_not_allowed"
+            },
+            "preserve_state": {
+              "const": true
+            },
+            "preserve_labels": {
+              "const": true
+            }
+          }
+        },
+        "multiple_operational_labels": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "result",
+            "code",
+            "automatic_repair",
+            "preserve_labels",
+            "requires_human_correction"
+          ],
+          "properties": {
+            "result": {
+              "const": "rejected"
+            },
+            "code": {
+              "const": "state_conflict"
+            },
+            "automatic_repair": {
+              "const": false
+            },
+            "preserve_labels": {
+              "const": true
+            },
+            "requires_human_correction": {
+              "const": true
+            }
+          }
+        },
+        "native_issue_lifecycle": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "closed_is_executable",
+            "interrupt_active_execution",
+            "preserve_evidence",
+            "remove_operational_label",
+            "reopened_operational_state",
+            "reopened_requires_new_task_review"
+          ],
+          "properties": {
+            "closed_is_executable": {
+              "const": false
+            },
+            "interrupt_active_execution": {
+              "const": true
+            },
+            "preserve_evidence": {
+              "const": true
+            },
+            "remove_operational_label": {
+              "const": true
+            },
+            "reopened_operational_state": {
+              "type": "null"
+            },
+            "reopened_requires_new_task_review": {
+              "const": true
+            }
+          }
+        }
+      }
+    },
+    "rejection_codes": {
+      "type": "object",
+      "minProperties": 6,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]+$"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "structured_confirmations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "schema_ref",
+        "publish_for_authorized_acceptance",
+        "publish_for_authorized_rejection",
+        "unauthorized_event_public_response",
+        "required_fields",
+        "forbidden_fields"
+      ],
+      "properties": {
+        "format": {
+          "const": "markdown_summary_with_json"
+        },
+        "schema_ref": {
+          "const": "#/$defs/structuredConfirmation"
+        },
+        "publish_for_authorized_acceptance": {
+          "const": true
+        },
+        "publish_for_authorized_rejection": {
+          "const": true
+        },
+        "unauthorized_event_public_response": {
+          "const": false
+        },
+        "required_fields": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "forbidden_fields": {
+          "type": "array",
+          "minItems": 5,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "task_review_approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_ref",
+        "required_result",
+        "pending_question_allowed",
+        "blocking_contradiction_allowed",
+        "context_change_invalidates_approval",
+        "cancelled_reapproval_reuses_context_only_when_unchanged",
+        "spec_fields_nullable_when_not_applicable"
+      ],
+      "properties": {
+        "schema_ref": {
+          "const": "#/$defs/taskReviewApproval"
+        },
+        "required_result": {
+          "const": "PRONTA PARA APROVACAO"
+        },
+        "pending_question_allowed": {
+          "const": false
+        },
+        "blocking_contradiction_allowed": {
+          "const": false
+        },
+        "context_change_invalidates_approval": {
+          "const": true
+        },
+        "cancelled_reapproval_reuses_context_only_when_unchanged": {
+          "const": true
+        },
+        "spec_fields_nullable_when_not_applicable": {
+          "const": true
+        }
+      }
+    }
+  },
+  "$defs": {
+    "operationalState": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^agent:[a-z][a-z-]+$"
+        }
+      ]
+    },
+    "structuredConfirmation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "confirmation_id",
+        "result",
+        "command",
+        "actor",
+        "occurred_at",
+        "repository",
+        "issue_number",
+        "source_comment",
+        "previous_state",
+        "new_state",
+        "execution_id",
+        "context_validation",
+        "rejection_code",
+        "approval_context"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "confirmation_id": {
+          "type": "string",
+          "pattern": "^agent-confirmation-[A-Za-z0-9._:-]+$"
+        },
+        "result": {
+          "enum": [
+            "accepted",
+            "accepted_pending",
+            "rejected",
+            "transition_completed",
+            "failed"
+          ]
+        },
+        "command": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "original",
+            "normalized"
+          ],
+          "properties": {
+            "original": {
+              "type": "string",
+              "pattern": "^/agent [^\\r\\n]+$"
+            },
+            "normalized": {
+              "type": "string",
+              "pattern": "^/agent [^\\r\\n]+$"
+            }
+          }
+        },
+        "actor": {
+          "type": "string",
+          "minLength": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "repository": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        },
+        "issue_number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "source_comment": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "url",
+            "created_at",
+            "edited"
+          ],
+          "properties": {
+            "id": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "url": {
+              "type": "string",
+              "format": "uri",
+              "pattern": "^https://github\\.com/"
+            },
+            "created_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "edited": {
+              "const": false
+            }
+          }
+        },
+        "previous_state": {
+          "$ref": "#/$defs/operationalState"
+        },
+        "new_state": {
+          "$ref": "#/$defs/operationalState"
+        },
+        "execution_id": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "minLength": 1
+            }
+          ]
+        },
+        "context_validation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "author",
+            "event",
+            "location",
+            "command",
+            "state",
+            "task_review"
+          ],
+          "properties": {
+            "author": {
+              "enum": [
+                "passed",
+                "failed",
+                "not_applicable"
+              ]
+            },
+            "event": {
+              "enum": [
+                "passed",
+                "failed",
+                "not_applicable"
+              ]
+            },
+            "location": {
+              "enum": [
+                "passed",
+                "failed",
+                "not_applicable"
+              ]
+            },
+            "command": {
+              "enum": [
+                "passed",
+                "failed",
+                "not_applicable"
+              ]
+            },
+            "state": {
+              "enum": [
+                "passed",
+                "failed",
+                "not_applicable"
+              ]
+            },
+            "task_review": {
+              "enum": [
+                "passed",
+                "failed",
+                "not_applicable"
+              ]
+            }
+          }
+        },
+        "rejection_code": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]+$"
+            }
+          ]
+        },
+        "approval_context": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/taskReviewApproval"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "result": {
+                "const": "rejected"
+              }
+            },
+            "required": [
+              "result"
+            ]
+          },
+          "then": {
+            "properties": {
+              "rejection_code": {
+                "type": "string"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "rejection_code": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "result": {
+                "enum": [
+                  "accepted",
+                  "transition_completed"
+                ]
+              },
+              "command": {
+                "properties": {
+                  "normalized": {
+                    "const": "/agent approve-task-review"
+                  }
+                },
+                "required": [
+                  "normalized"
+                ]
+              }
+            },
+            "required": [
+              "result",
+              "command"
+            ]
+          },
+          "then": {
+            "properties": {
+              "approval_context": {
+                "$ref": "#/$defs/taskReviewApproval"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "taskReviewApproval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task_review_result",
+        "has_pending_question",
+        "has_blocking_contradiction",
+        "issue_body_sha256",
+        "task_review_comment_id",
+        "task_review_body_sha256",
+        "spec_path",
+        "spec_commit_sha",
+        "approved_branch",
+        "approved_by",
+        "approved_at"
+      ],
+      "properties": {
+        "task_review_result": {
+          "const": "PRONTA PARA APROVACAO"
+        },
+        "has_pending_question": {
+          "const": false
+        },
+        "has_blocking_contradiction": {
+          "const": false
+        },
+        "issue_body_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "task_review_comment_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "task_review_body_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "spec_path": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^docs/specs/[A-Za-z0-9._/-]+\\.md$"
+            }
+          ]
+        },
+        "spec_commit_sha": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            }
+          ]
+        },
+        "approved_branch": {
+          "type": "string",
+          "pattern": "^(feat|fix|chore|docs|refactor|spec)/[a-z0-9][a-z0-9-]+$"
+        },
+        "approved_by": {
+          "const": "Lucassribeiro9"
+        },
+        "approved_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "spec_path": {
+                "type": "null"
+              }
+            },
+            "required": [
+              "spec_path"
+            ]
+          },
+          "then": {
+            "properties": {
+              "spec_commit_sha": {
+                "type": "null"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "spec_commit_sha": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
