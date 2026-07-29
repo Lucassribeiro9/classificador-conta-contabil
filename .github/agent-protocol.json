@@ -1,0 +1,410 @@
+{
+  "$schema": "./agent-protocol.schema.json",
+  "protocol_version": "1.0.0",
+  "eligibility_label": "ready-for-agent",
+  "no_operational_state": null,
+  "operational_labels": [
+    {
+      "name": "agent:awaiting-task-review",
+      "color": "C5DEF5",
+      "description": "Task Review ainda não concluída ou invalidada."
+    },
+    {
+      "name": "agent:awaiting-human",
+      "color": "FBCA04",
+      "description": "Existe decisão, pergunta ou autorização humana pendente."
+    },
+    {
+      "name": "agent:ready-to-implement",
+      "color": "0E8A16",
+      "description": "Task Review aprovada e implementação autorizada."
+    },
+    {
+      "name": "agent:running",
+      "color": "5319E7",
+      "description": "Runner mantém a trava e está executando a issue."
+    },
+    {
+      "name": "agent:awaiting-manual-test",
+      "color": "F9D0C4",
+      "description": "Draft e roteiro aguardam homologação manual."
+    },
+    {
+      "name": "agent:validated",
+      "color": "006B75",
+      "description": "Conteúdo do commit atual foi homologado."
+    },
+    {
+      "name": "agent:blocked",
+      "color": "B60205",
+      "description": "Execução requer intervenção antes de continuar."
+    },
+    {
+      "name": "agent:cancelled",
+      "color": "6A737D",
+      "description": "Execução cancelada pelo mantenedor."
+    }
+  ],
+  "transitions": [
+    {
+      "event": "task_review_started",
+      "from_state": null,
+      "to_state": "agent:awaiting-task-review",
+      "responsible": "orchestrator",
+      "condition": "Issue aberta, elegível e Task Review autorizada.",
+      "required_evidence": "Referência da issue e início registrado."
+    },
+    {
+      "event": "blocking_question_raised",
+      "from_state": "agent:awaiting-task-review",
+      "to_state": "agent:awaiting-human",
+      "responsible": "agent",
+      "condition": "Existe exatamente uma pergunta realmente pendente.",
+      "required_evidence": "Comentário da pergunta na issue."
+    },
+    {
+      "event": "decision_recorded",
+      "from_state": "agent:awaiting-human",
+      "to_state": "agent:awaiting-task-review",
+      "responsible": "orchestrator",
+      "condition": "Comando decide válido para a única pergunta pendente.",
+      "required_evidence": "Comentário de decisão e confirmação estruturada."
+    },
+    {
+      "event": "task_review_approved",
+      "from_state": "agent:awaiting-task-review",
+      "to_state": "agent:ready-to-implement",
+      "responsible": "maintainer",
+      "condition": "Registro PRONTA PARA APROVACAO, sem pendências, e contexto íntegro.",
+      "required_evidence": "Comando de aprovação, hashes, spec e branch aprovados."
+    },
+    {
+      "event": "implementation_started",
+      "from_state": "agent:ready-to-implement",
+      "to_state": "agent:running",
+      "responsible": "runner",
+      "condition": "Pedido implement aceito, contexto revalidado e travas adquiridas.",
+      "required_evidence": "Execution ID, base SHA e checkpoint inicial."
+    },
+    {
+      "event": "new_decision_required",
+      "from_state": "agent:running",
+      "to_state": "agent:awaiting-human",
+      "responsible": "runner",
+      "condition": "Decisão nova de produto, contrato ou arquitetura impede continuar.",
+      "required_evidence": "Pergunta bloqueante e checkpoint preservado."
+    },
+    {
+      "event": "draft_ready",
+      "from_state": "agent:running",
+      "to_state": "agent:awaiting-manual-test",
+      "responsible": "runner",
+      "condition": "Validações concluídas e draft PR criado com roteiro reproduzível.",
+      "required_evidence": "PR, commit, testes e roteiro manual."
+    },
+    {
+      "event": "automatic_correction_exhausted",
+      "from_state": "agent:running",
+      "to_state": "agent:blocked",
+      "responsible": "runner",
+      "condition": "Falha recuperável persistiu após a única correção automática.",
+      "required_evidence": "Código de erro, tentativa e checkpoint."
+    },
+    {
+      "event": "execution_timed_out",
+      "from_state": "agent:running",
+      "to_state": "agent:blocked",
+      "responsible": "runner",
+      "condition": "Timeout controlado atingido.",
+      "required_evidence": "Duração, checkpoint e evidências preservadas."
+    },
+    {
+      "event": "cancellation_completed",
+      "from_state": "agent:running",
+      "to_state": "agent:cancelled",
+      "responsible": "runner",
+      "condition": "Pedido cancel aceito e encerramento controlado concluído.",
+      "required_evidence": "Comando, execution ID e checkpoint final."
+    },
+    {
+      "event": "retry_completed",
+      "from_state": "agent:blocked",
+      "to_state": "agent:running",
+      "responsible": "runner",
+      "condition": "Pedido retry aceito, contexto confirmado e travas readquiridas.",
+      "required_evidence": "Novo event ID, execution ID e checkpoint retomado."
+    },
+    {
+      "event": "task_review_reapproved",
+      "from_state": "agent:cancelled",
+      "to_state": "agent:ready-to-implement",
+      "responsible": "maintainer",
+      "condition": "Nova aprovação com todos os hashes do contexto ainda válidos.",
+      "required_evidence": "Comando de aprovação e nova confirmação estruturada."
+    },
+    {
+      "event": "manual_test_approved",
+      "from_state": "agent:awaiting-manual-test",
+      "to_state": "agent:validated",
+      "responsible": "orchestrator",
+      "condition": "Resultado APROVADO vinculado ao conteúdo relevante do commit.",
+      "required_evidence": "Comentário de homologação no draft PR."
+    },
+    {
+      "event": "manual_test_rejected_or_blocked",
+      "from_state": "agent:awaiting-manual-test",
+      "to_state": "agent:blocked",
+      "responsible": "orchestrator",
+      "condition": "Resultado REPROVADO ou BLOQUEADO.",
+      "required_evidence": "Comentário de homologação e divergências."
+    },
+    {
+      "event": "validated_content_changed",
+      "from_state": "agent:validated",
+      "to_state": "agent:awaiting-manual-test",
+      "responsible": "orchestrator",
+      "condition": "Conteúdo relevante do escopo mudou após homologação.",
+      "required_evidence": "Comparação da árvore relevante e novo commit."
+    },
+    {
+      "event": "issue_closed",
+      "from_state": "agent:awaiting-task-review",
+      "to_state": null,
+      "responsible": "orchestrator",
+      "condition": "O estado nativo da issue mudou para closed.",
+      "required_evidence": "Evento de fechamento, motivo e evidências preservadas."
+    },
+    {
+      "event": "issue_closed",
+      "from_state": "agent:awaiting-human",
+      "to_state": null,
+      "responsible": "orchestrator",
+      "condition": "O estado nativo da issue mudou para closed.",
+      "required_evidence": "Evento de fechamento, motivo e evidências preservadas."
+    },
+    {
+      "event": "issue_closed",
+      "from_state": "agent:ready-to-implement",
+      "to_state": null,
+      "responsible": "orchestrator",
+      "condition": "O estado nativo da issue mudou para closed.",
+      "required_evidence": "Evento de fechamento, motivo e evidências preservadas."
+    },
+    {
+      "event": "issue_closed",
+      "from_state": "agent:running",
+      "to_state": null,
+      "responsible": "orchestrator",
+      "condition": "O estado nativo da issue mudou para closed.",
+      "required_evidence": "Evento de fechamento, motivo e evidências preservadas."
+    },
+    {
+      "event": "issue_closed",
+      "from_state": "agent:awaiting-manual-test",
+      "to_state": null,
+      "responsible": "orchestrator",
+      "condition": "O estado nativo da issue mudou para closed.",
+      "required_evidence": "Evento de fechamento, motivo e evidências preservadas."
+    },
+    {
+      "event": "issue_closed",
+      "from_state": "agent:validated",
+      "to_state": null,
+      "responsible": "orchestrator",
+      "condition": "O estado nativo da issue mudou para closed.",
+      "required_evidence": "Evento de fechamento, motivo e evidências preservadas."
+    },
+    {
+      "event": "issue_closed",
+      "from_state": "agent:blocked",
+      "to_state": null,
+      "responsible": "orchestrator",
+      "condition": "O estado nativo da issue mudou para closed.",
+      "required_evidence": "Evento de fechamento, motivo e evidências preservadas."
+    },
+    {
+      "event": "issue_closed",
+      "from_state": "agent:cancelled",
+      "to_state": null,
+      "responsible": "orchestrator",
+      "condition": "O estado nativo da issue mudou para closed.",
+      "required_evidence": "Evento de fechamento, motivo e evidências preservadas."
+    }
+  ],
+  "human_interventions": {
+    "authorized_actors": [
+      "Lucassribeiro9"
+    ],
+    "accepted_source": {
+      "event": "issue_comment.created",
+      "location": "issue",
+      "edited_comments_authorize": false
+    },
+    "manual_homologation_location": "expected_draft_pr",
+    "first_line_only": true,
+    "exact_ascii_spacing": true,
+    "justification_allowed_after_first_line": true,
+    "unauthorized_events": {
+      "public_response": false,
+      "state_change": false,
+      "future_private_audit": true
+    },
+    "commands": [
+      {
+        "name": "approve-task-review",
+        "first_line_pattern": "^/agent approve-task-review$",
+        "allowed_states": [
+          "agent:awaiting-task-review",
+          "agent:cancelled"
+        ],
+        "initial_result": "accepted",
+        "changes_state_on_acceptance": true,
+        "completion_events_by_state": {
+          "agent:awaiting-task-review": "task_review_approved",
+          "agent:cancelled": "task_review_reapproved"
+        },
+        "required_task_review_result": "PRONTA PARA APROVACAO",
+        "required_context_evidence": [
+          "issue_body_sha256",
+          "task_review_comment_id",
+          "task_review_body_sha256",
+          "spec_path",
+          "spec_commit_sha",
+          "approved_branch",
+          "approved_by",
+          "approved_at"
+        ],
+        "rejection_if_incomplete": "task_review_incomplete"
+      },
+      {
+        "name": "decide",
+        "first_line_pattern": "^/agent decide (?:[A-Za-z]|opcao-[a-z0-9][a-z0-9-]*)$",
+        "allowed_states": [
+          "agent:awaiting-human"
+        ],
+        "initial_result": "accepted",
+        "changes_state_on_acceptance": true,
+        "completion_event": "decision_recorded",
+        "normalization": {
+          "type": "option_token",
+          "canonical_format": "opcao-{slug}",
+          "case_insensitive": true,
+          "examples": {
+            "A": "opcao-a",
+            "a": "opcao-a",
+            "opcao-a": "opcao-a"
+          }
+        },
+        "option_must_be_offered": true,
+        "requires_single_pending_question": true,
+        "rejection_if_option_not_offered": "invalid_option",
+        "rejection_if_no_pending_question": "no_pending_decision"
+      },
+      {
+        "name": "retry",
+        "first_line_pattern": "^/agent retry$",
+        "allowed_states": [
+          "agent:blocked"
+        ],
+        "initial_result": "accepted_pending",
+        "changes_state_on_acceptance": false,
+        "completion_event": "retry_completed"
+      },
+      {
+        "name": "cancel",
+        "first_line_pattern": "^/agent cancel$",
+        "allowed_states": [
+          "agent:running"
+        ],
+        "initial_result": "accepted_pending",
+        "changes_state_on_acceptance": false,
+        "completion_event": "cancellation_completed"
+      }
+    ]
+  },
+  "state_policies": {
+    "operational_label_prefix": "agent:",
+    "operational_state_is_exclusive": true,
+    "preserve_non_operational_labels": true,
+    "release_1_blocking": false,
+    "invalid_transition": {
+      "result": "rejected",
+      "code": "transition_not_allowed",
+      "preserve_state": true,
+      "preserve_labels": true
+    },
+    "multiple_operational_labels": {
+      "result": "rejected",
+      "code": "state_conflict",
+      "automatic_repair": false,
+      "preserve_labels": true,
+      "requires_human_correction": true
+    },
+    "native_issue_lifecycle": {
+      "closed_is_executable": false,
+      "interrupt_active_execution": true,
+      "preserve_evidence": true,
+      "remove_operational_label": true,
+      "reopened_operational_state": null,
+      "reopened_requires_new_task_review": true
+    }
+  },
+  "rejection_codes": {
+    "transition_not_allowed": "Evento não permitido para o estado vigente.",
+    "wrong_location": "Comando publicado fora da issue correspondente.",
+    "no_pending_decision": "Não existe uma pergunta pendente para decidir.",
+    "invalid_option": "Opção não foi oferecida na pergunta pendente.",
+    "task_review_incomplete": "Registro ausente, bloqueado, contraditório ou incompleto.",
+    "state_conflict": "Mais de um label operacional foi encontrado.",
+    "wrong_author": "Autor não está autorizado para o piloto.",
+    "wrong_event": "Evento não é um comentário novo elegível.",
+    "invalid_command": "Primeira linha não corresponde à gramática aprovada.",
+    "context_changed": "Issue, Registro, spec ou branch divergem do contexto aprovado."
+  },
+  "structured_confirmations": {
+    "format": "markdown_summary_with_json",
+    "schema_ref": "#/$defs/structuredConfirmation",
+    "publish_for_authorized_acceptance": true,
+    "publish_for_authorized_rejection": true,
+    "unauthorized_event_public_response": false,
+    "required_fields": [
+      "schema_version",
+      "confirmation_id",
+      "result",
+      "command",
+      "actor",
+      "occurred_at",
+      "repository",
+      "issue_number",
+      "source_comment",
+      "previous_state",
+      "new_state",
+      "execution_id",
+      "context_validation",
+      "rejection_code",
+      "approval_context"
+    ],
+    "forbidden_fields": [
+      "token",
+      "secret",
+      "credential",
+      "signature",
+      "prompt",
+      "reasoning",
+      "diff",
+      "raw_log",
+      "private_url",
+      "private_metrics",
+      "accounting_data"
+    ]
+  },
+  "task_review_approval": {
+    "schema_ref": "#/$defs/taskReviewApproval",
+    "required_result": "PRONTA PARA APROVACAO",
+    "pending_question_allowed": false,
+    "blocking_contradiction_allowed": false,
+    "context_change_invalidates_approval": true,
+    "cancelled_reapproval_reuses_context_only_when_unchanged": true,
+    "spec_fields_nullable_when_not_applicable": true
+  }
+}
