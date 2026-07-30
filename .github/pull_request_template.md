@@ -1,63 +1,141 @@
-## Titulo sugerido
+<!--
+Título do PR: tipo(dominio): resumo
 
-`<tipo>(<dominio>): <resumo curto>`
+Use ASCII no título: sem acentos, emojis ou símbolos decorativos. Preserve
+`(`, `)`, `:` e `-` quando fizerem parte da convenção.
 
-Exemplos:
-- `feat(plano-contas): importar catalogo do escritorio`
-- `feat(razao): normalizar debito credito e contrapartida`
-- `fix(auth): bloquear acesso cross-company`
-- `refactor(ml): separar parser e treino do classificador`
+Preencha somente com evidências reais. Mantenha itens não aplicáveis
+desmarcados e acrescente `NAO APLICAVEL: <justificativa>`.
+-->
 
 ## Issue relacionada
 
 `Closes #<numero>`
 
-## Resumo
+## Problema e contexto
 
-Descreva em 3-6 linhas:
-- O problema ou oportunidade
-- O que foi alterado
-- O resultado esperado
+<!-- Explique por que a mudança é necessária e quem ou qual fluxo é afetado. -->
 
-## Tipo de mudanca
+## Tipo de mudança
 
 - [ ] `feat` (nova capacidade)
-- [ ] `fix` (correcao de comportamento)
+- [ ] `fix` (correção de comportamento)
 - [ ] `refactor` (melhoria sem mudar comportamento esperado)
-- [ ] `chore` (estrutura, scripts, migracoes, CI)
-- [ ] `docs` (documentacao)
-- [ ] `spec` (PRD, spec ou decisao de arquitetura)
+- [ ] `chore` (estrutura, scripts, migrações, CI)
+- [ ] `docs` (documentação)
+- [ ] `spec` (PRD, spec ou decisão de arquitetura)
+
+## Solução entregue
+
+<!-- Descreva o que foi efetivamente entregue e o resultado esperado. -->
 
 ## Escopo impactado
 
-- Dominios: (ex: `api`, `auth`, `plano-contas`, `razao`, `ml`, `postgres`, `seguranca`)
-- Arquivos/modulos principais alterados:
-- Dependencias externas afetadas: (PostgreSQL, planilhas, Docker, n8n, banco)
+- Domínios:
+- Arquivos ou módulos principais:
+- Dependências externas afetadas:
+- Contratos, schemas, PRD ou specs afetados:
 
-## Checklist de validacao
+## Checklist de validação
 
+<!--
+Marque somente itens concluídos com evidência. Para um item não aplicável,
+mantenha-o desmarcado e registre a justificativa na própria linha.
+-->
+
+- [ ] O diff está limitado ao escopo aprovado da issue
 - [ ] Testes automatizados relevantes foram executados
-- [ ] Casos de erro criticos foram testados
-- [ ] Regras de acesso por usuario/empresa foram verificadas quando aplicavel
-- [ ] Migracoes Alembic foram revisadas quando aplicavel
-- [ ] Contratos de API e schemas foram atualizados quando aplicavel
-- [ ] Documentacao/PRD/specs foram atualizados quando aplicavel
-- [ ] Nao ha segredos, credenciais ou dados sensiveis versionados
-- [ ] Diff foi revisado e esta legivel (mudanca focada)
+- [ ] Casos de erro críticos foram testados
+- [ ] Regras de acesso por usuário e empresa foram verificadas
+- [ ] Migrações Alembic foram revisadas
+- [ ] Contratos de API e schemas foram atualizados
+- [ ] Documentação, PRD ou specs foram atualizados
+- [ ] Não há segredos, credenciais ou dados sensíveis versionados
+- [ ] O diff foi revisado e está legível
 
-## Evidencias
+## Evidências automatizadas
 
-Inclua evidencias objetivas:
-- Comando de teste executado e resultado
-- Exemplo de entrada/saida ou payload esperado
-- Logs curtos ou prints quando ajudarem a validar comportamento
+- Classificação da mudança:
+- TDD:
+- Comandos executados:
+- Resultados:
+
+<!--
+Mudança documental: justifique por que testes de código não se aplicam e
+registre validações como `git diff --check`, inspeção do diff, links,
+placeholders e Markdown.
+
+Mudança comportamental: registre os ciclos RED -> GREEN, testes focados e
+regressões proporcionais ao risco.
+
+Configuração testável: registre validadores, testes de contrato, build, lint ou
+comandos equivalentes.
+-->
+
+## Roteiro de homologação manual
+
+### Ambiente e commit
+
+- Ambiente:
+- Commit:
+- Perfil:
+- Serviços necessários:
+- Fixtures:
+
+### Preparação
+
+1. <ação de preparação>
+
+Resultado esperado:
+
+### Passos
+
+1. <ação de validação>
+   - Resultado esperado:
+
+### Casos de erro
+
+1. <cenário de erro>
+   - Resultado esperado:
+
+### Evidências
+
+- <referência sanitizada>
+
+### Limpeza
+
+1. <ação de limpeza ou `NAO APLICAVEL: justificativa`>
+
+<!--
+O roteiro deve ser proporcional ao escopo, mas reproduzível.
+
+Para documentação, use passos curtos para conferir conteúdo renderizado,
+links, placeholders, rastreabilidade e diff.
+
+Para comportamento ou configuração, informe serviços, fixtures, preparação,
+fluxo principal, casos de erro, resultados esperados, evidências e limpeza.
+
+Depois da execução, publique no draft PR um comentário com este formato:
+
+## Homologação manual
+
+- Resultado: APROVADO | REPROVADO | BLOQUEADO | NAO APLICAVEL
+- Commit testado: <sha>
+- Ambiente: <ambiente>
+- Perfil: <perfil>
+- Roteiro executado: <referência>
+- Evidências: <referências sanitizadas>
+- Divergências: <nenhuma ou descrição>
+- Justificativa de NAO APLICAVEL: <quando aplicável>
+-->
 
 ## Riscos e rollback
 
 - Risco principal:
-- Impacto esperado se falhar:
-- Plano de rollback:
+- Impacto em caso de falha:
+- Mitigação:
+- Rollback:
 
-## Observacoes para review
+## Observações para review
 
-Pontos que voce quer atencao especial no code review.
+<!-- Indique os pontos que exigem atenção especial durante o code review. -->
