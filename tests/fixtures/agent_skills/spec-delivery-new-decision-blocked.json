@@ -1,0 +1,22 @@
+{
+  "contract_version": "1.0.0",
+  "skill": "spec-delivery",
+  "issue": {"repository": "example/classificador-conta-contabil", "number": 110},
+  "classification": "documental",
+  "outcome": "blocked",
+  "recommended_event": "new_decision_required",
+  "requires_human": true,
+  "blocking_reasons": [
+    {"code": "new_architecture_decision", "message": "A alteração exige escolher um novo responsável pelo contrato.", "source": "docs/specs/example.md"}
+  ],
+  "artifacts": [],
+  "evidence": [
+    {"kind": "source", "reference": "docs/specs/example.md", "result": "verified"}
+  ],
+  "payload": {
+    "spec_path": "docs/specs/example.md",
+    "changed_sections": [],
+    "traceability": ["Issue #110"],
+    "validation_commands": ["Não executados: decisão pendente."]
+  }
+}

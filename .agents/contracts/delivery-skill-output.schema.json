@@ -1,0 +1,767 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Lucassribeiro9/classificador-conta-contabil/blob/main/.agents/contracts/delivery-skill-output.schema.json",
+  "title": "Saida estruturada das skills de entrega",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "skill",
+    "issue",
+    "classification",
+    "outcome",
+    "recommended_event",
+    "requires_human",
+    "blocking_reasons",
+    "artifacts",
+    "evidence",
+    "payload"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "1.0.0"
+    },
+    "skill": {
+      "enum": [
+        "issue-task-review",
+        "spec-delivery",
+        "implement-issue",
+        "prepare-draft-pr"
+      ]
+    },
+    "issue": {
+      "$ref": "#/$defs/issue"
+    },
+    "classification": {
+      "$ref": "#/$defs/classification"
+    },
+    "outcome": {
+      "enum": [
+        "ready_for_approval",
+        "blocked",
+        "requires_spec",
+        "requires_rescoping",
+        "completed",
+        "draft_created"
+      ]
+    },
+    "recommended_event": {
+      "$ref": "#/$defs/recommended_event"
+    },
+    "requires_human": {
+      "type": "boolean"
+    },
+    "blocking_reasons": {
+      "$ref": "#/$defs/blocking_reasons"
+    },
+    "artifacts": {
+      "$ref": "#/$defs/artifacts"
+    },
+    "evidence": {
+      "$ref": "#/$defs/evidence"
+    },
+    "payload": {
+      "type": "object"
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "skill": {
+          "const": "issue-task-review"
+        },
+        "outcome": {
+          "enum": [
+            "ready_for_approval",
+            "blocked",
+            "requires_spec",
+            "requires_rescoping"
+          ]
+        },
+        "payload": {
+          "$ref": "#/$defs/task_review_payload"
+        }
+      }
+    },
+    {
+      "properties": {
+        "skill": {
+          "const": "spec-delivery"
+        },
+        "outcome": {
+          "enum": [
+            "completed",
+            "blocked"
+          ]
+        },
+        "payload": {
+          "$ref": "#/$defs/spec_delivery_payload"
+        }
+      }
+    },
+    {
+      "properties": {
+        "skill": {
+          "const": "implement-issue"
+        }
+      },
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "classification": {
+                  "const": "documental"
+                },
+                "payload": {
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/implement_issue_payload"
+                    },
+                    {
+                      "properties": {
+                        "process_type": {
+                          "const": "documental"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "classification": {
+                  "const": "comportamental"
+                },
+                "payload": {
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/implement_issue_payload"
+                    },
+                    {
+                      "properties": {
+                        "process_type": {
+                          "const": "comportamental"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "classification": {
+                  "const": "configuracao-testavel"
+                },
+                "payload": {
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/implement_issue_payload"
+                    },
+                    {
+                      "properties": {
+                        "process_type": {
+                          "const": "configuracao-testavel"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "classification": {
+                  "const": "mista"
+                },
+                "payload": {
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/implement_issue_payload"
+                    },
+                    {
+                      "properties": {
+                        "process_type": {
+                          "const": "mista"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "outcome": {
+                  "const": "completed"
+                },
+                "classification": {
+                  "const": "documental"
+                },
+                "recommended_event": {
+                  "type": "null"
+                },
+                "requires_human": {
+                  "const": false
+                },
+                "blocking_reasons": {
+                  "maxItems": 0
+                },
+                "payload": {
+                  "properties": {
+                    "tdd_applied": {
+                      "const": false
+                    },
+                    "red_green_cycles": {
+                      "maxItems": 0
+                    },
+                    "ready_for_draft": {
+                      "const": true
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "properties": {
+                "outcome": {
+                  "const": "completed"
+                },
+                "classification": {
+                  "enum": [
+                    "comportamental",
+                    "configuracao-testavel"
+                  ]
+                },
+                "recommended_event": {
+                  "type": "null"
+                },
+                "requires_human": {
+                  "const": false
+                },
+                "blocking_reasons": {
+                  "maxItems": 0
+                },
+                "payload": {
+                  "properties": {
+                    "tdd_applied": {
+                      "const": true
+                    },
+                    "red_green_cycles": {
+                      "minItems": 1
+                    },
+                    "ready_for_draft": {
+                      "const": true
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "properties": {
+                "outcome": {
+                  "const": "blocked"
+                },
+                "requires_human": {
+                  "const": true
+                },
+                "blocking_reasons": {
+                  "minItems": 1
+                },
+                "payload": {
+                  "properties": {
+                    "ready_for_draft": {
+                      "const": false
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "properties": {
+        "skill": {
+          "const": "prepare-draft-pr"
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "outcome": {
+              "const": "draft_created"
+            },
+            "recommended_event": {
+              "const": "draft_ready"
+            },
+            "requires_human": {
+              "const": true
+            },
+            "blocking_reasons": {
+              "maxItems": 0
+            },
+            "payload": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/prepare_draft_pr_payload"
+                },
+                {
+                  "properties": {
+                    "pull_request": {
+                      "$ref": "#/$defs/pull_request"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "outcome": {
+              "const": "blocked"
+            },
+            "recommended_event": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "enum": [
+                    "new_decision_required",
+                    "automatic_correction_exhausted"
+                  ]
+                }
+              ]
+            },
+            "requires_human": {
+              "const": true
+            },
+            "blocking_reasons": {
+              "minItems": 1
+            },
+            "payload": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/prepare_draft_pr_payload"
+                },
+                {
+                  "properties": {
+                    "pull_request": {
+                      "type": "null"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "$defs": {
+    "non_empty_string": {
+      "type": "string",
+      "minLength": 1
+    },
+    "string_list": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/non_empty_string"
+      }
+    },
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "number"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "classification": {
+      "enum": [
+        "documental",
+        "comportamental",
+        "configuracao-testavel",
+        "mista"
+      ]
+    },
+    "recommended_event": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "enum": [
+            "blocking_question_raised",
+            "new_decision_required",
+            "draft_ready",
+            "automatic_correction_exhausted"
+          ]
+        }
+      ]
+    },
+    "blocking_reasons": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "source"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]+$"
+          },
+          "message": {
+            "$ref": "#/$defs/non_empty_string"
+          },
+          "source": {
+            "$ref": "#/$defs/non_empty_string"
+          }
+        }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "type",
+          "status"
+        ],
+        "properties": {
+          "path": {
+            "$ref": "#/$defs/non_empty_string"
+          },
+          "type": {
+            "enum": [
+              "document",
+              "source",
+              "test",
+              "configuration",
+              "pull_request"
+            ]
+          },
+          "status": {
+            "enum": [
+              "planned",
+              "created",
+              "modified",
+              "validated"
+            ]
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "reference",
+          "result"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "source",
+              "test",
+              "validation",
+              "commit",
+              "pull_request"
+            ]
+          },
+          "reference": {
+            "$ref": "#/$defs/non_empty_string"
+          },
+          "result": {
+            "enum": [
+              "verified",
+              "passed",
+              "failed",
+              "not_applicable"
+            ]
+          }
+        }
+      }
+    },
+    "pending_question": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "question",
+            "options",
+            "recommendation"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_-]+$"
+            },
+            "question": {
+              "$ref": "#/$defs/non_empty_string"
+            },
+            "options": {
+              "type": "array",
+              "minItems": 2,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "label"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^opcao-[a-z0-9-]+$"
+                  },
+                  "label": {
+                    "$ref": "#/$defs/non_empty_string"
+                  }
+                }
+              }
+            },
+            "recommendation": {
+              "type": "string",
+              "pattern": "^opcao-[a-z0-9-]+$"
+            }
+          }
+        }
+      ]
+    },
+    "task_review_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "out_of_scope",
+        "approved_decisions",
+        "pending_question",
+        "acceptance_criteria",
+        "validations",
+        "risks",
+        "dependencies",
+        "suggested_branch"
+      ],
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/string_list"
+        },
+        "out_of_scope": {
+          "$ref": "#/$defs/string_list"
+        },
+        "approved_decisions": {
+          "$ref": "#/$defs/string_list"
+        },
+        "pending_question": {
+          "$ref": "#/$defs/pending_question"
+        },
+        "acceptance_criteria": {
+          "$ref": "#/$defs/string_list"
+        },
+        "validations": {
+          "$ref": "#/$defs/string_list"
+        },
+        "risks": {
+          "$ref": "#/$defs/string_list"
+        },
+        "dependencies": {
+          "$ref": "#/$defs/string_list"
+        },
+        "suggested_branch": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "spec_delivery_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "spec_path",
+        "changed_sections",
+        "traceability",
+        "validation_commands"
+      ],
+      "properties": {
+        "spec_path": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "changed_sections": {
+          "$ref": "#/$defs/string_list"
+        },
+        "traceability": {
+          "$ref": "#/$defs/string_list"
+        },
+        "validation_commands": {
+          "$ref": "#/$defs/string_list"
+        }
+      }
+    },
+    "red_green_cycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "behavior",
+        "red_evidence",
+        "green_evidence"
+      ],
+      "properties": {
+        "behavior": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "red_evidence": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "green_evidence": {
+          "$ref": "#/$defs/non_empty_string"
+        }
+      }
+    },
+    "implement_issue_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "process_type",
+        "tdd_applied",
+        "red_green_cycles",
+        "changed_files",
+        "validations",
+        "acceptance_criteria_met",
+        "ready_for_draft"
+      ],
+      "properties": {
+        "process_type": {
+          "$ref": "#/$defs/classification"
+        },
+        "tdd_applied": {
+          "type": "boolean"
+        },
+        "red_green_cycles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/red_green_cycle"
+          }
+        },
+        "changed_files": {
+          "$ref": "#/$defs/string_list"
+        },
+        "validations": {
+          "$ref": "#/$defs/string_list"
+        },
+        "acceptance_criteria_met": {
+          "$ref": "#/$defs/string_list"
+        },
+        "ready_for_draft": {
+          "type": "boolean"
+        }
+      }
+    },
+    "pull_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "number",
+        "url",
+        "state",
+        "base",
+        "head",
+        "commit"
+      ],
+      "properties": {
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "url": {
+          "type": "string",
+          "pattern": "^https://github\\.com/[^/]+/[^/]+/pull/[1-9][0-9]*$"
+        },
+        "state": {
+          "const": "draft"
+        },
+        "base": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "head": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        }
+      }
+    },
+    "prepare_draft_pr_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "pull_request",
+        "manual_test_steps",
+        "validation_summary"
+      ],
+      "properties": {
+        "title": {
+          "type": "string",
+          "pattern": "^[a-z]+\\([a-z0-9-]+\\): [\\x20-\\x7E]+$"
+        },
+        "pull_request": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/pull_request"
+            }
+          ]
+        },
+        "manual_test_steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/non_empty_string"
+          }
+        },
+        "validation_summary": {
+          "$ref": "#/$defs/string_list"
+        }
+      }
+    }
+  }
+}

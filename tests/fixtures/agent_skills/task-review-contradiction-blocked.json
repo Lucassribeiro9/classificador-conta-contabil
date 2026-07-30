@@ -1,0 +1,36 @@
+{
+  "contract_version": "1.0.0",
+  "skill": "issue-task-review",
+  "issue": {"repository": "example/classificador-conta-contabil", "number": 108},
+  "classification": "documental",
+  "outcome": "blocked",
+  "recommended_event": "blocking_question_raised",
+  "requires_human": true,
+  "blocking_reasons": [
+    {"code": "source_contradiction", "message": "Issue e spec definem destinos diferentes.", "source": "issue#108/docs/specs/example.md"}
+  ],
+  "artifacts": [],
+  "evidence": [
+    {"kind": "source", "reference": "issue#108", "result": "verified"},
+    {"kind": "source", "reference": "docs/specs/example.md", "result": "verified"}
+  ],
+  "payload": {
+    "scope": ["Resolver a contradição antes da entrega."],
+    "out_of_scope": ["Escolher silenciosamente uma fonte."],
+    "approved_decisions": [],
+    "pending_question": {
+      "id": "canonical-source",
+      "question": "Qual destino deve prevalecer?",
+      "options": [
+        {"id": "opcao-a", "label": "Manter a spec"},
+        {"id": "opcao-b", "label": "Atualizar a spec primeiro"}
+      ],
+      "recommendation": "opcao-b"
+    },
+    "acceptance_criteria": ["Contradição resolvida por decisão registrada."],
+    "validations": ["Revisar issue e spec novamente."],
+    "risks": ["Implementar contrato incorreto."],
+    "dependencies": [],
+    "suggested_branch": null
+  }
+}

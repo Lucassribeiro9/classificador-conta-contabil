@@ -1,0 +1,27 @@
+{
+  "contract_version": "1.0.0",
+  "skill": "issue-task-review",
+  "issue": {"repository": "example/classificador-conta-contabil", "number": 109},
+  "classification": "configuracao-testavel",
+  "outcome": "blocked",
+  "recommended_event": null,
+  "requires_human": true,
+  "blocking_reasons": [
+    {"code": "dependency_unresolved", "message": "A dependência #99 permanece aberta.", "source": "issue#99"}
+  ],
+  "artifacts": [],
+  "evidence": [
+    {"kind": "source", "reference": "issue#99", "result": "verified"}
+  ],
+  "payload": {
+    "scope": ["Aguardar a dependência aprovada."],
+    "out_of_scope": ["Antecipar o contrato dependente."],
+    "approved_decisions": [],
+    "pending_question": null,
+    "acceptance_criteria": ["Dependência concluída ou explicitamente removida."],
+    "validations": ["Consultar novamente a issue #99."],
+    "risks": ["Duplicação de contrato."],
+    "dependencies": ["Issue #99 aberta."],
+    "suggested_branch": null
+  }
+}

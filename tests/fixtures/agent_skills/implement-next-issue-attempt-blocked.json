@@ -1,0 +1,25 @@
+{
+  "contract_version": "1.0.0",
+  "skill": "implement-issue",
+  "issue": {"repository": "example/classificador-conta-contabil", "number": 115},
+  "classification": "documental",
+  "outcome": "blocked",
+  "recommended_event": null,
+  "requires_human": true,
+  "blocking_reasons": [
+    {"code": "next_issue_forbidden", "message": "A solicitação tentou iniciar outra issue automaticamente.", "source": "execution-request"}
+  ],
+  "artifacts": [],
+  "evidence": [
+    {"kind": "source", "reference": "execution-request", "result": "verified"}
+  ],
+  "payload": {
+    "process_type": "documental",
+    "tdd_applied": false,
+    "red_green_cycles": [],
+    "changed_files": [],
+    "validations": ["Execução interrompida antes de qualquer edição."],
+    "acceptance_criteria_met": [],
+    "ready_for_draft": false
+  }
+}

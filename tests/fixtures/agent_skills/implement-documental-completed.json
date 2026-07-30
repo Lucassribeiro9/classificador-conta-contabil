@@ -1,0 +1,43 @@
+{
+  "contract_version": "1.0.0",
+  "skill": "implement-issue",
+  "issue": {
+    "repository": "example/classificador-conta-contabil",
+    "number": 116
+  },
+  "classification": "documental",
+  "outcome": "completed",
+  "recommended_event": null,
+  "requires_human": false,
+  "blocking_reasons": [],
+  "artifacts": [
+    {
+      "path": "docs/example.md",
+      "type": "document",
+      "status": "validated"
+    }
+  ],
+  "evidence": [
+    {
+      "kind": "validation",
+      "reference": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "payload": {
+    "process_type": "documental",
+    "tdd_applied": false,
+    "red_green_cycles": [],
+    "changed_files": [
+      "docs/example.md"
+    ],
+    "validations": [
+      "git diff --check",
+      "Inspeção integral do diff"
+    ],
+    "acceptance_criteria_met": [
+      "Documento atualizado e rastreável."
+    ],
+    "ready_for_draft": true
+  }
+}
