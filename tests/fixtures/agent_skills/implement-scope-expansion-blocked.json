@@ -1,0 +1,25 @@
+{
+  "contract_version": "1.0.0",
+  "skill": "implement-issue",
+  "issue": {"repository": "example/classificador-conta-contabil", "number": 111},
+  "classification": "comportamental",
+  "outcome": "blocked",
+  "recommended_event": "new_decision_required",
+  "requires_human": true,
+  "blocking_reasons": [
+    {"code": "scope_expansion", "message": "O comportamento exige alterar contrato público não autorizado.", "source": "issue#111"}
+  ],
+  "artifacts": [],
+  "evidence": [
+    {"kind": "source", "reference": "issue#111", "result": "verified"}
+  ],
+  "payload": {
+    "process_type": "comportamental",
+    "tdd_applied": true,
+    "red_green_cycles": [],
+    "changed_files": [],
+    "validations": ["Não executadas: ampliação detectada antes da edição."],
+    "acceptance_criteria_met": [],
+    "ready_for_draft": false
+  }
+}

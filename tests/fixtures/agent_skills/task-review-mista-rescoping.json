@@ -1,0 +1,48 @@
+{
+  "contract_version": "1.0.0",
+  "skill": "issue-task-review",
+  "issue": {
+    "repository": "example/classificador-conta-contabil",
+    "number": 107
+  },
+  "classification": "mista",
+  "outcome": "requires_rescoping",
+  "recommended_event": null,
+  "requires_human": true,
+  "blocking_reasons": [
+    {
+      "code": "mixed_scope",
+      "message": "A entrega mistura spec e comportamento em mais de um PR focado.",
+      "source": "issue#107"
+    }
+  ],
+  "artifacts": [],
+  "evidence": [
+    {
+      "kind": "source",
+      "reference": "issue#107",
+      "result": "verified"
+    }
+  ],
+  "payload": {
+    "scope": [
+      "Separar documentação e comportamento."
+    ],
+    "out_of_scope": [
+      "Implementar antes do recorte."
+    ],
+    "approved_decisions": [],
+    "pending_question": null,
+    "acceptance_criteria": [
+      "Cada recorte cabe em um PR focado."
+    ],
+    "validations": [
+      "Revisão do novo escopo."
+    ],
+    "risks": [
+      "Mistura de contratos e implementação."
+    ],
+    "dependencies": [],
+    "suggested_branch": null
+  }
+}

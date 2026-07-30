@@ -1,0 +1,51 @@
+{
+  "contract_version": "1.0.0",
+  "skill": "prepare-draft-pr",
+  "issue": {
+    "repository": "example/classificador-conta-contabil",
+    "number": 104
+  },
+  "classification": "configuracao-testavel",
+  "outcome": "draft_created",
+  "recommended_event": "draft_ready",
+  "requires_human": true,
+  "blocking_reasons": [],
+  "artifacts": [
+    {
+      "path": "https://github.com/example/classificador-conta-contabil/pull/105",
+      "type": "pull_request",
+      "status": "created"
+    }
+  ],
+  "evidence": [
+    {
+      "kind": "commit",
+      "reference": "0123456789abcdef0123456789abcdef01234567",
+      "result": "verified"
+    },
+    {
+      "kind": "pull_request",
+      "reference": "https://github.com/example/classificador-conta-contabil/pull/105",
+      "result": "verified"
+    }
+  ],
+  "payload": {
+    "title": "feat(agent): exemplo sanitizado",
+    "pull_request": {
+      "number": 105,
+      "url": "https://github.com/example/classificador-conta-contabil/pull/105",
+      "state": "draft",
+      "base": "main",
+      "head": "feat/agent-example",
+      "commit": "0123456789abcdef0123456789abcdef01234567"
+    },
+    "manual_test_steps": [
+      "Abrir o draft PR.",
+      "Conferir o roteiro e as evidencias sanitizadas."
+    ],
+    "validation_summary": [
+      "Testes focados aprovados.",
+      "git diff --check aprovado."
+    ]
+  }
+}

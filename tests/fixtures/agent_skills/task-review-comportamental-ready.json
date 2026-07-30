@@ -1,0 +1,44 @@
+{
+  "contract_version": "1.0.0",
+  "skill": "issue-task-review",
+  "issue": {
+    "repository": "example/classificador-conta-contabil",
+    "number": 106
+  },
+  "classification": "comportamental",
+  "outcome": "ready_for_approval",
+  "recommended_event": null,
+  "requires_human": true,
+  "blocking_reasons": [],
+  "artifacts": [],
+  "evidence": [
+    {
+      "kind": "source",
+      "reference": "docs/specs/example.md",
+      "result": "verified"
+    }
+  ],
+  "payload": {
+    "scope": [
+      "Alterar um comportamento público já especificado."
+    ],
+    "out_of_scope": [
+      "Alterar contratos não aprovados."
+    ],
+    "approved_decisions": [
+      "Usar TDD no seam público."
+    ],
+    "pending_question": null,
+    "acceptance_criteria": [
+      "Comportamento coberto por RED e GREEN."
+    ],
+    "validations": [
+      "pytest -q tests/test_example.py"
+    ],
+    "risks": [
+      "Regressão no contrato público."
+    ],
+    "dependencies": [],
+    "suggested_branch": "feat/example-behavior"
+  }
+}

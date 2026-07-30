@@ -1,0 +1,54 @@
+{
+  "contract_version": "1.0.0",
+  "skill": "implement-issue",
+  "issue": {
+    "repository": "example/classificador-conta-contabil",
+    "number": 103
+  },
+  "classification": "configuracao-testavel",
+  "outcome": "completed",
+  "recommended_event": null,
+  "requires_human": false,
+  "blocking_reasons": [],
+  "artifacts": [
+    {
+      "path": ".agents/contracts/example.schema.json",
+      "type": "configuration",
+      "status": "validated"
+    },
+    {
+      "path": "tests/test_example.py",
+      "type": "test",
+      "status": "validated"
+    }
+  ],
+  "evidence": [
+    {
+      "kind": "test",
+      "reference": "pytest -q tests/test_example.py",
+      "result": "passed"
+    }
+  ],
+  "payload": {
+    "process_type": "configuracao-testavel",
+    "tdd_applied": true,
+    "red_green_cycles": [
+      {
+        "behavior": "Validar o contrato fechado.",
+        "red_evidence": "Falha por schema ausente.",
+        "green_evidence": "Teste focado aprovado."
+      }
+    ],
+    "changed_files": [
+      ".agents/contracts/example.schema.json",
+      "tests/test_example.py"
+    ],
+    "validations": [
+      "pytest -q tests/test_example.py"
+    ],
+    "acceptance_criteria_met": [
+      "Contrato validado por fixture sanitizada."
+    ],
+    "ready_for_draft": true
+  }
+}

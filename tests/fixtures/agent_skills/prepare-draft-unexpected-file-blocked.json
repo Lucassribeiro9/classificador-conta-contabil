@@ -1,0 +1,24 @@
+{
+  "contract_version": "1.0.0",
+  "skill": "prepare-draft-pr",
+  "issue": {"repository": "example/classificador-conta-contabil", "number": 113},
+  "classification": "configuracao-testavel",
+  "outcome": "blocked",
+  "recommended_event": "automatic_correction_exhausted",
+  "requires_human": true,
+  "blocking_reasons": [
+    {"code": "unexpected_file", "message": "O diff contém arquivo fora da Task Review.", "source": "git diff --name-only"}
+  ],
+  "artifacts": [
+    {"path": "unrelated.txt", "type": "document", "status": "modified"}
+  ],
+  "evidence": [
+    {"kind": "validation", "reference": "git diff --name-only", "result": "failed"}
+  ],
+  "payload": {
+    "title": "feat(agent): exemplo sanitizado",
+    "pull_request": null,
+    "manual_test_steps": ["Não iniciar homologação enquanto o diff estiver misto."],
+    "validation_summary": ["Arquivo inesperado bloqueou commit e publicação."]
+  }
+}

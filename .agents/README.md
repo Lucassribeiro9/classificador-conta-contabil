@@ -11,6 +11,19 @@ Esta pasta guarda as skills usadas para conduzir a evolucao do classificador con
 - `tdd`: implementar cada issue com ciclo red-green-refactor.
 - `documentation-writer`: criar ou revisar documentacao do projeto, PRs, guias e README com estrutura clara.
 
+## Skills de Entrega Supervisionada
+
+- `issue-task-review`: revisar uma issue e registrar decisões antes da implementação.
+- `spec-delivery`: criar ou atualizar somente uma spec autorizada.
+- `implement-issue`: executar uma issue aprovada com TDD condicional.
+- `prepare-draft-pr`: validar, publicar a branch aprovada e criar somente o draft PR.
+
+As quatro skills usam o contrato
+`.agents/contracts/delivery-skill-output.schema.json` e a matriz de contexto
+`.agents/references/delivery-skill-sources.md`. Elas executam uma etapa e
+não coordenam a esteira, não alteram estados diretamente e não avançam para
+outra issue.
+
 ## Fluxo Recomendado
 
 1. Usar `brainstorming` quando a ideia ainda estiver aberta.

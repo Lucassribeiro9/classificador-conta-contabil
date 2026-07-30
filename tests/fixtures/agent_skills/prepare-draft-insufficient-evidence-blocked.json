@@ -1,0 +1,20 @@
+{
+  "contract_version": "1.0.0",
+  "skill": "prepare-draft-pr",
+  "issue": {"repository": "example/classificador-conta-contabil", "number": 112},
+  "classification": "documental",
+  "outcome": "blocked",
+  "recommended_event": "automatic_correction_exhausted",
+  "requires_human": true,
+  "blocking_reasons": [
+    {"code": "insufficient_evidence", "message": "A validação documental não possui resultado registrado.", "source": "worktree"}
+  ],
+  "artifacts": [],
+  "evidence": [],
+  "payload": {
+    "title": "docs(example): atualizar documento",
+    "pull_request": null,
+    "manual_test_steps": ["Não iniciar homologação até completar as evidências."],
+    "validation_summary": ["Evidência insuficiente; draft não criado."]
+  }
+}

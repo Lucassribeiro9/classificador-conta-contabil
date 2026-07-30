@@ -1,0 +1,29 @@
+{
+  "contract_version": "1.0.0",
+  "skill": "implement-issue",
+  "issue": {"repository": "example/classificador-conta-contabil", "number": 114},
+  "classification": "configuracao-testavel",
+  "outcome": "blocked",
+  "recommended_event": "automatic_correction_exhausted",
+  "requires_human": true,
+  "blocking_reasons": [
+    {"code": "mandatory_test_failed", "message": "O teste focado continua falhando após a correção permitida.", "source": "pytest -q tests/test_example.py"}
+  ],
+  "artifacts": [
+    {"path": "tests/test_example.py", "type": "test", "status": "modified"}
+  ],
+  "evidence": [
+    {"kind": "test", "reference": "pytest -q tests/test_example.py", "result": "failed"}
+  ],
+  "payload": {
+    "process_type": "configuracao-testavel",
+    "tdd_applied": true,
+    "red_green_cycles": [
+      {"behavior": "Validar a configuração.", "red_evidence": "Falha esperada confirmada.", "green_evidence": "GREEN não obtido."}
+    ],
+    "changed_files": ["tests/test_example.py"],
+    "validations": ["pytest -q tests/test_example.py"],
+    "acceptance_criteria_met": [],
+    "ready_for_draft": false
+  }
+}

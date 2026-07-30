@@ -1,0 +1,44 @@
+{
+  "contract_version": "1.0.0",
+  "skill": "issue-task-review",
+  "issue": {
+    "repository": "example/classificador-conta-contabil",
+    "number": 101
+  },
+  "classification": "documental",
+  "outcome": "ready_for_approval",
+  "recommended_event": null,
+  "requires_human": true,
+  "blocking_reasons": [],
+  "artifacts": [],
+  "evidence": [
+    {
+      "kind": "source",
+      "reference": "docs/specs/example.md",
+      "result": "verified"
+    }
+  ],
+  "payload": {
+    "scope": [
+      "Atualizar o documento aprovado."
+    ],
+    "out_of_scope": [
+      "Alterar comportamento executavel."
+    ],
+    "approved_decisions": [
+      "Manter a mudanca documental."
+    ],
+    "pending_question": null,
+    "acceptance_criteria": [
+      "Documento rastreavel para a issue."
+    ],
+    "validations": [
+      "git diff --check"
+    ],
+    "risks": [
+      "Perda de rastreabilidade."
+    ],
+    "dependencies": [],
+    "suggested_branch": "docs/example-update"
+  }
+}

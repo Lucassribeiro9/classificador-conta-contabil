@@ -1,0 +1,39 @@
+{
+  "contract_version": "1.0.0",
+  "skill": "spec-delivery",
+  "issue": {
+    "repository": "example/classificador-conta-contabil",
+    "number": 102
+  },
+  "classification": "documental",
+  "outcome": "completed",
+  "recommended_event": null,
+  "requires_human": false,
+  "blocking_reasons": [],
+  "artifacts": [
+    {
+      "path": "docs/specs/example.md",
+      "type": "document",
+      "status": "modified"
+    }
+  ],
+  "evidence": [
+    {
+      "kind": "validation",
+      "reference": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "payload": {
+    "spec_path": "docs/specs/example.md",
+    "changed_sections": [
+      "Criterios de aceite"
+    ],
+    "traceability": [
+      "Issue #102"
+    ],
+    "validation_commands": [
+      "git diff --check"
+    ]
+  }
+}
