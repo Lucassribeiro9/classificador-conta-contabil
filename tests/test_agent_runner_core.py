@@ -432,3 +432,15 @@ def test_context_validation_failure_blocks_before_executor(tmp_path: Path):
     assert response.code == "STATE_MISMATCH"
     assert response.execution_id is None
     assert executor.requests == []
+
+
+def test_runner_store_persists_private_interface_nonce_replay(tmp_path: Path):
+    store = RunnerStore(tmp_path / "runner.sqlite3")
+
+    first = store.register_nonce("primary", "nonce-377", "2026-08-05T12:00:00Z")
+    replay = store.register_nonce("primary", "nonce-377", "2026-08-05T12:00:00Z")
+    other_key = store.register_nonce("secondary", "nonce-377", "2026-08-05T12:00:00Z")
+
+    assert first is True
+    assert replay is False
+    assert other_key is True
