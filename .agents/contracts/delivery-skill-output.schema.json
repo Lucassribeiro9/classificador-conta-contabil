@@ -19,14 +19,15 @@
   ],
   "properties": {
     "contract_version": {
-      "const": "1.0.0"
+      "const": "2.0.0"
     },
     "skill": {
       "enum": [
         "issue-task-review",
         "spec-delivery",
         "implement-issue",
-        "prepare-draft-pr"
+        "prepare-draft-pr",
+        "issue-delivery-loop"
       ]
     },
     "issue": {
@@ -42,7 +43,8 @@
         "requires_spec",
         "requires_rescoping",
         "completed",
-        "draft_created"
+        "draft_created",
+        "delegation_ready"
       ]
     },
     "recommended_event": {
@@ -284,6 +286,103 @@
               }
             }
           ]
+        }
+      ]
+    },
+    {
+      "properties": {
+        "skill": {
+          "const": "issue-delivery-loop"
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "outcome": {
+              "const": "delegation_ready"
+            },
+            "recommended_event": {
+              "type": "null"
+            },
+            "requires_human": {
+              "const": false
+            },
+            "blocking_reasons": {
+              "maxItems": 0
+            },
+            "payload": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/issue_delivery_loop_payload"
+                },
+                {
+                  "properties": {
+                    "delegation_allowed": {
+                      "const": true
+                    },
+                    "selected_skill": {
+                      "enum": [
+                        "issue-task-review",
+                        "spec-delivery",
+                        "implement-issue",
+                        "prepare-draft-pr"
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "outcome": {
+              "const": "blocked"
+            },
+            "recommended_event": {
+              "type": "null"
+            },
+            "requires_human": {
+              "const": true
+            },
+            "blocking_reasons": {
+              "minItems": 1
+            },
+            "payload": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/issue_delivery_loop_payload"
+                },
+                {
+                  "properties": {
+                    "delegation_allowed": {
+                      "const": false
+                    },
+                    "selected_skill": {
+                      "type": "null"
+                    },
+                    "selected_skill_source": {
+                      "type": "null"
+                    },
+                    "checkpoint": {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/checkpoint"
+                        },
+                        {
+                          "properties": {
+                            "status": {
+                              "const": "blocked"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          }
         }
       ]
     },
@@ -567,6 +666,7 @@
       "additionalProperties": false,
       "required": [
         "scope",
+        "delivery_track",
         "out_of_scope",
         "approved_decisions",
         "pending_question",
@@ -579,6 +679,12 @@
       "properties": {
         "scope": {
           "$ref": "#/$defs/string_list"
+        },
+        "delivery_track": {
+          "enum": [
+            "spec",
+            "implementation"
+          ]
         },
         "out_of_scope": {
           "$ref": "#/$defs/string_list"
@@ -760,6 +866,180 @@
         },
         "validation_summary": {
           "$ref": "#/$defs/string_list"
+        }
+      }
+    },
+    "delivery_track": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "enum": [
+            "spec",
+            "implementation"
+          ]
+        }
+      ]
+    },
+    "checkpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stage",
+        "status",
+        "attempt",
+        "previous_output_ref",
+        "idempotency_key"
+      ],
+      "properties": {
+        "stage": {
+          "enum": [
+            "task_review",
+            "delivery",
+            "draft",
+            "manual_homologation",
+            "complete"
+          ]
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "completed",
+            "blocked"
+          ]
+        },
+        "attempt": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "previous_output_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "idempotency_key": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "delegation_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "github_state",
+        "previous_output_ref",
+        "previous_skill",
+        "previous_outcome"
+      ],
+      "properties": {
+        "github_state": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "previous_output_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "previous_skill": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "previous_outcome": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "manual_fallback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "comment_location",
+        "prompt_section",
+        "append_only"
+      ],
+      "properties": {
+        "comment_location": {
+          "enum": [
+            "issue",
+            "pull_request"
+          ]
+        },
+        "prompt_section": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "append_only": {
+          "const": true
+        }
+      }
+    },
+    "issue_delivery_loop_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "delivery_track",
+        "selected_skill",
+        "selected_skill_source",
+        "delegation_allowed",
+        "delegation_input",
+        "checkpoint",
+        "fallback",
+        "suggested_next_issue"
+      ],
+      "properties": {
+        "delivery_track": {
+          "$ref": "#/$defs/delivery_track"
+        },
+        "selected_skill": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "enum": [
+                "issue-task-review",
+                "spec-delivery",
+                "implement-issue",
+                "prepare-draft-pr"
+              ]
+            }
+          ]
+        },
+        "selected_skill_source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "delegation_allowed": {
+          "type": "boolean"
+        },
+        "delegation_input": {
+          "$ref": "#/$defs/delegation_input"
+        },
+        "checkpoint": {
+          "$ref": "#/$defs/checkpoint"
+        },
+        "fallback": {
+          "$ref": "#/$defs/manual_fallback"
+        },
+        "suggested_next_issue": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
         }
       }
     }

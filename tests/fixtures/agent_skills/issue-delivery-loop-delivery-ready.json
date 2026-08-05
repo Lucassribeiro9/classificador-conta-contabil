@@ -1,0 +1,46 @@
+{
+  "contract_version": "2.0.0",
+  "skill": "issue-delivery-loop",
+  "issue": {
+    "repository": "example/classificador-conta-contabil",
+    "number": 101
+  },
+  "classification": "configuracao-testavel",
+  "outcome": "delegation_ready",
+  "recommended_event": null,
+  "requires_human": false,
+  "blocking_reasons": [],
+  "artifacts": [],
+  "evidence": [
+    {
+      "kind": "source",
+      "reference": ".agents/contracts/issue-delivery-loop-routing.json",
+      "result": "verified"
+    }
+  ],
+  "payload": {
+    "delivery_track": "implementation",
+    "selected_skill": "implement-issue",
+    "selected_skill_source": ".agents/skills/implement-issue/SKILL.md",
+    "delegation_allowed": true,
+    "delegation_input": {
+      "github_state": "agent:ready-to-implement",
+      "previous_output_ref": "issue-comment:12345",
+      "previous_skill": "issue-task-review",
+      "previous_outcome": "ready_for_approval"
+    },
+    "checkpoint": {
+      "stage": "delivery",
+      "status": "pending",
+      "attempt": 1,
+      "previous_output_ref": "issue-comment:12345",
+      "idempotency_key": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "fallback": {
+      "comment_location": "issue",
+      "prompt_section": "implementation",
+      "append_only": true
+    },
+    "suggested_next_issue": null
+  }
+}

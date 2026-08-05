@@ -537,3 +537,113 @@ Regras:
 - [ ] Riscos e rollback estao descritos.
 - [ ] Corpo do PR segue `.github/pull_request_template.md`.
 - [ ] Se o PR for apenas texto, ele foi entregue em um unico bloco Markdown.
+
+## Fallback Manual da Esteira Supervisionada
+
+Use estes prompts quando a automação estiver indisponível. Antes de cada
+retomada, valide o último checkpoint conforme
+`.agents/references/issue-delivery-loop-fallback.md`.
+
+### Task Review
+
+`prompt_section: task-review`
+
+```text
+Use issue-task-review e github:github.
+
+Revise uma única issue:
+<url-ou-numero>
+
+Contexto:
+- Repositório: Lucassribeiro9/classificador-conta-contabil
+- PRD: <caminho-ou-nao-aplicavel>
+- Spec: <caminho-ou-nao-aplicavel>
+- Issue-pai: <numero-ou-nao-aplicavel>
+- Checkpoint anterior: <referencia-ou-null>
+
+Não altere arquivos ou o GitHub. Resolva pelo repositório tudo que for
+descoberto, faça somente uma pergunta pendente por vez e aguarde aprovação
+explícita do Registro da Task Review.
+```
+
+### Entrega de Spec
+
+`prompt_section: spec-delivery`
+
+```text
+Use spec-delivery e github:github.
+
+Entregue somente a spec autorizada pela issue:
+<url-ou-numero>
+
+Contexto:
+- Task Review aprovada: <referencia>
+- PRD: <caminho>
+- Spec autorizada: <caminho>
+- Branch aprovada: <branch>
+- Checkpoint anterior: <referencia>
+
+Não implemente código, não gere issues e não altere contratos superiores sem
+nova decisão. Execute as validações documentais previstas e devolva o envelope
+estruturado.
+```
+
+### Implementação Condicional
+
+`prompt_section: implementation`
+
+```text
+Use implement-issue, spec-driven-development e github:github.
+Use TDD somente para mudança comportamental ou configuração testável.
+
+Implemente uma única issue:
+<url-ou-numero>
+
+Contexto:
+- Task Review aprovada: <referencia>
+- PRD/spec: <caminhos aplicáveis>
+- Branch aprovada: <branch>
+- Checkpoint anterior: <referencia>
+
+Revalide issue, dependências, branch e worktree. Execute RED → GREEN em fatias
+quando aplicável, não faça commit/push/PR e não avance para outra issue.
+```
+
+### Preparação do Draft PR
+
+`prompt_section: draft-pr`
+
+```text
+Use prepare-draft-pr e github:github. Use github:yeet somente para publicar.
+
+Prepare o draft PR de uma única issue:
+<url-ou-numero>
+
+Contexto:
+- Task Review: <referencia>
+- Branch aprovada: <branch>
+- Base: main
+- Resultado da entrega: <referencia>
+- Template: .github/pull_request_template.md
+
+Use somente evidências reais. Inclua roteiro manual reproduzível, faça commit e
+push apenas do escopo aprovado, crie somente draft e nunca faça merge.
+```
+
+### Homologação Manual
+
+`prompt_section: manual-homologation`
+
+```text
+Homologue o draft PR:
+<url-ou-numero>
+
+1. Execute exatamente o roteiro manual do PR.
+2. Registre resultado APROVADO, REPROVADO ou BLOQUEADO.
+3. Vincule o resultado ao commit testado.
+4. Liste divergências observadas sem incluir dados sensíveis.
+5. Publique o checkpoint sanitizado no PR.
+
+Não marque como aprovado se algum passo estiver pendente. Alteração relevante
+após a homologação exige novo teste manual.
+```

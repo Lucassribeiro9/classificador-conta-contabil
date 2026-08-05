@@ -1,5 +1,5 @@
 {
-  "contract_version": "1.0.0",
+  "contract_version": "2.0.0",
   "skill": "spec-delivery",
   "issue": {"repository": "example/classificador-conta-contabil", "number": 110},
   "classification": "documental",

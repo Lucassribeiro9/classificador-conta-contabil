@@ -1,5 +1,5 @@
 {
-  "contract_version": "1.0.0",
+  "contract_version": "2.0.0",
   "skill": "issue-task-review",
   "issue": {
     "repository": "example/classificador-conta-contabil",
@@ -22,6 +22,7 @@
     "scope": [
       "Alterar um comportamento público já especificado."
     ],
+    "delivery_track": "implementation",
     "out_of_scope": [
       "Alterar contratos não aprovados."
     ],
