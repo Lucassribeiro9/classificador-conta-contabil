@@ -1,0 +1,153 @@
+{
+  "routing_version": "1.0.0",
+  "output_contract_version": "2.0.0",
+  "protocol_source": ".github/agent-protocol.json",
+  "routes": [
+    {
+      "stage": "task_review",
+      "status": "pending",
+      "delivery_track": null,
+      "github_states": [
+        null,
+        "agent:awaiting-task-review",
+        "agent:awaiting-human"
+      ],
+      "selected_skill": "issue-task-review",
+      "selected_skill_source": ".agents/skills/issue-task-review/SKILL.md",
+      "required_previous_skill": null,
+      "required_previous_outcomes": [],
+      "prompt_section": "task-review"
+    },
+    {
+      "stage": "delivery",
+      "status": "pending",
+      "delivery_track": "spec",
+      "github_states": [
+        "agent:ready-to-implement",
+        "agent:running"
+      ],
+      "selected_skill": "spec-delivery",
+      "selected_skill_source": ".agents/skills/spec-delivery/SKILL.md",
+      "required_previous_skill": "issue-task-review",
+      "required_previous_outcomes": [
+        "ready_for_approval"
+      ],
+      "prompt_section": "spec-delivery"
+    },
+    {
+      "stage": "delivery",
+      "status": "pending",
+      "delivery_track": "implementation",
+      "github_states": [
+        "agent:ready-to-implement",
+        "agent:running"
+      ],
+      "selected_skill": "implement-issue",
+      "selected_skill_source": ".agents/skills/implement-issue/SKILL.md",
+      "required_previous_skill": "issue-task-review",
+      "required_previous_outcomes": [
+        "ready_for_approval"
+      ],
+      "prompt_section": "implementation"
+    },
+    {
+      "stage": "draft",
+      "status": "pending",
+      "delivery_track": "spec",
+      "github_states": [
+        "agent:running"
+      ],
+      "selected_skill": "prepare-draft-pr",
+      "selected_skill_source": ".agents/skills/prepare-draft-pr/SKILL.md",
+      "required_previous_skill": "spec-delivery",
+      "required_previous_outcomes": [
+        "completed"
+      ],
+      "prompt_section": "draft-pr"
+    },
+    {
+      "stage": "draft",
+      "status": "pending",
+      "delivery_track": "implementation",
+      "github_states": [
+        "agent:running"
+      ],
+      "selected_skill": "prepare-draft-pr",
+      "selected_skill_source": ".agents/skills/prepare-draft-pr/SKILL.md",
+      "required_previous_skill": "implement-issue",
+      "required_previous_outcomes": [
+        "completed"
+      ],
+      "prompt_section": "draft-pr"
+    },
+    {
+      "stage": "manual_homologation",
+      "status": "pending",
+      "mode": "human_gate",
+      "delivery_track": null,
+      "github_states": [
+        "agent:awaiting-manual-test"
+      ],
+      "selected_skill": null,
+      "selected_skill_source": null,
+      "required_previous_skill": "prepare-draft-pr",
+      "required_previous_outcomes": [
+        "draft_created"
+      ],
+      "prompt_section": "manual-homologation"
+    }
+  ],
+  "terminal_stages": [
+    "complete"
+  ],
+  "blocked_states": [
+    "agent:blocked",
+    "agent:cancelled"
+  ],
+  "idempotency": {
+    "algorithm": "sha256",
+    "components": [
+      "repository",
+      "issue_number",
+      "stage",
+      "attempt",
+      "previous_output_ref"
+    ],
+    "duplicate_result": "reuse_without_delegation"
+  },
+  "retry_policy": {
+    "requires_human_event": "retry_completed",
+    "automatic_retry": false
+  },
+  "checkpoint_policy": {
+    "append_only": true,
+    "edited_comment_is_valid": false,
+    "locations": {
+      "task_review": "issue",
+      "delivery": "issue",
+      "draft": "pull_request",
+      "manual_homologation": "pull_request",
+      "complete": "pull_request"
+    },
+    "forbidden_fields": [
+      "prompt",
+      "response",
+      "reasoning",
+      "token_metrics",
+      "secret",
+      "accounting_data",
+      "raw_log",
+      "diff"
+    ]
+  },
+  "next_issue_policy": {
+    "source": "ordered_parent_sub_issues",
+    "requirements": [
+      "open",
+      "eligible",
+      "dependencies_resolved"
+    ],
+    "action": "suggest_only",
+    "on_ambiguity": null
+  }
+}

@@ -1,5 +1,5 @@
 {
-  "contract_version": "1.0.0",
+  "contract_version": "2.0.0",
   "skill": "issue-task-review",
   "issue": {"repository": "example/classificador-conta-contabil", "number": 108},
   "classification": "documental",
@@ -16,6 +16,7 @@
   ],
   "payload": {
     "scope": ["Resolver a contradição antes da entrega."],
+    "delivery_track": "spec",
     "out_of_scope": ["Escolher silenciosamente uma fonte."],
     "approved_decisions": [],
     "pending_question": {

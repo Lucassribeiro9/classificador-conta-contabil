@@ -1,0 +1,52 @@
+{
+  "contract_version": "2.0.0",
+  "skill": "issue-delivery-loop",
+  "issue": {
+    "repository": "example/classificador-conta-contabil",
+    "number": 101
+  },
+  "classification": "configuracao-testavel",
+  "outcome": "blocked",
+  "recommended_event": null,
+  "requires_human": true,
+  "blocking_reasons": [
+    {
+      "code": "unknown_state",
+      "message": "Estado GitHub desconhecido para o manifesto.",
+      "source": ".agents/contracts/issue-delivery-loop-routing.json"
+    }
+  ],
+  "artifacts": [],
+  "evidence": [
+    {
+      "kind": "source",
+      "reference": ".agents/contracts/issue-delivery-loop-routing.json",
+      "result": "verified"
+    }
+  ],
+  "payload": {
+    "delivery_track": "implementation",
+    "selected_skill": null,
+    "selected_skill_source": null,
+    "delegation_allowed": false,
+    "delegation_input": {
+      "github_state": "agent:unknown",
+      "previous_output_ref": "issue-comment:12345",
+      "previous_skill": "issue-task-review",
+      "previous_outcome": "ready_for_approval"
+    },
+    "checkpoint": {
+      "stage": "delivery",
+      "status": "blocked",
+      "attempt": 1,
+      "previous_output_ref": "issue-comment:12345",
+      "idempotency_key": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "fallback": {
+      "comment_location": "issue",
+      "prompt_section": "implementation",
+      "append_only": true
+    },
+    "suggested_next_issue": null
+  }
+}
