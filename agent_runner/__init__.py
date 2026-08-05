@@ -172,6 +172,12 @@ class RunnerStore:
                     lock_name TEXT PRIMARY KEY,
                     execution_id TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS nonces (
+                    key_id TEXT NOT NULL,
+                    nonce TEXT NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    PRIMARY KEY (key_id, nonce)
+                );
                 """
             )
 
@@ -201,6 +207,20 @@ class RunnerStore:
                 """,
                 (event_id, payload_hash, json.dumps(_response_to_json(response), sort_keys=True)),
             )
+
+    def register_nonce(self, key_id: str, nonce: str, timestamp: str) -> bool:
+        with self._connect() as connection:
+            try:
+                connection.execute(
+                    """
+                    INSERT INTO nonces (key_id, nonce, timestamp)
+                    VALUES (?, ?, ?)
+                    """,
+                    (key_id, nonce, timestamp),
+                )
+                return True
+            except sqlite3.IntegrityError:
+                return False
 
     def create_execution_with_locks(
         self,
