@@ -1,0 +1,8 @@
+{
+  "event_id": "00000000-0000-4000-8000-000000000380",
+  "repository": "Lucassribeiro9/classificador-conta-contabil",
+  "issue_number": 378,
+  "expected_state": "agent:ready-to-implement",
+  "runner_available": false,
+  "expected_result_code": "RUNNER_UNAVAILABLE"
+}
