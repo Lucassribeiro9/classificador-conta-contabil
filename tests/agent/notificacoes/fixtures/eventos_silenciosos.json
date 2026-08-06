@@ -1,0 +1,30 @@
+{
+  "eventos": [
+    {
+      "id": "evento_nao_mapeado",
+      "raw": {
+        "repository": "Lucassribeiro9/classificador-conta-contabil",
+        "issue_number": 379,
+        "title": "feat(agent): notificar gates por Teams e e-mail",
+        "state": "agent:running",
+        "resumo": "Execucao em andamento (sem gate de notificacao).",
+        "acao_esperada": "Nenhuma.",
+        "link": "https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/379"
+      },
+      "esperado": null
+    },
+    {
+      "id": "estado_invalido",
+      "raw": {
+        "repository": "Lucassribeiro9/classificador-conta-contabil",
+        "issue_number": 379,
+        "title": "titulo qualquer",
+        "state": "estado_que_nao_existe",
+        "resumo": "Estado fora da allowlist.",
+        "acao_esperada": "Nenhuma.",
+        "link": "https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/379"
+      },
+      "esperado": null
+    }
+  ]
+}

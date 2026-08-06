@@ -10,6 +10,7 @@ from api.routes import (
     companies,
     feedback,
     movimentos_operacionais,
+    notificacoes,
     plano_contas,
     razao,
     transactions,
@@ -73,6 +74,9 @@ app.include_router(
     movimentos_operacionais.router,
     prefix="/api/v1",
     tags=["Movimentos Operacionais"],
+)
+app.include_router(
+    notificacoes.router, prefix="/api/v1", tags=["Agente-Notificacoes"]
 )
 
 
