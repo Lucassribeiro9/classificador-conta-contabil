@@ -1,0 +1,198 @@
+{
+  "name": "Agent Documental Pilot",
+  "version": "sanitized-1",
+  "active": false,
+  "description": "Piloto inativo da esteira documental: recebe evento interno, rele GitHub, chama runner privado com HMAC e registra resultado sanitizado.",
+  "runtime_placeholders": {
+    "github_api_base_url": "__GITHUB_API_BASE_URL__",
+    "github_credential": "__GITHUB_CREDENTIAL_PLACEHOLDER__",
+    "private_runner_url": "__PRIVATE_RUNNER_URL__",
+    "runner_hmac_key_id": "__RUNNER_HMAC_KEY_ID__",
+    "runner_hmac_secret": "__RUNNER_HMAC_SECRET__",
+    "event_data_table_id": "__N8N_DATA_TABLE_ID__"
+  },
+  "nodes": [
+    {
+      "name": "Receber evento da esteira",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agent-documental-pilot",
+        "authentication": "none",
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "name": "Normalizar evento",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "purpose": "Extrai body/evento, normaliza campos permitidos e descarta dados fora do contrato."
+      }
+    },
+    {
+      "name": "Consultar evento processado",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "parameters": {
+        "resource": "row",
+        "operation": "rowExists",
+        "dataTableId": "__N8N_DATA_TABLE_ID__",
+        "match": "event_id"
+      }
+    },
+    {
+      "name": "Reler issue no GitHub",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "parameters": {
+        "method": "GET",
+        "url": "__GITHUB_API_BASE_URL__/repos/{{repository}}/issues/{{issue_number}}",
+        "credential": "__GITHUB_CREDENTIAL_PLACEHOLDER__",
+        "neverError": true
+      }
+    },
+    {
+      "name": "Avaliar gates minimos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "checks": [
+          "repository == Lucassribeiro9/classificador-conta-contabil",
+          "issue.state == open",
+          "label ready-for-agent presente",
+          "exatamente um label agent:*",
+          "agent:ready-to-implement presente"
+        ]
+      }
+    },
+    {
+      "name": "Gates OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "parameters": {
+        "condition": "gates_ok == true"
+      }
+    },
+    {
+      "name": "Montar HMAC e payload do runner",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "hmac_contract": [
+          "POST",
+          "/agent/runner",
+          "timestamp RFC3339 UTC",
+          "nonce",
+          "sha256(body_bytes)"
+        ],
+        "private_values": [
+          "__RUNNER_HMAC_KEY_ID__",
+          "__RUNNER_HMAC_SECRET__"
+        ]
+      }
+    },
+    {
+      "name": "Chamar runner privado",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "parameters": {
+        "method": "POST",
+        "url": "__PRIVATE_RUNNER_URL__/agent/runner",
+        "headers": [
+          "X-Agent-Key-Id",
+          "X-Agent-Timestamp",
+          "X-Agent-Nonce",
+          "X-Agent-Signature"
+        ],
+        "neverError": true
+      }
+    },
+    {
+      "name": "Normalizar resultado do runner",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "output_fields": [
+          "event_id",
+          "repository",
+          "issue_number",
+          "status",
+          "code",
+          "retryable",
+          "suggested_next_issue",
+          "github_ref"
+        ]
+      }
+    },
+    {
+      "name": "Resultado bloqueado sanitizado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "effect": "Registra falha previsivel sem alterar GitHub e sem iniciar proxima issue."
+      }
+    },
+    {
+      "name": "Registrar resultado sanitizado",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "parameters": {
+        "resource": "row",
+        "operation": "upsert",
+        "dataTableId": "__N8N_DATA_TABLE_ID__",
+        "matchingColumns": ["event_id"],
+        "columns": [
+          "event_id",
+          "status",
+          "code",
+          "repository",
+          "issue_number",
+          "suggested_next_issue"
+        ]
+      }
+    },
+    {
+      "name": "Responder webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 200
+      }
+    }
+  ],
+  "connections": [
+    ["Receber evento da esteira", "Normalizar evento"],
+    ["Normalizar evento", "Consultar evento processado"],
+    ["Normalizar evento", "Reler issue no GitHub"],
+    ["Reler issue no GitHub", "Avaliar gates minimos"],
+    ["Avaliar gates minimos", "Gates OK?"],
+    ["Gates OK?", "Montar HMAC e payload do runner"],
+    ["Montar HMAC e payload do runner", "Chamar runner privado"],
+    ["Chamar runner privado", "Normalizar resultado do runner"],
+    ["Normalizar resultado do runner", "Registrar resultado sanitizado"],
+    ["Resultado bloqueado sanitizado", "Registrar resultado sanitizado"],
+    ["Registrar resultado sanitizado", "Responder webhook"]
+  ],
+  "manual_fallback": {
+    "reference": "docs/prompts-fluxo-sdd-tdd.md",
+    "skills": [
+      "issue-task-review",
+      "implement-issue",
+      "prepare-draft-pr",
+      "issue-delivery-loop"
+    ]
+  }
+}
