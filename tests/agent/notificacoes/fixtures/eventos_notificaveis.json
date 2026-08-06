@@ -1,0 +1,151 @@
+{
+  "eventos": [
+    {
+      "id": "task_review_pronta",
+      "raw": {
+        "repository": "Lucassribeiro9/classificador-conta-contabil",
+        "issue_number": 379,
+        "title": "feat(agent): notificar gates por Teams e e-mail",
+        "state": "agent:awaiting-task-review",
+        "resumo": "Task Review pronta para aprovacao do mantenedor.",
+        "acao_esperada": "Publicar /agent approve-task-review na issue.",
+        "link": "https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/379#issuecomment-5208366819"
+      },
+      "esperado": {
+        "repository": "Lucassribeiro9/classificador-conta-contabil",
+        "issue_number": 379,
+        "title": "feat(agent): notificar gates por Teams e e-mail",
+        "state": "agent:awaiting-task-review",
+        "resumo_sanitizado": "Task Review pronta para aprovacao do mantenedor.",
+        "acao_esperada": "Publicar /agent approve-task-review na issue.",
+        "link": "https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/379#issuecomment-5208366819"
+      }
+    },
+    {
+      "id": "decisao_bloqueante",
+      "raw": {
+        "repository": "Lucassribeiro9/classificador-conta-contabil",
+        "issue_number": 379,
+        "title": "feat(agent): notificar gates por Teams e e-mail",
+        "state": "agent:awaiting-human",
+        "resumo": "Existe decisao pendente que bloqueia a esteira.",
+        "acao_esperada": "Responder a pergunta na issue com /agent decide opcao-x.",
+        "link": "https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/379"
+      },
+      "esperado": {
+        "repository": "Lucassribeiro9/classificador-conta-contabil",
+        "issue_number": 379,
+        "title": "feat(agent): notificar gates por Teams e e-mail",
+        "state": "agent:awaiting-human",
+        "resumo_sanitizado": "Existe decisao pendente que bloqueia a esteira.",
+        "acao_esperada": "Responder a pergunta na issue com /agent decide opcao-x.",
+        "link": "https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/379"
+      }
+    },
+    {
+      "id": "timeout_bloqueio",
+      "raw": {
+        "repository": "Lucassribeiro9/classificador-conta-contabil",
+        "issue_number": 380,
+        "title": "fix(agent): corrigir timeout do runner",
+        "state": "agent:blocked",
+        "resumo": "Timeout controlado atingido; execucao bloqueada.",
+        "acao_esperada": "Publicar /agent retry na issue apos revisar o contexto.",
+        "link": "https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/380"
+      },
+      "esperado": {
+        "repository": "Lucassribeiro9/classificador-conta-contabil",
+        "issue_number": 380,
+        "title": "fix(agent): corrigir timeout do runner",
+        "state": "agent:blocked",
+        "resumo_sanitizado": "Timeout controlado atingido; execucao bloqueada.",
+        "acao_esperada": "Publicar /agent retry na issue apos revisar o contexto.",
+        "link": "https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/380"
+      }
+    },
+    {
+      "id": "draft_pronto",
+      "raw": {
+        "repository": "Lucassribeiro9/classificador-conta-contabil",
+        "issue_number": 379,
+        "title": "feat(agent): notificar gates por Teams e e-mail",
+        "state": "agent:awaiting-manual-test",
+        "resumo": "Draft PR criado e pronto para homologacao manual.",
+        "acao_esperada": "Executar o roteiro e registrar APROVADO/REPROVADO no PR.",
+        "link": "https://github.com/Lucassribeiro9/classificador-conta-contabil/pull/400"
+      },
+      "esperado": {
+        "repository": "Lucassribeiro9/classificador-conta-contabil",
+        "issue_number": 379,
+        "title": "feat(agent): notificar gates por Teams e e-mail",
+        "state": "agent:awaiting-manual-test",
+        "resumo_sanitizado": "Draft PR criado e pronto para homologacao manual.",
+        "acao_esperada": "Executar o roteiro e registrar APROVADO/REPROVADO no PR.",
+        "link": "https://github.com/Lucassribeiro9/classificador-conta-contabil/pull/400"
+      }
+    },
+    {
+      "id": "reprovacao_bloqueio",
+      "raw": {
+        "repository": "Lucassribeiro9/classificador-conta-contabil",
+        "issue_number": 379,
+        "title": "feat(agent): notificar gates por Teams e e-mail",
+        "state": "agent:blocked",
+        "resumo": "Homologacao manual reprovou o conteudo do commit.",
+        "acao_esperada": "Revisar divergencias e reabrir a implementacao.",
+        "link": "https://github.com/Lucassribeiro9/classificador-conta-contabil/pull/400#issuecomment-1"
+      },
+      "esperado": {
+        "repository": "Lucassribeiro9/classificador-conta-contabil",
+        "issue_number": 379,
+        "title": "feat(agent): notificar gates por Teams e e-mail",
+        "state": "agent:blocked",
+        "resumo_sanitizado": "Homologacao manual reprovou o conteudo do commit.",
+        "acao_esperada": "Revisar divergencias e reabrir a implementacao.",
+        "link": "https://github.com/Lucassribeiro9/classificador-conta-contabil/pull/400#issuecomment-1"
+      }
+    },
+    {
+      "id": "cancelamento",
+      "raw": {
+        "repository": "Lucassribeiro9/classificador-conta-contabil",
+        "issue_number": 381,
+        "title": "feat(agent): exportar workflow n8n",
+        "state": "agent:cancelled",
+        "resumo": "Execucao cancelada pelo mantenedor.",
+        "acao_esperada": "Nenhuma acao necessaria; execucao encerrada.",
+        "link": "https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/381"
+      },
+      "esperado": {
+        "repository": "Lucassribeiro9/classificador-conta-contabil",
+        "issue_number": 381,
+        "title": "feat(agent): exportar workflow n8n",
+        "state": "agent:cancelled",
+        "resumo_sanitizado": "Execucao cancelada pelo mantenedor.",
+        "acao_esperada": "Nenhuma acao necessaria; execucao encerrada.",
+        "link": "https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/381"
+      }
+    },
+    {
+      "id": "validacao_concluida",
+      "raw": {
+        "repository": "Lucassribeiro9/classificador-conta-contabil",
+        "issue_number": 379,
+        "title": "feat(agent): notificar gates por Teams e e-mail",
+        "state": "agent:validated",
+        "resumo": "Conteudo relevante do commit foi homologado.",
+        "acao_esperada": "Aguardar merge; apos merge a issue e fechada.",
+        "link": "https://github.com/Lucassribeiro9/classificador-conta-contabil/pull/400#issuecomment-2"
+      },
+      "esperado": {
+        "repository": "Lucassribeiro9/classificador-conta-contabil",
+        "issue_number": 379,
+        "title": "feat(agent): notificar gates por Teams e e-mail",
+        "state": "agent:validated",
+        "resumo_sanitizado": "Conteudo relevante do commit foi homologado.",
+        "acao_esperada": "Aguardar merge; apos merge a issue e fechada.",
+        "link": "https://github.com/Lucassribeiro9/classificador-conta-contabil/pull/400#issuecomment-2"
+      }
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "canais": [
+    {
+      "id": "falha_teams",
+      "evento": {
+        "repository": "Lucassribeiro9/classificador-conta-contabil",
+        "issue_number": 379,
+        "title": "feat(agent): notificar gates por Teams e e-mail",
+        "state": "agent:awaiting-task-review",
+        "resumo": "Task Review pronta para aprovacao.",
+        "acao_esperada": "Publicar /agent approve-task-review.",
+        "link": "https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/379"
+      },
+      "canais_que_falham": ["teams"],
+      "github_state_esperado": "agent:awaiting-task-review"
+    },
+    {
+      "id": "falha_email",
+      "evento": {
+        "repository": "Lucassribeiro9/classificador-conta-contabil",
+        "issue_number": 379,
+        "title": "feat(agent): notificar gates por Teams e e-mail",
+        "state": "agent:awaiting-task-review",
+        "resumo": "Task Review pronta para aprovacao.",
+        "acao_esperada": "Publicar /agent approve-task-review.",
+        "link": "https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/379"
+      },
+      "canais_que_falham": ["email"],
+      "github_state_esperado": "agent:awaiting-task-review"
+    },
+    {
+      "id": "falha_dupla",
+      "evento": {
+        "repository": "Lucassribeiro9/classificador-conta-contabil",
+        "issue_number": 379,
+        "title": "feat(agent): notificar gates por Teams e e-mail",
+        "state": "agent:awaiting-task-review",
+        "resumo": "Task Review pronta para aprovacao.",
+        "acao_esperada": "Publicar /agent approve-task-review.",
+        "link": "https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/379"
+      },
+      "canais_que_falham": ["teams", "email"],
+      "github_state_esperado": "agent:awaiting-task-review"
+    }
+  ]
+}
