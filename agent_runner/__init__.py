@@ -5,9 +5,12 @@ import json
 import sqlite3
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, Protocol
+
+from agent_runner.telemetria import TelemetryRecorder
 
 
 class RunnerAction(StrEnum):
@@ -119,6 +122,12 @@ class StageExecutor(Protocol):
     ) -> StageResult: ...
 
     def request_cancel(self, execution_id: str) -> None: ...
+
+
+class TelemetryWriter(Protocol):
+    def record_event(
+        self, event: dict[str, Any], *, now: datetime | None = None
+    ) -> Any: ...
 
 
 class RunnerStore:
@@ -420,16 +429,18 @@ class RunnerService:
         executor: StageExecutor,
         clock: Clock,
         timeout_seconds: int = 1_800,
+        telemetry: TelemetryWriter | None = None,
     ) -> None:
         self.store = store
         self.context_validator = context_validator
         self.executor = executor
         self.clock = clock
         self.timeout_seconds = timeout_seconds
+        self.telemetry = telemetry if telemetry is not None else TelemetryRecorder.from_env()
 
     def handle(self, request: RunnerRequest) -> RunnerResponse:
         if not _payload_allowed(request):
-            return RunnerResponse(
+            response = RunnerResponse(
                 event_id=request.event_id,
                 execution_id=None,
                 action=request.action,
@@ -438,11 +449,13 @@ class RunnerService:
                 message="Payload contains unknown or forbidden fields.",
                 retryable=False,
             )
+            self._record_response_telemetry(request, response, stage="rejection")
+            return response
 
         payload_hash = _payload_hash(request)
         existing = self.store.get_event_response(request.event_id, payload_hash)
         if existing == "conflict":
-            return RunnerResponse(
+            response = RunnerResponse(
                 event_id=request.event_id,
                 execution_id=None,
                 action=request.action,
@@ -451,6 +464,8 @@ class RunnerService:
                 message="Event id already used with a different payload.",
                 retryable=False,
             )
+            self._record_response_telemetry(request, response, stage="rejection")
+            return response
         if isinstance(existing, RunnerResponse):
             return existing
 
@@ -479,7 +494,7 @@ class RunnerService:
     def _implement(self, request: RunnerRequest) -> RunnerResponse:
         validation = self.context_validator.validate(request)
         if validation != ContextValidation.VALID:
-            return RunnerResponse(
+            response = RunnerResponse(
                 event_id=request.event_id,
                 execution_id=None,
                 action=request.action,
@@ -488,11 +503,13 @@ class RunnerService:
                 message="Context validation failed.",
                 retryable=False,
             )
+            self._record_response_telemetry(request, response, stage="rejection")
+            return response
 
         started_at = self.clock.now()
         execution_or_code = self.store.create_execution_with_locks(request, started_at)
         if isinstance(execution_or_code, str):
-            return RunnerResponse(
+            response = RunnerResponse(
                 event_id=request.event_id,
                 execution_id=None,
                 action=request.action,
@@ -501,8 +518,11 @@ class RunnerService:
                 message="Execution lock is not available.",
                 retryable=False,
             )
+            self._record_response_telemetry(request, response, stage="rejection")
+            return response
 
         execution = execution_or_code
+        self._record_start_telemetry(request, execution)
         result = self.executor.run(request, execution)
         if (
             result.status == StageResultStatus.MECHANICAL_FAILURE
@@ -513,6 +533,20 @@ class RunnerService:
                 status=ExecutionStatus.RUNNING,
                 now=self.clock.now(),
                 mechanical_fix_attempts=1,
+            )
+            self._safe_record_telemetry(
+                {
+                    "event_id": request.event_id,
+                    "execution_id": execution.execution_id,
+                    "repository": request.repository,
+                    "issue_number": request.issue_number,
+                    "stage": "correction",
+                    "command_category": request.action.value,
+                    "started_at": _clock_iso(self.clock),
+                    "result": "running",
+                    "attempts": execution.mechanical_fix_attempts + 1,
+                    "code": "MECHANICAL_REPAIR_STARTED",
+                }
             )
             result = self.executor.repair_mechanical_failure(request, execution)
 
@@ -548,7 +582,7 @@ class RunnerService:
             created_at=self.clock.now(),
             head_sha=result.head_sha,
         )
-        return RunnerResponse(
+        response = RunnerResponse(
             event_id=request.event_id,
             execution_id=execution.execution_id,
             action=request.action,
@@ -558,6 +592,8 @@ class RunnerService:
             retryable=False,
             checkpoint=checkpoint,
         )
+        self._record_response_telemetry(request, response, stage=checkpoint.stage)
+        return response
 
     def _resume(self, request: RunnerRequest) -> RunnerResponse:
         execution_id = request.payload.get("execution_id")
@@ -715,6 +751,50 @@ class RunnerService:
             checkpoint=checkpoint,
         )
 
+    def _record_start_telemetry(self, request: RunnerRequest, execution: Execution) -> None:
+        self._safe_record_telemetry(
+            {
+                "event_id": request.event_id,
+                "execution_id": execution.execution_id,
+                "repository": request.repository,
+                "issue_number": request.issue_number,
+                "stage": "start",
+                "command_category": request.action.value,
+                "started_at": _clock_iso(self.clock),
+                "result": "running",
+                "attempts": execution.mechanical_fix_attempts + 1,
+                "code": "EXECUTION_STARTED",
+            }
+        )
+
+    def _record_response_telemetry(
+        self,
+        request: RunnerRequest,
+        response: RunnerResponse,
+        *,
+        stage: str,
+    ) -> None:
+        self._safe_record_telemetry(
+            {
+                "event_id": request.event_id,
+                "execution_id": response.execution_id,
+                "repository": request.repository,
+                "issue_number": request.issue_number,
+                "stage": stage,
+                "command_category": request.action.value,
+                "finished_at": _clock_iso(self.clock),
+                "result": response.status.value,
+                "attempts": response.checkpoint.attempt if response.checkpoint else 1,
+                "code": response.code,
+            }
+        )
+
+    def _safe_record_telemetry(self, event: dict[str, Any]) -> None:
+        try:
+            self.telemetry.record_event(event, now=_clock_datetime(self.clock))
+        except Exception:
+            return
+
 
 def _payload_hash(request: RunnerRequest) -> str:
     data = {
@@ -727,6 +807,14 @@ def _payload_hash(request: RunnerRequest) -> str:
     return hashlib.sha256(
         json.dumps(data, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
+
+
+def _clock_datetime(clock: Clock) -> datetime:
+    return datetime.fromtimestamp(clock.now(), tz=UTC)
+
+
+def _clock_iso(clock: Clock) -> str:
+    return _clock_datetime(clock).isoformat()
 
 
 def _sanitize_summary(value: str) -> str:
