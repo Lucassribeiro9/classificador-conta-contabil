@@ -60,6 +60,8 @@ Exemplo de evento:
 
 - Sempre: registrar usuario e empresa quando a acao envolver dados de cliente.
 - Sempre: evitar dados sensiveis desnecessarios em logs e auditoria.
+- Sempre: manter a separacao entre log tecnico e auditoria conforme
+  `docs/specs/15-harness-qualidade-documentacao.md`.
 - Sempre: manter banco sem exposicao publica.
 - Sempre: usar tabela unica de eventos de auditoria na primeira versao.
 - Sempre: manter logs tecnicos separados de eventos de auditoria.
@@ -110,6 +112,8 @@ Exemplo de evento:
 - Auditoria sera retida por tempo indeterminado na primeira versao.
 - Acoes sensiveis de escrita devem registrar auditoria de forma transacional quando possivel.
 - Logs tecnicos e auditoria sao conceitos separados.
+- Logs tecnicos JSON, rotacao, retencao operacional e correlacao por
+  `request_id` pertencem a `docs/specs/15-harness-qualidade-documentacao.md`.
 - Nenhuma ferramenta externa de observabilidade sera adicionada nesta fase.
 - Aplicacao permanece restrita a rede do escritorio, sem ngrok permanente.
 - Banco permanece sem exposicao publica.

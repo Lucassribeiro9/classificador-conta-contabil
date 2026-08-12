@@ -96,6 +96,11 @@ CI esperado:
 - lint/typecheck/build frontend;
 - validacao de Docker Compose quando aplicavel.
 
+Na Release 1, a matriz completa de comandos `dev`, `hml`, `prod` e `all`, os
+contratos de `make check` e `make check-full`, o uso de PostgreSQL real e
+Playwright relevante em PRs e os limites de producao sao definidos em
+`docs/specs/15-harness-qualidade-documentacao.md`.
+
 CD inicial pode ser manual e controlado:
 
 1. atualizar branch aprovada no servidor;
@@ -127,6 +132,8 @@ Automacao completa de deploy fica fora do MVP.
 - Sempre: manter banco privado.
 - Sempre: exigir HTTPS e restringir o acesso no firewall a rede interna.
 - Sempre: documentar comandos de subida e validacao.
+- Sempre: alinhar comandos de ambiente e validacao com
+  `docs/specs/15-harness-qualidade-documentacao.md`.
 - Perguntar antes: expor ambiente fora da rede do escritorio.
 - Perguntar antes: automatizar deploy em producao.
 - Nunca: versionar `.env` real.

@@ -60,11 +60,17 @@ As specs devem gerar issues testaveis. Cada issue funcional deve comecar por tes
 - Dataset para filtros de banco/caixa e alvo de contrapartida.
 - ML para formato de predicao, confianca e revisao.
 
+Para a Release 1, a fonte canonica de harness, qualidade, comandos de
+validacao, CI, logs, erros, README e homologacao do Ciclo 0 e
+`docs/specs/15-harness-qualidade-documentacao.md`.
+
 ## Boundaries
 
 - Sempre: escrever ou atualizar spec antes de mudancas grandes.
 - Sempre: criar testes antes ou junto de implementacoes de comportamento.
 - Sempre: manter escopo de PR pequeno e ligado a issue.
+- Sempre: consultar `docs/specs/15-harness-qualidade-documentacao.md` quando a
+  issue tocar comandos, CI, logs, erros, documentacao ou homologacao do Ciclo 0.
 - Perguntar antes: mudar mecanismo de autenticacao, adicionar dependencia grande, mudar schema principal ou remover compatibilidade relevante.
 - Nunca: expor credenciais, dados sensiveis ou banco publicamente.
 - Nunca: deixar Streamlit acessar diretamente o banco na arquitetura-alvo.
