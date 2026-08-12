@@ -18,13 +18,18 @@ convergir para um contrato intermediario sem serem confundidos com o
 - O dataset atual de ML usa o Razao canonico como fonte inicial de treino.
 - A primeira fase deste fluxo aceita apenas planilha operacional `.xlsx`.
 - OFX, PDF/OCR e exportacao para Dominio ficam fora dessa fase.
-- A planilha anexada ao brainstorming e o modelo candidato do layout.
-- Apos validacao, o modelo deve ser versionado primeiro em
-  `tests/fixtures/modelo_movimentos_operacionais_classificacao.xlsx`.
+- A planilha anexada ao brainstorming e o modelo candidato original continuam
+  aceitos como compatibilidade legada do layout A.
+- A Release 1 versiona dois layouts oficiais para movimentos operacionais:
+  layout A com `valor` assinado e `saldo`; layout B com `debito`, `credito`
+  e `saldo` na convencao do extrato.
+- Os modelos futuros esperados sao
+  `tests/fixtures/modelo_movimentos_operacionais_valor_saldo.xlsx` e
+  `tests/fixtures/modelo_movimentos_operacionais_debito_credito_saldo.xlsx`.
 
 ## Escopo do MVP
 
-- Definir contrato de layout da planilha operacional `.xlsx`.
+- Definir contrato de dois layouts versionados da planilha operacional `.xlsx`.
 - Definir lote proprio de importacao operacional.
 - Definir entidade intermediaria `MovimentoOperacionalImportado`.
 - Validar empresa por CNPJ/CPF da planilha contra empresa selecionada.
@@ -34,7 +39,10 @@ convergir para um contrato intermediario sem serem confundidos com o
 - Permitir importacao parcial com warnings por linha.
 - Separar pre-classificacao humana, sugestao da ML e decisao final.
 - Definir fluxo de classificacao, revisao, aprovacao, correcao e rejeicao.
-- Definir regras iniciais de debito/credito a partir do sinal do valor.
+- Definir regras de deteccao de layout, valor assinado, direcao contabil e
+  saldo por conta financeira.
+- Preservar saldo observado separado do saldo calculado, sem usar saldo como
+  feature de treino ou predicao.
 - Definir testes esperados e issues derivadas.
 
 ## Fora de Escopo
@@ -48,6 +56,9 @@ convergir para um contrato intermediario sem serem confundidos com o
 - Auto-aprovar sugestoes da ML.
 - Predizer `conta_financeira`.
 - Aprovar em lote movimentos que criem vinculos novos de conta por empresa.
+- Implementar parser, migration ou endpoints dos novos layouts nesta spec.
+- Gerar download da planilha classificada ou feedback round-trip.
+- Conciliar movimentos operacionais com o Razao.
 
 ## Tech Stack
 
@@ -72,7 +83,7 @@ convergir para um contrato intermediario sem serem confundidos com o
 - `tests/fixtures/`: modelo e fixtures sanitizadas do layout `.xlsx`.
 - `tests/`: testes de parser, importacao, validacao, API e ML.
 
-## Contrato do Layout `.xlsx`
+## Contrato dos Layouts `.xlsx`
 
 O arquivo deve conter uma aba obrigatoria chamada `Movimentos`.
 
@@ -103,12 +114,18 @@ Regras de metadados:
 O parser deve detectar a linha de cabecalho pelos nomes das colunas, nao pela
 linha fixa do modelo.
 
+### Layout A: valor assinado com saldo
+
 Colunas obrigatorias:
 
 - `data`
 - `conta_financeira`
 - `historico`
 - `valor`
+
+Colunas recomendadas para a Release 1:
+
+- `saldo`
 
 Colunas opcionais:
 
@@ -117,11 +134,72 @@ Colunas opcionais:
 - `documento`
 - `observacao`
 
+Compatibilidade legada:
+
+- arquivos do layout atual sem `saldo` continuam aceitos;
+- a ausencia de `saldo` gera warning informativo de que a conferencia por saldo
+  nao esta disponivel para aquele lote ou conta;
+- o arquivo legado deve ser tratado como uma versao compativel do layout A, nao
+  como um terceiro layout oficial.
+
+### Layout B: debito, credito e saldo do extrato
+
+Colunas obrigatorias:
+
+- `data`
+- `conta_financeira`
+- `historico`
+- `debito`
+- `credito`
+
+Colunas recomendadas para a Release 1:
+
+- `saldo`
+
+Colunas opcionais:
+
+- `contrapartida`
+- `tipo_movimento`
+- `documento`
+- `observacao`
+
+Regras do layout B:
+
+- `credito` do extrato representa entrada na conta financeira;
+- `debito` do extrato representa saida da conta financeira;
+- exatamente uma entre `debito` e `credito` deve estar preenchida por linha;
+- linha sem valor em ambas ou com valores em ambas deve ser invalida;
+- valores iguais a zero nao representam movimento valido.
+
+### Deteccao e versao do layout
+
+A deteccao do layout deve ser deterministica pelo cabecalho da aba
+`Movimentos`:
+
+- layout A: contem `valor` e nao contem o par decisorio `debito`/`credito`;
+- layout B: contem `debito` e `credito` e nao contem `valor`;
+- layout ambiguo: contem `valor` e tambem `debito` ou `credito`.
+
+Layout ambiguo deve bloquear o lote antes de persistir movimentos. A versao do
+layout deve ser persistida no lote de importacao para auditoria e rastreio. Como
+um lote aceita apenas um layout, os movimentos herdam a versao do lote.
+
+Versoes conceituais esperadas:
+
+- `operacional_valor_saldo_v1`: layout A oficial;
+- `operacional_debito_credito_saldo_v1`: layout B oficial;
+- `operacional_valor_legado_v1`: compatibilidade do layout A sem `saldo`.
+
+### Colunas preenchidas pelo sistema
+
 Colunas preenchidas pelo sistema e ignoradas como entrada decisoria:
 
 - `status_sugerido`
 - `confidence_sugerida`
 - `mensagem_validacao`
+
+Essas colunas podem aparecer em arquivos retornados pelo sistema em ciclo futuro,
+mas nao devem alterar importacao, classificacao ou feedback nesta spec.
 
 ## Entidades
 
@@ -141,6 +219,7 @@ Campos conceituais:
 - `total_importadas`
 - `total_invalidas`
 - `warnings_metadata`
+- `layout_version`
 - `periodo_inicio`
 - `periodo_fim`
 - `cnpj_cpf_arquivo`
@@ -177,8 +256,12 @@ Campos de origem:
 - `historico`
 - `historico_normalizado`
 - `valor_original`
+- `valor_assinado`
 - `valor_absoluto`
-- `direcao` (`debito` ou `credito`)
+- `direcao` (`debito` ou `credito`, sempre como direcao contabil)
+- `saldo_observado_original`
+- `saldo_observado_decimal`
+- `saldo_calculado_decimal`
 - `tipo_movimento`
 - `documento`
 - `observacao`
@@ -229,6 +312,7 @@ Bloqueiam o lote antes de persistir movimentos:
 - `Periodo inicio` ausente ou invalido;
 - `Periodo fim` ausente ou invalido;
 - cabecalho de movimentos sem colunas obrigatorias;
+- cabecalho de movimentos com layout ambiguo;
 - mesmo `file_hash` ja importado com sucesso total ou parcial para a empresa.
 
 Geram warning de lote:
@@ -242,7 +326,9 @@ Linha invalida, nao persistida como movimento valido:
 - `data` ausente ou invalida;
 - `conta_financeira` ausente;
 - `historico` ausente;
-- `valor` ausente, invalido ou igual a zero;
+- representacao de valor ausente, invalida ou igual a zero;
+- layout B com `debito` e `credito` preenchidos na mesma linha;
+- layout B sem preenchimento em `debito` e `credito`;
 - `conta_financeira` inexistente no plano;
 - `conta_financeira` sintetica ou inativa;
 - `contrapartida` preenchida, mas inexistente no plano;
@@ -256,7 +342,9 @@ Linha persistida em `revisao` com warning:
 - `tipo_movimento` incoerente com o sinal do valor;
 - `tipo_movimento` em `transferencia`, `aplicacao` ou `resgate` sem
   `contrapartida`;
-- sugestao da ML com `confidence_sugerida < 0.70`.
+- sugestao da ML com `confidence_sugerida < 0.70`;
+- saldo ausente, parcial, invalido ou divergente quando os demais campos da
+  linha permitirem recuperacao.
 
 Linha persistida como `pre_classificado`:
 
@@ -271,31 +359,50 @@ Linha persistida como `pendente`:
 - campos obrigatorios validos;
 - sem regra especial que exija revisao imediata.
 
-## Regras de Valor, Direcao e Debito/Credito
+## Regras de Valor, Direcao, Debito/Credito e Saldo
 
-`valor` da planilha usa sinal operacional:
+A normalizacao deve convergir os dois layouts para o mesmo contrato interno:
+
+- `valor_assinado`: valor operacional com sinal;
+- `valor_absoluto`: `abs(valor_assinado)`;
+- `direcao`: direcao contabil da conta financeira, sempre `debito` ou
+  `credito`;
+- `saldo_observado_original`: saldo como apareceu na planilha;
+- `saldo_observado_decimal`: saldo observado normalizado, quando possivel;
+- `saldo_calculado_decimal`: saldo calculado pelo sistema para a conta
+  financeira naquele lote.
+
+No layout A, `valor` usa sinal operacional:
 
 - `valor > 0`: entrada na conta financeira;
 - `valor < 0`: saida da conta financeira;
 - `valor = 0`: linha invalida.
 
+No layout B, os valores usam a convencao do extrato:
+
+- `credito > 0`: entrada na conta financeira;
+- `debito > 0`: saida da conta financeira;
+- `credito` e `debito` nao podem estar preenchidos simultaneamente;
+- valores iguais a zero nao representam movimento valido.
+
 Campos derivados na importacao:
 
-- `valor_absoluto = abs(valor)`;
-- `direcao = debito` quando `valor > 0`;
-- `direcao = credito` quando `valor < 0`.
+- entrada na conta financeira deriva `valor_assinado > 0` e `direcao = debito`;
+- saida da conta financeira deriva `valor_assinado < 0` e `direcao = credito`;
+- `valor_absoluto = abs(valor_assinado)`.
 
 A semantica operacional de entrada ou saida continua derivavel pelo sinal de
-`valor_original` quando necessario, mas nao deve ser persistida no campo
-`direcao`.
+`valor_assinado` quando necessario, mas nao deve ser persistida no campo
+`direcao`. O campo `direcao` permanece contabil e alinhado ao dataset canonico
+do Razao.
 
 Regra conceitual para par final:
 
 ```python
-if valor > 0:
+if valor_assinado > 0:
     conta_debito = conta_financeira
     conta_credito = contrapartida_final
-elif valor < 0:
+elif valor_assinado < 0:
     conta_debito = contrapartida_final
     conta_credito = conta_financeira
 ```
@@ -309,6 +416,33 @@ diagnostico, filtros e feature futura.
 Para `transferencia`, `aplicacao` e `resgate`, a `contrapartida` e obrigatoria
 para seguir como pre-classificada/aprovavel. Se estiver ausente, o movimento
 fica em `revisao` e nao entra no fluxo comum de sugestao da ML no MVP.
+
+### Regras de saldo operacional
+
+Saldo e informacao de conferencia, nao de classificacao.
+
+A sequencia de saldo deve ser calculada por `conta_financeira`, preservando a
+ordem das linhas no arquivo. A data continua sendo atributo do movimento, mas o
+calculo nao deve reordenar linhas recebidas.
+
+Regras:
+
+- cada `conta_financeira` possui sequencia independente dentro do lote;
+- `saldo_observado_original` preserva a forma recebida;
+- `saldo_observado_decimal` e preenchido quando a normalizacao for possivel;
+- `saldo_calculado_decimal` deve continuar sendo calculado mesmo quando houver
+  lacuna no saldo observado;
+- saldo ausente gera warning informativo e nao bloqueia importacao ou
+  classificacao;
+- saldo divergente gera warning recuperavel e nao bloqueia importacao ou
+  classificacao;
+- saldo invalido gera warning recuperavel quando os demais campos da linha forem
+  validos;
+- saldo nao entra em deduplicacao, treino, predicao ou decisao de contrapartida.
+
+Respostas futuras de API podem expor saldo observado, saldo calculado e warnings
+por lote/movimento para apoiar conferencia, sem alterar o contrato de endpoints
+nesta spec.
 
 ## Fluxo de Importacao
 
@@ -339,7 +473,7 @@ Classificacao e acao separada da importacao no MVP.
 4. Features iniciais do movimento:
    - `historico_normalizado`;
    - `conta_financeira`;
-   - `direcao` (`debito` ou `credito`);
+   - `direcao` (`debito` ou `credito`, como direcao contabil);
    - `tipo_movimento`, se preenchido.
 5. Sistema preenche `contrapartida_sugerida` e `confidence_sugerida`.
 6. Se `confidence_sugerida >= 0.70`, status vira `sugerido`.
@@ -352,7 +486,11 @@ Fora das features iniciais:
 - `observacao`;
 - `empresa`;
 - `codigo_dominio`;
-- `cnpj_cpf`.
+- `cnpj_cpf`;
+- `saldo_observado_original`;
+- `saldo_observado_decimal`;
+- `saldo_calculado_decimal`;
+- warnings de saldo.
 
 O modelo nao prediz `conta_financeira` no MVP. A `conta_financeira` e
 obrigatoria na planilha.
@@ -438,13 +576,44 @@ isso nao for necessario para auditoria.
 - Rejeita lote sem CNPJ/CPF.
 - Rejeita lote sem periodo valido.
 - Detecta cabecalho de movimentos pelos nomes das colunas.
+- Detecta layout A com `valor` assinado e `saldo`.
+- Aceita layout A legado sem `saldo` com warning informativo.
+- Detecta layout B com `debito`, `credito` e `saldo`.
 - Rejeita layout sem colunas obrigatorias.
+- Rejeita layout ambiguo com `valor` e `debito`/`credito` no mesmo cabecalho.
+
+### Normalizacao Bancaria e Contabil
+
+- Layout A com `valor > 0` normaliza para entrada, `valor_assinado > 0` e
+  `direcao=debito`.
+- Layout A com `valor < 0` normaliza para saida, `valor_assinado < 0` e
+  `direcao=credito`.
+- Layout B com `credito` preenchido normaliza para entrada, `valor_assinado > 0`
+  e `direcao=debito`.
+- Layout B com `debito` preenchido normaliza para saida, `valor_assinado < 0` e
+  `direcao=credito`.
+- Layout B rejeita linha com `debito` e `credito` preenchidos.
+- Layout B rejeita linha sem valor em `debito` e `credito`.
+- Os dois layouts convergem para o mesmo contrato interno quando representam o
+  mesmo movimento.
+- `valor_absoluto` sempre e derivado de `valor_assinado`.
+
+### Saldos e Multiplas Contas
+
+- Varias `conta_financeira` no mesmo lote mantem sequencias independentes.
+- Sequencia de saldo usa a ordem da linha no arquivo dentro de cada conta.
+- Saldo completo preserva observado original, observado decimal e calculado.
+- Saldo ausente gera warning e nao bloqueia importacao/classificacao.
+- Saldo parcial mantem continuidade do saldo calculado nas linhas seguintes.
+- Saldo divergente gera warning recuperavel e nao bloqueia linhas validas.
+- Saldo invalido gera warning recuperavel quando o movimento for valido.
 
 ### Importador
 
 - Bloqueia CNPJ/CPF divergente.
 - Gera warning para `codigo_dominio` divergente.
 - Bloqueia reimportacao por `file_hash`.
+- Persiste `layout_version` no lote.
 - Permite importacao parcial.
 - Persiste lote com contadores corretos.
 - Persiste `pendente`, `pre_classificado` e `revisao` conforme regras.
@@ -457,18 +626,14 @@ isso nao for necessario para auditoria.
 - `contrapartida` valida nao vinculada vira `revisao`.
 - `contrapartida` sintetica/inativa/inexistente invalida a linha.
 
-### Debito/Credito
-
-- Valor positivo deriva `direcao=debito`.
-- Valor negativo deriva `direcao=credito`.
-- Features de classificacao usam `direcao_debito` ou `direcao_credito`,
-  alinhadas ao dataset canonico do Razao.
-- Par debito/credito final so existe apos aprovacao/correcao.
-
-### Classificacao e Revisao
+### Classificacao, ML e Revisao
 
 - Classificacao nao roda automaticamente apos importacao.
 - Classificacao usa dataset canonico do Razao.
+- Features de classificacao usam `direcao_debito` ou `direcao_credito`,
+  alinhadas ao dataset canonico do Razao.
+- Saldo observado, saldo calculado e warnings de saldo nao entram nas features
+  de treino ou predicao.
 - `confidence < 0.70` gera `revisao`.
 - `confidence >= 0.70` gera `sugerido`.
 - Aprovacao individual define `contrapartida_final`.
@@ -482,6 +647,8 @@ isso nao for necessario para auditoria.
 - Usuario sem acesso a empresa nao importa.
 - Usuario sem permissao operacional nao aprova/corrige.
 - Empresas diferentes nao compartilham movimentos.
+- Respostas futuras podem expor `layout_version`, saldos e warnings seguros para
+  conferencia sem expor dados sensiveis desnecessarios.
 - Auditoria e registrada nos eventos sensiveis.
 
 ## Boundaries
@@ -491,13 +658,27 @@ isso nao for necessario para auditoria.
 - Sempre: CNPJ/CPF e validacao forte de empresa.
 - Sempre: importacao operacional aceita apenas `.xlsx` no MVP.
 - Sempre: `conta_financeira` e obrigatoria.
+- Sempre: um lote possui uma unica versao de layout persistida.
+- Sempre: layout ambiguo deve ser rejeitado antes de persistir movimentos.
+- Sempre: `direcao` representa direcao contabil, nao texto bruto do extrato.
+- Sempre: credito do extrato no layout B representa entrada operacional.
+- Sempre: debito do extrato no layout B representa saida operacional.
+- Sempre: sequencias de saldo sao independentes por `conta_financeira`.
+- Sempre: saldo observado fica separado de saldo calculado.
+- Sempre: lacunas e divergencias de saldo geram warning recuperavel.
 - Sempre: ML prediz apenas contrapartida no MVP.
+- Sempre: saldo fica fora de deduplicacao, treino, predicao e decisao de
+  contrapartida.
 - Sempre: `confidence < 0.70` exige revisao.
 - Sempre: aprovacao humana define quando um movimento vira confiavel.
 - Sempre: somente movimento `aprovado` ou `corrigido`, com
   `elegivel_treino=True`, pode virar fonte complementar do dataset.
+- Perguntar antes: bloquear lote inteiro por divergencia recuperavel de saldo.
+- Perguntar antes: transformar saldo ausente ou invalido em erro bloqueante.
 - Perguntar antes: criar exportacao para Dominio.
 - Perguntar antes: importar OFX/PDF.
+- Nunca: misturar convencao do extrato com direcao contabil.
+- Nunca: usar saldo como feature de ML.
 - Nunca: transformar movimento operacional automaticamente em Razao canonico.
 - Nunca: copiar movimento operacional automaticamente para `Transacao`.
 - Nunca: persistir conta sintetica/inativa como classificacao valida.
@@ -506,65 +687,66 @@ isso nao for necessario para auditoria.
 ## Success Criteria
 
 - Spec aprovada antes de implementacao.
-- Layout `.xlsx` candidato e validado e versionado como fixture antes do parser.
+- Dois layouts oficiais e versionados descritos sem ambiguidade.
+- Layout atual sem saldo permanece compativel como legado do layout A.
 - Entidades de lote e movimento ficam claramente separadas do Razao.
+- `layout_version` fica definido no lote para auditoria e rastreio.
+- Os dois layouts convergem para `valor_assinado`, `valor_absoluto` e `direcao`.
 - Regras de validacao distinguem erro bloqueante, warning e revisao.
-- Regras de debito/credito dependem do sinal do valor e da contrapartida final.
+- Regras de debito/credito dependem do valor assinado e da contrapartida final.
+- Saldo observado e saldo calculado possuem semantica separada.
+- Lacunas e divergencias de saldo geram warnings sem bloquear linhas validas.
+- Saldo fica fora das features de ML.
 - Fluxo de ML sugere contrapartida sem auto-aprovar.
 - Revisao humana controla aprovacao, correcao, rejeicao e elegibilidade futura
   para treino.
-- Tarefas derivadas cabem em PRs pequenos.
+- Tarefas derivadas cabem em PRs pequenos e nao repetem tarefas ja concluidas.
 
 ## Tarefas e Issues Sugeridas
 
-1. `spec(movimentos): versionar fixture do layout operacional`
-   - Copiar modelo validado para `tests/fixtures`.
-   - Validar que nao contem dados sensiveis.
+1. `test(movimentos): versionar fixtures dos dois layouts operacionais`
+   - Criar fixtures sanitizadas para layout A e layout B.
+   - Manter fixture legada sem saldo como compatibilidade.
+   - Validar ausencia de dados sensiveis.
 
-2. `feat(movimentos): criar modelos de lote e movimento operacional`
-   - Criar `LoteImportacaoMovimentoOperacional`.
-   - Criar `MovimentoOperacionalImportado`.
-   - Criar migration Alembic.
+2. `feat(movimentos): detectar layout operacional versionado`
+   - Detectar layout A, layout B e legado.
+   - Persistir `layout_version` no lote.
+   - Rejeitar layout ambiguo.
 
-3. `feat(movimentos): criar parser do layout xlsx operacional`
-   - Ler aba `Movimentos`.
-   - Extrair metadados e linhas.
-   - Cobrir erros de layout.
+3. `feat(movimentos): normalizar valores dos dois layouts`
+   - Converter layout A e B para `valor_assinado`, `valor_absoluto` e
+     `direcao` contabil.
+   - Cobrir credito/debito do extrato sem misturar com direcao contabil.
 
-4. `feat(movimentos): criar servico de importacao operacional`
-   - Validar empresa, periodo, contas e file hash.
-   - Persistir lote e movimentos.
-   - Permitir importacao parcial.
+4. `feat(movimentos): preservar saldo observado e calculado`
+   - Capturar saldo observado original e decimal.
+   - Calcular saldo por `conta_financeira` e ordem da linha.
+   - Registrar warnings recuperaveis para saldo ausente, parcial, invalido ou
+     divergente.
 
-5. `feat(movimentos): criar endpoint de importacao e consulta`
-   - Upload `.xlsx`.
-   - Consulta de lotes e movimentos por empresa.
-   - Permissoes por empresa.
+5. `feat(movimentos): expor saldos e warnings operacionais na API`
+   - Expor `layout_version`, saldos e warnings seguros em respostas de lote e
+     movimento.
+   - Preservar permissoes por empresa e auditoria.
 
-6. `feat(movimentos): classificar movimentos pendentes`
-   - Acao separada da importacao.
-   - Usar modelo treinado com dataset do Razao.
-   - Persistir sugestao, confianca e status.
+6. `test(ml): garantir que saldo nao entra nas features`
+   - Cobrir dataset de movimentos aprovados/corrigidos.
+   - Garantir que saldo observado, calculado e warnings nao participam de treino
+     ou predicao.
 
-7. `feat(movimentos): revisar, aprovar, corrigir e rejeitar`
-   - Fluxo individual.
-   - Criacao de vinculo empresa-conta por decisao humana.
-   - Auditoria.
+7. `docs(movimentos): atualizar modelos oficiais de planilha`
+   - Documentar uso dos dois templates oficiais.
+   - Indicar compatibilidade com o modelo legado.
+   - Alinhar instrucoes de preenchimento para usuario operador/contador.
 
-8. `feat(movimentos): aprovacao em lote conservadora`
-   - Aprovar apenas movimentos elegiveis.
-   - Retornar aprovados, ignorados e erros por item.
+8. `backlog(movimentos): adaptar OFX para contrato operacional`
+   - Mapear campos OFX para o contrato intermediario dos movimentos.
 
-9. `backlog(movimentos): incluir aprovados no dataset futuro`
-   - Decidir e implementar quando movimentos aprovados entram no treino.
+9. `backlog(movimentos): avaliar PDF/OCR`
+   - Definir estrategia por banco/layout.
 
-10. `backlog(movimentos): adaptar OFX para contrato operacional`
-    - Mapear campos OFX para `MovimentoOperacionalImportado`.
-
-11. `backlog(movimentos): avaliar PDF/OCR`
-    - Definir estrategia por banco/layout.
-
-12. `backlog(movimentos): exportar movimentos aprovados para Dominio`
+10. `backlog(movimentos): exportar movimentos aprovados para Dominio`
     - Definir formato, validacoes e auditoria.
 
 ## Open Questions
