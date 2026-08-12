@@ -24,6 +24,11 @@ Usar comentarios quando:
 - houver tratamento especial de erro da API;
 - houver decisao temporaria ou limitacao intencional.
 
+Na Release 1, o criterio geral de docstrings e comentarios orientados a
+contrato ou complexidade e canonico em
+`docs/specs/15-harness-qualidade-documentacao.md`. Esta spec permanece como
+referencia complementar para o frontend.
+
 Evitar comentarios quando:
 
 - o codigo ja e autoexplicativo;
@@ -73,6 +78,10 @@ Quando houver acesso ao GitHub e o usuario pedir publicacao, o PR deve ser criad
 - Tela simples: build, typecheck, lint e teste de componente quando houver estado relevante.
 - Fluxo com API: build, typecheck, lint, teste de service/hook e Playwright quando possivel.
 - Docker/ambiente: build de imagem, subida controlada e smoke test.
+
+Os contratos de `make check`, `make check-full` e Playwright relevante em todo
+PR da Release 1 sao definidos em
+`docs/specs/15-harness-qualidade-documentacao.md`.
 
 ## Boundaries
 

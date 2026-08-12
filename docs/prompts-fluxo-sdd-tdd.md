@@ -11,12 +11,13 @@ Este guia define a sequencia recomendada para continuar o projeto usando PRD, sp
 5. Escolher uma issue por vez.
 6. Fazer review da issue antes de implementar.
 7. Sugerir branch seguindo `.github/BRANCHING.md`.
-8. Escrever teste falhando.
-9. Implementar o minimo necessario.
-10. Rodar testes.
-11. Refatorar se necessario.
-12. Atualizar docs/specs apenas se alguma decisao mudar.
-13. Preparar PR em bloco unico Markdown ou draft no GitHub seguindo `.github/pull_request_template.md`.
+8. Classificar a issue como documental, comportamental ou configuracao testavel.
+9. Usar TDD apenas quando a issue alterar comportamento, contrato executavel ou configuracao testavel.
+10. Implementar o minimo necessario.
+11. Rodar testes ou validacoes proporcionais ao escopo.
+12. Refatorar se necessario.
+13. Atualizar docs/specs apenas se alguma decisao mudar.
+14. Preparar PR em bloco unico Markdown ou draft no GitHub seguindo `.github/pull_request_template.md`.
 
 Fluxo resumido:
 
@@ -26,9 +27,9 @@ PRD aprovado
 -> Issues pequenas
 -> Task Review
 -> Branch sugerida
--> Teste falhando
+-> TDD quando aplicavel
 -> Implementacao minima
--> Testes verdes
+-> Testes ou validacoes verdes
 -> PR
 ```
 
@@ -41,6 +42,7 @@ PRD aprovado
 5. `docs/specs/05-dataset-treino-contrapartida.md`
 6. `docs/specs/06-ml-classificacao-feedback.md`
 7. `docs/specs/07-auditoria-seguranca-operacional.md`
+8. `docs/specs/15-harness-qualidade-documentacao.md` para Ciclo 0 da Release 1
 
 ## Regra Principal
 
