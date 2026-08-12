@@ -33,14 +33,20 @@ Campos opcionais:
 - `conta_origem_nome`
 - `debito`
 - `credito`
-- `saldo_exercicio_original`
+- `saldo_anterior`
+- `saldo`
+- `saldo_exercicio`
+- `saldo_exercicio_original`: alias legado de `saldo_exercicio`.
 
 Cada linha deve ter `debito` ou `credito` preenchido. Nunca preencha os dois
 na mesma linha.
 
-`saldo_exercicio_original` serve apenas para conferencia visual. Ele nao define
-debito, credito, valor do lancamento, direcao contabil nem chave de
-deduplicacao.
+Campos de saldo servem para conferencia visual, fechamento mensal e diagnostico
+de divergencia. Eles nao definem debito, credito, valor do lancamento, direcao
+contabil, chave de deduplicacao nem feature de ML.
+
+Cada saldo deve preservar a forma original do arquivo e, quando possivel, uma
+representacao normalizada com `valor_decimal` e `natureza` `D` ou `C`.
 
 ## Regras importantes
 
@@ -67,6 +73,23 @@ data        numero  historico              contrapartida  debito   credito
 
 Nesse exemplo, `10046` e a conta de origem das duas linhas. A coluna
 `contrapartida` informa o outro lado do lancamento.
+
+## Saldos
+
+O Razao anual pode trazer:
+
+- `saldo_anterior`: saldo que abre a sequencia do bloco de conta;
+- `saldo`: saldo observado na sequencia exibida no bloco ou relatorio;
+- `saldo_exercicio`: saldo acumulado do exercicio informado pelo Dominio.
+
+`saldo` e `saldo_exercicio` sao preservados separadamente. A importacao nao
+tenta recalcular a diferenca conceitual entre eles nesta fase.
+
+`saldo_exercicio` sera a referencia principal para conciliacao futura. `saldo`
+permanece como diagnostico secundario.
+
+Arquivos antigos sem colunas de saldo continuam importaveis, mas a conciliacao
+por saldo fica indisponivel e deve gerar aviso informativo.
 
 ## Regra de debito e credito
 
@@ -133,7 +156,12 @@ Geram warning, entre outros casos:
 
 - linha sem contrapartida;
 - conta de origem inexistente no catalogo;
-- conta de contrapartida inexistente no catalogo.
+- conta de contrapartida inexistente no catalogo;
+- divergencia recuperavel na sequencia de saldo;
+- valor ou natureza de saldo em formato invalido, quando as demais informacoes
+  do lancamento permitirem continuar;
+- arquivo antigo sem colunas de saldo, quando a conciliacao por saldo nao puder
+  ser feita.
 
 Se houver linhas validas e warnings, o lote fica com status
 `completed_with_warnings`. Se nenhuma linha for valida, o lote fica `failed`.
