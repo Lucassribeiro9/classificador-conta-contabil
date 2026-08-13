@@ -473,7 +473,7 @@ Criterios de saida:
 | Ciclo 1 | [#361](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/361) | [#364](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/364) | [Spec 04](../specs/04-importacao-razao-normalizacao.md) | Atualizada com saldos e fechamentos pela #364 |
 | Ciclo 1 | [#361](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/361) | [#365](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/365) | [Spec 08](../specs/08-movimentos-operacionais-classificacao.md) | Atualizada com dois layouts operacionais e saldos pela #365 |
 | Ciclo 2 | [#362](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/362) | [#366](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/366) | [Spec 16](../specs/16-planilha-classificada-feedback-roundtrip.md) | Criada pela #366 |
-| Ciclo 2 | [#362](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/362) | [#351](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/351) | [Spec 02](../specs/02-auth-usuarios-permissoes.md) | Atualizacao planejada |
+| Ciclo 2 | [#362](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/362) | [#351](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/351) | [Spec 02](../specs/02-auth-usuarios-permissoes.md) | Atualizada com estrategia JWT, API keys, admin token e n8n pela #351 |
 | Ciclo 2 | [#362](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/362) | [#367](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/367) | Sem arquivo canonico - issue de spec ainda nao executada | Planejada |
 
 ### Evolucao das Decisoes
