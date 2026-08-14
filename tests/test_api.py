@@ -53,7 +53,7 @@ class TestCompanies:
         client.post("/api/v1/companies", json=empresa_data, headers=admin_headers)
         response = client.post("/api/v1/companies", json=empresa_data, headers=admin_headers)
         assert response.status_code == 409
-        assert "Documento já cadastrado" in response.json()["detail"]
+        assert "Documento já cadastrado" in response.json()["message"]
 
     def test_create_company_duplicate_document_masked_unmasked(self, client, admin_headers):
         """Testa duplicidade de documento com e sem máscara."""
@@ -72,7 +72,7 @@ class TestCompanies:
 
         second_response = client.post("/api/v1/companies", json=payload_unmasked, headers=admin_headers)
         assert second_response.status_code == 409
-        assert "Documento já cadastrado" in second_response.json()["detail"]
+        assert "Documento já cadastrado" in second_response.json()["message"]
 
     def test_create_company_invalid_document_size(self, client, admin_headers):
         """Testa erro de validação para cnpj_cpf com tamanho inválido."""
@@ -122,7 +122,7 @@ class TestCompanies:
 
         response = client.post("/api/v1/companies/batch", json=payload, headers=admin_headers)
         assert response.status_code == 409
-        assert "Documento já cadastrado" in response.json()["detail"]
+        assert "Documento já cadastrado" in response.json()["message"]
 
 
     def test_create_company_batch_duplicate_against_db(self, client, admin_headers):
@@ -144,7 +144,7 @@ class TestCompanies:
 
         response = client.post("/api/v1/companies/batch", json=payload, headers=admin_headers)
         assert response.status_code == 409
-        assert "Documento já cadastrado" in response.json()["detail"]
+        assert "Documento já cadastrado" in response.json()["message"]
 
 
     def test_create_company_batch_invalid_document_returns_422(self, client, admin_headers):
@@ -162,7 +162,7 @@ class TestCompanies:
         """Testa que criar empresa sem token de admin retorna erro."""
         response = client.post("/api/v1/companies", json=empresa_data)
         assert response.status_code == 401
-        assert "Admin token ausente" in response.json()["detail"]
+        assert "Admin token ausente" in response.json()["message"]
     def test_create_company_with_invalid_admin_token(self, client, empresa_data):
         """Testa que criar empresa com token de admin inválido retorna erro."""
         response = client.post(
@@ -227,21 +227,21 @@ class TestCompanies:
         client.patch(f"/api/v1/companies/{company_id}/deactivate")
         response = client.patch(f"/api/v1/companies/{company_id}/deactivate")
         assert response.status_code == 403
-        assert "Empresa já está desativada" in response.json()["detail"]
+        assert "Empresa já está desativada" in response.json()["message"]
 
     def test_activate_company_already_active(self, client, empresa_criada):
         """Testa erro ao ativar empresa já ativa."""
         company_id = empresa_criada["id"]
         response = client.patch(f"/api/v1/companies/{company_id}/activate")
         assert response.status_code == 403
-        assert "Empresa já está ativa" in response.json()["detail"]
+        assert "Empresa já está ativa" in response.json()["message"]
 
     def test_delete_company_without_admin_token(self, client, empresa_criada):
         """Testa que deletar empresa sem token de admin retorna erro."""
         company_id = empresa_criada["id"]
         response = client.delete(f"/api/v1/companies/{company_id}")
         assert response.status_code == 401
-        assert "Admin token ausente" in response.json()["detail"]
+        assert "Admin token ausente" in response.json()["message"]
 
 
     def test_delete_company_with_invalid_admin_token(self, client, empresa_criada):
@@ -252,7 +252,7 @@ class TestCompanies:
             headers={"X-Admin-Token": "invalid_token"},
         )
         assert response.status_code == 403
-        assert "Admin token inválido" in response.json()["detail"]
+        assert "Admin token inválido" in response.json()["message"]
 
 
     def test_delete_company_with_valid_admin_token(self, client, empresa_criada, admin_headers):
@@ -362,7 +362,7 @@ class TestPredict:
             headers={"X-API-Key": api_key},
         )
         assert response.status_code == 404
-        assert "Empresa não encontrada" in response.json()["detail"]
+        assert "Empresa não encontrada" in response.json()["message"]
 
     def test_predict_invalid_api_key(self, client, empresa_criada):
         """Testa erro para API key inválida."""
@@ -389,7 +389,7 @@ class TestPredict:
             headers={"X-API-Key": api_key},
         )
         assert response.status_code == 400
-        assert "Empresa está desativada" in response.json()["detail"]
+        assert "Empresa está desativada" in response.json()["message"]
 
     def test_predict_persist_false_does_not_create_transaction(
         self, client, empresa_criada, monkeypatch
@@ -469,7 +469,7 @@ class TestTransactionsAuth:
             headers={"X-API-Key": "invalid_key"},
         )
         assert response.status_code == 403
-        assert "API Key inválida" in response.json()["detail"]
+        assert "API Key inválida" in response.json()["message"]
 
     def test_create_transactions_with_valid_api_key(
         self, client, empresa_criada, transacao_data
@@ -643,7 +643,7 @@ class TestTransactionsAuth:
         assert second_response.status_code == 409
         assert (
             "Transação duplicada para os mesmos dados de empresa, data, histórico, valor, conta e banco"
-            in second_response.json()["detail"]
+            in second_response.json()["message"]
         )
 
     def test_create_transactions_duplicate_inside_payload_returns_409(
@@ -663,7 +663,7 @@ class TestTransactionsAuth:
         assert response.status_code == 409
         assert (
             "Transação duplicada para os mesmos dados de empresa, data, histórico, valor, conta e banco"
-            in response.json()["detail"]
+            in response.json()["message"]
         )
 
     def test_create_transactions_with_different_conta_contabil_returns_200(
@@ -726,7 +726,7 @@ class TestTransactionsDeleteBatch:
             headers={"X-API-Key": api_key},
         )
         assert response.status_code == 401
-        assert "Admin token ausente" in response.json()["detail"]
+        assert "Admin token ausente" in response.json()["message"]
 
     def test_delete_batch_requires_api_key(
         self, client, empresa_criada, transacao_data, admin_headers
@@ -746,7 +746,7 @@ class TestTransactionsDeleteBatch:
             headers=admin_headers,
         )
         assert response.status_code == 401
-        assert "API Key ausente" in response.json()["detail"]
+        assert "API Key ausente" in response.json()["message"]
 
     def test_delete_batch_forbidden_with_api_key_from_another_company(
         self, client, empresa_criada, transacao_data, admin_headers
@@ -780,7 +780,7 @@ class TestTransactionsDeleteBatch:
             },
         )
         assert response.status_code == 403
-        assert "Acesso negado" in response.json()["detail"]
+        assert "Acesso negado" in response.json()["message"]
 
     def test_delete_batch_success_returns_deleted_items(
         self, client, empresa_criada, transacao_data, admin_headers
@@ -916,7 +916,7 @@ class TestFeedbackScope:
             headers={"X-API-Key": empresa_criada_x["api_key"]},
         )
         assert feedback_response.status_code == 403
-        assert "outra empresa" in feedback_response.json()["detail"].lower()
+        assert "outra empresa" in feedback_response.json()["message"].lower()
 
     def test_feedback_company_inactive(self, client, empresa_criada):
         company_id = empresa_criada["id"]
@@ -950,7 +950,7 @@ class TestFeedbackScope:
             headers={"X-API-Key": api_key},
         )
         assert feedback_response.status_code == 400
-        assert "Empresa está desativada" in feedback_response.json()["detail"]
+        assert "Empresa está desativada" in feedback_response.json()["message"]
 class TestClassificationAuth:
     """Testes de autenticação no endpoint de classificação."""
 

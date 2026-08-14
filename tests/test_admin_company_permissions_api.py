@@ -184,7 +184,7 @@ def test_admin_removes_company_permission(client):
 
     assert delete_response.status_code == 204
     assert update_response.status_code == 404
-    assert update_response.json()["detail"] == "Vínculo não encontrado"
+    assert update_response.json()["message"] == "Vínculo não encontrado"
 
 
 def test_admin_permission_rejects_invalid_permission(client):
@@ -232,4 +232,4 @@ def test_non_admin_cannot_manage_company_permissions(client):
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "Acesso restrito a administradores"
+    assert response.json()["message"] == "Acesso restrito a administradores"

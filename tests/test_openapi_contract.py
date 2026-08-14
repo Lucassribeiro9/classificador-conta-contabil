@@ -58,3 +58,19 @@ def test_openapi_contains_main_route_groups_and_paths():
 
     assert EXPECTED_TAGS.issubset(tags)
     assert EXPECTED_PATHS.issubset(paths.keys())
+
+
+def test_openapi_declares_public_error_envelope_schema():
+    schema = app.openapi()
+    error_schema = schema["components"]["schemas"]["PublicErrorEnvelope"]
+
+    assert set(error_schema["required"]) == {
+        "code",
+        "message",
+        "details",
+        "request_id",
+    }
+    assert error_schema["properties"]["code"]["type"] == "string"
+    assert error_schema["properties"]["message"]["type"] == "string"
+    assert error_schema["properties"]["details"]["type"] == "object"
+    assert error_schema["properties"]["request_id"]["type"] == "string"

@@ -345,7 +345,7 @@ def test_user_without_company_link_cannot_list_razao_lotes(client):
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "Acesso negado"
+    assert response.json()["message"] == "Acesso negado"
 
 
 def test_razao_lancamentos_query_does_not_cross_company_boundaries(client):
@@ -370,7 +370,7 @@ def test_razao_lancamentos_query_does_not_cross_company_boundaries(client):
 
     assert outra_empresa_id != empresa_id
     assert response.status_code == 404
-    assert response.json()["detail"] == "Lote de razão não encontrado"
+    assert response.json()["message"] == "Lote de razão não encontrado"
 
 
 def test_user_imports_valid_tabular_fixture_through_endpoint(client):
@@ -406,7 +406,7 @@ def test_razao_import_rejects_file_cnpj_from_another_company(client):
 
     assert response.status_code == 400
     assert (
-        response.json()["detail"]
+        response.json()["message"]
         == "CNPJ do razao nao corresponde a empresa da importacao."
     )
 
@@ -502,7 +502,7 @@ def test_duplicate_razao_file_hash_creates_failed_audit_event(client):
 
     assert first_response.status_code == 200
     assert second_response.status_code == 400
-    assert second_response.json()["detail"] == "Arquivo ja importado com sucesso para esta empresa."
+    assert second_response.json()["message"] == "Arquivo ja importado com sucesso para esta empresa."
 
     with TestingSessionLocal() as session:
         events = session.query(AuditEvent).order_by(AuditEvent.id).all()
@@ -545,7 +545,7 @@ def test_user_with_leitura_permission_cannot_import_razao(client):
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "Permissão insuficiente"
+    assert response.json()["message"] == "Permissão insuficiente"
 
     with TestingSessionLocal() as session:
         event = session.query(AuditEvent).one()
@@ -576,7 +576,7 @@ def test_user_without_company_link_cannot_import_razao(client):
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "Acesso negado"
+    assert response.json()["message"] == "Acesso negado"
 
     with TestingSessionLocal() as session:
         event = session.query(AuditEvent).one()
@@ -598,7 +598,7 @@ def test_razao_import_rejects_non_xlsx_file(client):
     )
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "Arquivo deve ser .xlsx"
+    assert response.json()["message"] == "Arquivo deve ser .xlsx"
 
 
 def test_razao_import_requires_jwt(client):

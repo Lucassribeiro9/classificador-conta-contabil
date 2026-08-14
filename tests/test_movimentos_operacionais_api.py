@@ -325,7 +325,7 @@ def test_user_without_company_access_cannot_import_operational_movements(client)
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "Acesso negado"
+    assert response.json()["message"] == "Acesso negado"
 
     with TestingSessionLocal() as session:
         event = session.query(AuditEvent).one()
@@ -350,7 +350,7 @@ def test_operational_movements_import_rejects_non_xlsx_file(client):
     )
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "Arquivo deve ser .xlsx"
+    assert response.json()["message"] == "Arquivo deve ser .xlsx"
 
     with TestingSessionLocal() as session:
         event = session.query(AuditEvent).one()
@@ -467,7 +467,7 @@ def test_user_without_company_access_cannot_list_operational_lotes(client):
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "Acesso negado"
+    assert response.json()["message"] == "Acesso negado"
 
 
 def test_operational_movements_query_does_not_cross_company_boundaries(client):
@@ -492,7 +492,7 @@ def test_operational_movements_query_does_not_cross_company_boundaries(client):
 
     assert outra_empresa_id != empresa_id
     assert response.status_code == 404
-    assert response.json()["detail"] == "Lote operacional não encontrado"
+    assert response.json()["message"] == "Lote operacional não encontrado"
 
 
 def test_user_with_operacao_permission_classifies_pending_operational_movements(
@@ -563,7 +563,7 @@ def test_classificar_movimentos_returns_controlled_error_when_model_is_missing(
     )
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "Modelo treinado não encontrado para a empresa"
+    assert response.json()["message"] == "Modelo treinado não encontrado para a empresa"
 
     with TestingSessionLocal() as session:
         event = session.query(AuditEvent).one()
@@ -638,4 +638,4 @@ def test_review_movimento_without_permission(client):
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "Permissão insuficiente"
+    assert response.json()["message"] == "Permissão insuficiente"

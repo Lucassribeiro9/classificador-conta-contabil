@@ -267,7 +267,7 @@ def test_classification_endpoint_returns_404_when_company_has_no_model(client):
     )
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "Modelo treinado não encontrado para a empresa"
+    assert response.json()["message"] == "Modelo treinado não encontrado para a empresa"
 
 
 def test_classification_endpoint_creates_failed_audit_event_when_model_is_missing(
@@ -326,7 +326,7 @@ def test_classification_endpoint_rejects_batches_over_100_items(
     )
 
     assert response.status_code == 422
-    assert response.json()["detail"] == "Limite de 100 lançamentos por requisição"
+    assert response.json()["message"] == "Limite de 100 lançamentos por requisição"
 
 
 def test_classification_endpoint_requires_jwt(client):
@@ -358,7 +358,7 @@ def test_classification_endpoint_requires_company_operation_permission(client):
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "Permissão insuficiente"
+    assert response.json()["message"] == "Permissão insuficiente"
     events = _audit_events()
     assert [event.event_type for event in events] == ["auth.access.denied"]
     assert events[0].empresa_id == empresa_id
@@ -381,7 +381,7 @@ def test_classification_endpoint_rejects_user_without_company_link_and_audits(
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "Acesso negado"
+    assert response.json()["message"] == "Acesso negado"
     events = _audit_events()
     assert [event.event_type for event in events] == ["auth.access.denied"]
     assert events[0].user_id == usuario_id
@@ -403,7 +403,7 @@ def test_classification_endpoint_rejects_inactive_user_and_audits(client):
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "Usuário inativo"
+    assert response.json()["message"] == "Usuário inativo"
     events = _audit_events()
     assert [event.event_type for event in events] == ["auth.user.inactive_blocked"]
     assert events[0].user_id == usuario_id

@@ -233,7 +233,7 @@ def test_non_admin_cannot_import_plano_contas(client, papel):
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "Acesso restrito a administradores"
+    assert response.json()["message"] == "Acesso restrito a administradores"
 
 
 def test_plano_contas_import_requires_jwt(client):
@@ -255,4 +255,4 @@ def test_plano_contas_import_rejects_non_xlsx_file(client):
     )
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "Arquivo deve ser .xlsx"
+    assert response.json()["message"] == "Arquivo deve ser .xlsx"

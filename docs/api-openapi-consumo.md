@@ -220,10 +220,26 @@ curl -sS "http://localhost:8000/api/v1/companies/123/transactions" \
 
 Nao use `X-API-Key` como substituto de JWT em endpoints internos novos.
 
+## Erros publicos e correlacao
+
+Erros publicos da API usam o envelope canonico:
+
+```json
+{
+  "code": "validation_error",
+  "message": "Dados invalidos enviados para a API.",
+  "details": {},
+  "request_id": "<REQUEST_ID>"
+}
+```
+
+Toda resposta HTTP deve incluir o header `X-Request-ID`. Quando o cliente envia
+um valor seguro nesse header, a API o preserva; quando o valor esta ausente ou
+fora do formato aceito, a API gera um UUID4. Use esse identificador ao reportar
+falhas, sem copiar tokens, planilhas, payloads brutos ou dados contabeis.
+
 ## Lacunas conhecidas e encaminhamento
 
-- Envelope de erro padronizado com `code`, `message`, `details` e `request_id`
-  pertence a #403.
 - Identidade de servico para n8n e integracoes pertence a #351 e issues futuras
   derivadas.
 - Download da planilha classificada e feedback round-trip pertencem a Spec 16 e
