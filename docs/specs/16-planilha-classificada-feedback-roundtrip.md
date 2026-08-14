@@ -70,7 +70,14 @@ Regras:
 - limitar o download a usuarios ou integracoes autorizadas para a empresa e o
   lote.
 
-### Identificacao e Versao
+### Identificacao, Rotas e Versao
+
+Rotas definitivas:
+
+- GET `/api/v1/companies/{company_id}/movimentos-operacionais/lotes/{lote_id}/planilha-classificada`
+  baixa a planilha classificada do estado atual do lote.
+- POST `/api/v1/companies/{company_id}/movimentos-operacionais/lotes/{lote_id}/planilha-classificada/feedback`
+  importa revisoes em lote a partir da planilha classificada.
 
 Colunas de controle esperadas no arquivo exportado:
 
@@ -79,11 +86,43 @@ Colunas de controle esperadas no arquivo exportado:
 - `linha_original`
 - `layout_version`
 - `export_revision`
-- `row_version` ou `updated_at`
+- `row_version`
 
-`export_revision` identifica a versao logica da exportacao. `row_version` ou
-`updated_at` representa a versao esperada da linha no momento do download e deve
-ser usado para concorrencia otimista na importacao de feedback.
+`row_version` inteiro monotonico e a estrategia canonica de versao por linha. Ele
+representa a versao esperada da linha no momento do download e deve ser usado
+para concorrencia otimista na importacao de feedback. Deve ser incrementado
+quando o estado revisavel ou exportavel do movimento mudar, incluindo mudancas
+em `status`, sugestao, confianca, `contrapartida_final`, decisao humana,
+mensagens de validacao ou saldos/warnings expostos no arquivo.
+
+`export_revision` e um UUID gerado a cada download da planilha classificada.
+Todas as linhas do arquivo compartilham o mesmo `export_revision`, usado para
+agrupar a exportacao em auditoria, respostas e diagnostico. Na primeira versao,
+`export_revision` nao exige snapshot persistido nem tabela propria; a
+concorrencia real por linha depende de `row_version`. Na importacao, o sistema
+deve validar presenca e consistencia de `export_revision` dentro do arquivo e
+do lote informado, sem bloquear por exportacao desconhecida no banco.
+
+### Snapshot Minimo Exportavel
+
+Cada linha exportada deve conter, no minimo:
+
+- `lote_id`;
+- `movimento_id`;
+- `linha_original`;
+- `layout_version`;
+- `export_revision`;
+- `row_version`;
+- colunas originais do layout do lote;
+- `contrapartida`;
+- `contrapartida_sugerida`;
+- `confidence_sugerida`;
+- `contrapartida_final`;
+- `status_atual`;
+- `mensagem_validacao`;
+- saldos e warnings quando existirem;
+- `decisao_revisao`;
+- `observacao_revisao`.
 
 ### Colunas de Classificacao e Revisao
 
@@ -121,7 +160,10 @@ e deve ser validada contra o plano de contas e as regras de empresa.
 
 `contrapartida_sugerida`, `confidence_sugerida`, `status_atual`, saldos e
 mensagens de validacao nao podem ser aceitos como feedback humano nem
-sobrescritos pelo arquivo.
+sobrescritos pelo arquivo. A importacao aceita somente os campos editaveis
+`decisao_revisao`, `contrapartida_final` e `observacao_revisao`. Alteracoes em
+campos somente leitura devem ser ignoradas; a regra de dominio deve considerar
+apenas os campos editaveis para aplicar feedback.
 
 ## Contrato de Importacao do Round-trip
 
@@ -141,6 +183,10 @@ Regras:
 - nao sobrescrever revisao mais recente quando a linha estiver desatualizada.
 
 ### Resultado por Linha
+
+Arquivo parcialmente valido deve retornar HTTP 200 com resumo e resultados por linha.
+Erro estrutural de arquivo, como planilha nao reconhecida ou ausencia de
+colunas globais obrigatorias, deve retornar HTTP 400.
 
 A resposta da importacao deve permitir classificar cada linha como:
 
@@ -163,21 +209,25 @@ Resumo esperado:
 
 ## Concorrencia Otimista
 
-A importacao deve comparar a versao esperada do arquivo com a versao persistida
-do movimento.
+A importacao deve comparar `row_version` da planilha com o `row_version`
+persistido do movimento.
 
 Chaves esperadas:
 
 - `lote_id`
 - `movimento_id`
-- `row_version` ou `updated_at`
+- `row_version`
 - `export_revision`
 
 Se o movimento tiver sido alterado apos a exportacao, a linha deve retornar
-`conflitante` e nao deve sobrescrever a revisao mais recente.
+`conflitante` e nao deve sobrescrever a revisao mais recente. A concorrencia e
+por linha: conflitos em algumas linhas nao bloqueiam a aplicacao de outras
+linhas validas do arquivo.
 
-A concorrencia e por linha. Conflitos em algumas linhas nao bloqueiam a
-aplicacao de outras linhas validas do arquivo.
+Linhas de outro lote ou de outra empresa nao devem ser aplicadas; elas devem
+retornar `nao_autorizada` ou `invalida`, sem bloquear o arquivo todo. Linha com
+`export_revision` divergente do restante do arquivo deve retornar `invalida`,
+mantendo processamento parcial das demais linhas.
 
 ## Idempotencia
 
@@ -192,8 +242,10 @@ A chave idempotente conceitual deve derivar de:
 - `contrapartida_final`
 - versao esperada da linha
 
-Quando a mesma decisao for reenviada contra a mesma versao ja processada, a linha
-deve retornar `ignorada` com mensagem segura de reenvio idempotente.
+Quando a mesma decisao for reenviada contra o mesmo `row_version` ja processado,
+a linha deve retornar `ignorada` com mensagem segura de reenvio idempotente,
+sem duplicar feedback nem auditoria decisoria. Reenvio de decisao diferente
+contra versao antiga deve retornar `conflitante`.
 
 ## Regra de Dominio Compartilhada
 
@@ -224,7 +276,8 @@ frontend ou versionado no repositorio.
 
 Acoes auditaveis esperadas:
 
-- geracao/download da planilha classificada;
+- geracao/download da planilha classificada com empresa, lote, usuario ou
+  servico, `export_revision` e totais seguros, sem conteudo da planilha;
 - importacao de arquivo de feedback;
 - decisao aplicada por linha;
 - linha invalida, conflitante ou nao autorizada;
@@ -258,18 +311,22 @@ sensiveis, segredos ou dados de outra empresa.
 
 ### Concorrencia e Idempotencia
 
-- Rejeitar como `conflitante` linha com `row_version` ou `updated_at`
-  desatualizado.
+- Rejeitar como `conflitante` linha com `row_version` desatualizado.
 - Nao bloquear outras linhas quando houver conflito parcial.
-- Reenviar a mesma decisao sem duplicar feedback nem auditoria decisoria.
+- Reenviar a mesma decisao contra o mesmo `row_version` como reenvio idempotente
+  sem duplicar feedback nem auditoria decisoria.
 - Reenviar decisao diferente contra versao antiga como conflito.
+- Retornar HTTP 200 com resumo e resultados por linha em arquivo parcialmente
+  valido.
+- Retornar HTTP 400 em erro estrutural de arquivo.
 
 ### Autorizacao e Auditoria
 
 - Bloquear download sem acesso a empresa/lote.
 - Bloquear importacao de feedback sem permissao operacional.
 - Bloquear arquivo que tente referenciar movimento de outra empresa.
-- Registrar auditoria de download, importacao e decisao aplicada.
+- Registrar auditoria de download, importacao e decisao aplicada sem conteudo
+  integral da planilha.
 - Nao retornar segredos nem dados de outra empresa.
 
 ### Consumo sem Frontend
@@ -287,14 +344,22 @@ sensiveis, segredos ou dados de outra empresa.
 - Sempre: separar sugestao, confianca e decisao humana final.
 - Sempre: tratar sugestao, confianca, saldos e validacoes como leitura no
   round-trip.
+- Sempre: aceitar somente `decisao_revisao`, `contrapartida_final` e
+  `observacao_revisao` como campos editaveis na importacao.
+- Sempre: ignorar alteracoes em campos somente leitura.
 - Sempre: processar feedback em lote com resultado por linha.
-- Sempre: usar concorrencia otimista para impedir sobrescrita de revisao recente.
+- Sempre: usar `row_version` para concorrencia otimista e impedir sobrescrita
+  de revisao recente.
+- Sempre: gerar `export_revision` como UUID por exportacao sem exigir snapshot
+  persistido na primeira versao.
 - Sempre: tornar reenvio idempotente.
 - Sempre: compartilhar regra de dominio com o endpoint individual.
 - Sempre: validar isolamento por empresa e registrar auditoria segura.
 - Perguntar antes: armazenar binario original.
 - Perguntar antes: permitir edicao de campos do sistema pelo arquivo.
 - Perguntar antes: bloquear o arquivo inteiro por uma linha invalida.
+- Nunca: usar `updated_at` como alternativa canonica a `row_version` no
+  round-trip.
 - Nunca: aceitar `contrapartida_sugerida` ou `confidence_sugerida` como feedback
   humano.
 - Nunca: sobrescrever revisao mais recente com planilha antiga.
@@ -310,8 +375,10 @@ sensiveis, segredos ou dados de outra empresa.
 - Campos editaveis e somente leitura estao definidos.
 - `contrapartida` original permanece imutavel.
 - Sugestao e confianca nao podem ser alteradas por reimportacao.
-- Processamento parcial retorna resultado por linha.
-- Concorrencia otimista e idempotencia estao definidas.
+- Processamento parcial retorna HTTP 200 com resultado por linha.
+- Erro estrutural de arquivo retorna HTTP 400.
+- Concorrencia otimista por `row_version` e idempotencia estao definidas.
+- `export_revision` tem origem, ciclo e uso definidos.
 - Frontend, arquivo e integracao compartilham a mesma regra de dominio.
 - Regras de acesso por empresa e auditoria estao definidas.
 - A dependencia da #351 esta explicita sem decidir credenciais nesta spec.
@@ -321,28 +388,35 @@ sensiveis, segredos ou dados de outra empresa.
 
 1. `feat(exportacao): gerar planilha classificada por layout do lote`
    - Reconstruir arquivo a partir dos templates e dados persistidos.
-   - Preservar ordem, identificadores e `layout_version`.
+   - Preservar ordem, identificadores, `layout_version`, `row_version` e
+     `export_revision`.
    - Cobrir layout A, layout B e legado.
 
 2. `feat(exportacao): expor endpoint autenticado de download`
+   - Implementar GET `/api/v1/companies/{company_id}/movimentos-operacionais/lotes/{lote_id}/planilha-classificada`.
    - Validar empresa, lote, usuario/integracao e permissao.
-   - Retornar arquivo do estado atual com auditoria segura.
+   - Retornar arquivo do estado atual com auditoria segura de `export_revision`.
 
 3. `feat(feedback): criar regra compartilhada de revisao operacional`
+   - Consolidar a regra conceitual `review_movimento_operacional`.
    - Reutilizar a mesma regra para endpoint individual e round-trip.
-   - Validar decisao, contrapartida final, status e conta por empresa.
+   - Validar decisao, contrapartida final, status, `row_version` e conta por empresa.
 
 4. `feat(feedback): importar revisoes em lote por planilha`
+   - Implementar POST `/api/v1/companies/{company_id}/movimentos-operacionais/lotes/{lote_id}/planilha-classificada/feedback`.
    - Ler arquivo retornado pelo sistema.
-   - Aplicar processamento parcial com resultado por linha.
+   - Aplicar processamento parcial com HTTP 200 e resultado por linha.
+   - Retornar HTTP 400 para erro estrutural de arquivo.
    - Preservar campos somente leitura.
 
 5. `feat(feedback): implementar concorrencia otimista no round-trip`
-   - Validar `row_version` ou `updated_at` e `export_revision`.
+   - Validar `row_version` e consistencia de `export_revision`.
    - Retornar conflitos por linha sem bloquear linhas validas.
+   - Rejeitar planilha antiga sem sobrescrever revisao recente.
 
 6. `feat(feedback): implementar idempotencia de reenvio`
-   - Detectar decisao ja aplicada contra a mesma versao.
+   - Detectar decisao ja aplicada contra o mesmo `row_version`.
+   - Retornar `ignorada` para reenvio idempotente.
    - Evitar duplicidade de feedback e auditoria decisoria.
 
 7. `test(exportacao): cobrir consumo sem frontend`
@@ -356,5 +430,3 @@ sensiveis, segredos ou dados de outra empresa.
 ## Open Questions
 
 - A estrategia final de credencial de integracao depende da issue #351.
-- O nome definitivo dos endpoints deve ser confirmado nas issues de implementacao
-  para manter consistencia com as rotas existentes.
