@@ -308,4 +308,4 @@ def test_ml_status_endpoint_rejects_user_without_company_access(
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "Acesso negado"
+    assert response.json()["message"] == "Acesso negado"

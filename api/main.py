@@ -1,4 +1,6 @@
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.exceptions import RequestValidationError
+from fastapi.openapi.utils import get_openapi
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -17,18 +19,45 @@ from api.routes import (
     users,
 )
 from core.audit import begin_audit_request_context, end_audit_request_context
+from api.error_handlers import (
+    error_response,
+    http_exception_handler,
+    unexpected_exception_handler,
+    validation_exception_handler,
+)
+from api.request_context import (
+    REQUEST_ID_HEADER,
+    reset_current_request_id,
+    resolve_request_id,
+    set_current_request_id,
+)
 
 
 app = FastAPI(title="Classificador contábil")
+app.add_exception_handler(HTTPException, http_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(Exception, unexpected_exception_handler)
 
 
 @app.middleware("http")
-async def audit_context_middleware(request, call_next):
+async def request_context_middleware(request, call_next):
+    request_id = resolve_request_id(request.headers.get(REQUEST_ID_HEADER))
+    request_id_token = set_current_request_id(request_id)
     begin_audit_request_context()
     try:
-        return await call_next(request)
+        response = await call_next(request)
+    except Exception:
+        response = error_response(
+            status_code=500,
+            code="internal_error",
+            message="Erro interno inesperado.",
+        )
     finally:
         end_audit_request_context()
+        reset_current_request_id(request_id_token)
+
+    response.headers[REQUEST_ID_HEADER] = request_id
+    return response
 
 
 # Checando se está tudo certo
@@ -78,6 +107,50 @@ app.include_router(
 app.include_router(
     notificacoes.router, prefix="/api/v1", tags=["Agente-Notificacoes"]
 )
+
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    schema = get_openapi(
+        title=app.title,
+        version="0.1.0",
+        routes=app.routes,
+    )
+    components = schema.setdefault("components", {}).setdefault("schemas", {})
+    components["PublicErrorEnvelope"] = {
+        "type": "object",
+        "required": ["code", "message", "details", "request_id"],
+        "properties": {
+            "code": {"type": "string"},
+            "message": {"type": "string"},
+            "details": {"type": "object", "additionalProperties": True},
+            "request_id": {"type": "string"},
+        },
+    }
+
+    error_response_schema = {
+        "description": "Erro publico padronizado",
+        "content": {
+            "application/json": {
+                "schema": {"$ref": "#/components/schemas/PublicErrorEnvelope"}
+            }
+        },
+    }
+    for path_item in schema.get("paths", {}).values():
+        for operation in path_item.values():
+            if not isinstance(operation, dict):
+                continue
+            responses = operation.setdefault("responses", {})
+            for status_code in ("400", "401", "403", "404", "409", "422", "500"):
+                responses.setdefault(status_code, error_response_schema)
+
+    app.openapi_schema = schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
 
 
 @app.get("/")

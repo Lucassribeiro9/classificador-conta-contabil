@@ -134,7 +134,7 @@ def test_non_admin_cannot_create_user(client):
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "Acesso restrito a administradores"
+    assert response.json()["message"] == "Acesso restrito a administradores"
 
 
 def test_admin_lists_users_without_password_hash(client):
@@ -303,4 +303,4 @@ def test_non_admin_cannot_reset_user_password(client):
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "Acesso restrito a administradores"
+    assert response.json()["message"] == "Acesso restrito a administradores"

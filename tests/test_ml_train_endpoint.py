@@ -206,7 +206,7 @@ def test_train_endpoint_returns_422_when_dataset_is_insufficient(
     )
 
     assert response.status_code == 422
-    assert response.json()["detail"] == "Dataset insuficiente para treino do modelo"
+    assert response.json()["message"] == "Dataset insuficiente para treino do modelo"
     assert not (tmp_path / f"empresa_{empresa_id}" / "model_.joblib").exists()
     events = _audit_events()
     assert [event.event_type for event in events] == ["model.train_failed"]
@@ -233,7 +233,7 @@ def test_train_endpoint_requires_company_operation_permission(
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "Permissão insuficiente"
+    assert response.json()["message"] == "Permissão insuficiente"
     assert not (tmp_path / f"empresa_{empresa_id}" / "model_.joblib").exists()
     events = _audit_events()
     assert [event.event_type for event in events] == ["auth.access.denied"]

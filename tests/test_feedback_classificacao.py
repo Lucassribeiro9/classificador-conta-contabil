@@ -338,7 +338,7 @@ def test_feedback_classificacao_rejects_synthetic_final_account(client):
     )
 
     assert response.status_code == 422
-    assert response.json()["detail"] == "Conta final deve ser analítica e ativa"
+    assert response.json()["message"] == "Conta final deve ser analítica e ativa"
 
 
 def test_feedback_classificacao_rejects_user_without_company_link_and_audits(
@@ -357,7 +357,7 @@ def test_feedback_classificacao_rejects_user_without_company_link_and_audits(
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "Acesso negado"
+    assert response.json()["message"] == "Acesso negado"
 
     from tests.conftest import TestingSessionLocal
 

@@ -192,7 +192,7 @@ def test_authorized_companies_rejects_expired_jwt(client):
     response = client.get("/api/v1/companies/authorized", headers=headers)
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "Token expirado"
+    assert response.json()["message"] == "Token expirado"
 
 
 def test_authorized_companies_rejects_inactive_user(client):
@@ -208,7 +208,7 @@ def test_authorized_companies_rejects_inactive_user(client):
     response = client.get("/api/v1/companies/authorized", headers=headers)
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "Usuário inativo"
+    assert response.json()["message"] == "Usuário inativo"
 
 
 def test_legacy_company_list_keeps_requiring_admin_token(

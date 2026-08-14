@@ -219,4 +219,4 @@ def test_non_admin_cannot_list_audit_events(client):
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "Acesso restrito a administradores"
+    assert response.json()["message"] == "Acesso restrito a administradores"

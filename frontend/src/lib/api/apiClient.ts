@@ -79,7 +79,7 @@ function buildRequestInit(
 async function parseSafeValidationMessage(response: Response) {
   try {
     const data = (await response.json()) as ApiErrorResponse;
-    const message = data.detail ?? data.message;
+    const message = data.message ?? data.detail;
     return typeof message === "string" && message.trim()
       ? message
       : DEFAULT_VALIDATION_MESSAGE;

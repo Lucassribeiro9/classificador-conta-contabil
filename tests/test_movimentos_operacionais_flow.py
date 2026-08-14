@@ -333,7 +333,7 @@ def test_fluxo_operacional_importa_classifica_revisa_audita_e_isola_empresa(
     assert correct_response.json()["status"] == "corrigido"
     assert correct_response.json()["contrapartida_final"] == 30001
     assert cross_company_response.status_code == 403
-    assert cross_company_response.json()["detail"] == "Acesso negado"
+    assert cross_company_response.json()["message"] == "Acesso negado"
 
     with TestingSessionLocal() as session:
         movimentos_salvos = (

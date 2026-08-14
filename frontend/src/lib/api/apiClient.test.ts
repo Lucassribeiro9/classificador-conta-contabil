@@ -113,4 +113,33 @@ describe("apiClient", () => {
       apiClient.post("/api/v1/import", { body: {} }),
     ).rejects.toBeInstanceOf(ApiValidationError);
   });
+
+  it("prioriza mensagem do envelope canonico e tolera detail legado", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            code: "validation_error",
+            message: "Mensagem segura do envelope.",
+            details: {},
+            request_id: "req-frontend-1",
+            detail: "Mensagem legada.",
+          }),
+          {
+            status: 400,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
+      ),
+    );
+    const { apiClient } = await import("./apiClient");
+
+    await expect(
+      apiClient.post("/api/v1/import", { body: {} }),
+    ).rejects.toMatchObject({
+      name: "ApiValidationError",
+      message: "Mensagem segura do envelope.",
+    });
+  });
 });
