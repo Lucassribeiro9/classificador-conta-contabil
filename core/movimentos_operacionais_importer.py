@@ -85,6 +85,7 @@ def import_movimentos_operacionais(
         periodo_fim=periodo_fim,
         cnpj_cpf_arquivo=parsed.metadata.cnpj_cpf,
         codigo_dominio_arquivo=parsed.metadata.codigo_dominio or None,
+        layout_version="operacional_valor_legado_v1",
     )
     session.add(lote)
     session.flush()
@@ -102,7 +103,7 @@ def import_movimentos_operacionais(
         if not validation.is_valid:
             continue
 
-        session.add(_to_model(lote.id, empresa_id, validation))
+        session.add(_to_model(lote.id, empresa_id, validation, linha_original=index))
         imported += 1
 
     invalid = len(parsed.movimentos) - imported
@@ -320,6 +321,8 @@ def _to_model(
     lote_id: int,
     empresa_id: int,
     validation: _LinhaValidada,
+    *,
+    linha_original: int,
 ) -> MovimentoOperacionalImportado:
     """Converte linha validada para modelo ORM."""
 
@@ -337,11 +340,13 @@ def _to_model(
         tipo_movimento=movimento["tipo_movimento"],
         documento=movimento["documento"],
         observacao=movimento["observacao"],
+        linha_original=linha_original,
         contrapartida_informada=movimento["contrapartida_informada"],
         contrapartida_sugerida=None,
         contrapartida_final=None,
         confidence_sugerida=None,
         status=validation.status,
+        row_version=1,
         elegivel_treino=False,
         mensagens_validacao=validation.warnings,
         conta_debito=None,

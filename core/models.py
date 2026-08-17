@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from typing import Optional
+from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
@@ -478,6 +479,9 @@ class LoteImportacaoMovimentoOperacional(Base):
     codigo_dominio_arquivo: Mapped[Optional[str]] = mapped_column(
         String(30), nullable=True
     )
+    layout_version: Mapped[str] = mapped_column(
+        String(80), default="operacional_valor_legado_v1", nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.now, nullable=False
     )
@@ -531,16 +535,17 @@ class MovimentoOperacionalImportado(Base):
     conta_financeira: Mapped[int] = mapped_column(Integer, nullable=False)
     historico: Mapped[str] = mapped_column(String, nullable=False)
     historico_normalizado: Mapped[str] = mapped_column(String, nullable=False)
-    valor_original: Mapped[float] = mapped_column(
+    valor_original: Mapped[Decimal] = mapped_column(
         Numeric(precision=12, scale=2), nullable=False
     )
-    valor_absoluto: Mapped[float] = mapped_column(
+    valor_absoluto: Mapped[Decimal] = mapped_column(
         Numeric(precision=12, scale=2), nullable=False
     )
     direcao: Mapped[str] = mapped_column(String(10), nullable=False)
     tipo_movimento: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
     documento: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     observacao: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    linha_original: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     contrapartida_informada: Mapped[Optional[int]] = mapped_column(
         Integer, nullable=True
     )
@@ -550,6 +555,7 @@ class MovimentoOperacionalImportado(Base):
     contrapartida_final: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     confidence_sugerida: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False)
+    row_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     elegivel_treino: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False
     )

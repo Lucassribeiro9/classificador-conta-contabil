@@ -222,7 +222,10 @@ def test_import_movimentos_operacionais_persiste_lote_parcial_e_movimentos(sessi
     assert lote.warnings_metadata == {"warnings": result.warnings}
     assert lote.cnpj_cpf_arquivo == empresa.cnpj_cpf
     assert lote.codigo_dominio_arquivo == "9999"
+    assert lote.layout_version == "operacional_valor_legado_v1"
     assert lote.file_hash.startswith("sha256:")
+    assert [movimento.linha_original for movimento in movimentos] == [1, 2, 3]
+    assert [movimento.row_version for movimento in movimentos] == [1, 1, 1]
     assert [movimento.status for movimento in movimentos] == [
         "pre_classificado",
         "pendente",
