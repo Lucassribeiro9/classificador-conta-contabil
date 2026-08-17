@@ -3,7 +3,7 @@ from io import BytesIO
 
 import jwt
 import pytest
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from pwdlib import PasswordHash
 
 from core.config import settings
@@ -403,6 +403,161 @@ def test_user_with_leitura_permission_lists_own_operational_lotes(client):
             "created_at": response.json()["items"][0]["created_at"],
         }
     ]
+
+
+def test_user_with_leitura_permission_downloads_classified_operational_sheet(client):
+    from tests.conftest import TestingSessionLocal
+
+    usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(
+        permissao="leitura"
+    )
+
+    response = client.get(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/{lote_id}/planilha-classificada",
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == (
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    assert response.headers["content-disposition"] == (
+        f'attachment; filename="11222333000144-lote{lote_id}-classificada.xlsx"'
+    )
+
+    workbook = load_workbook(BytesIO(response.content))
+    sheet = workbook["Movimentos"]
+    headers = [cell.value for cell in sheet[1]]
+    assert "lote_id" in headers
+    assert "movimento_id" in headers
+    assert "export_revision" in headers
+    assert "row_version" in headers
+    assert "decisao_revisao" in headers
+    assert "contrapartida_final" in headers
+    assert "observacao_revisao" in headers
+    assert sheet.max_row == 3
+
+    with TestingSessionLocal() as session:
+        event = session.query(AuditEvent).one()
+
+    assert event.event_type == "operational_movements.classified_sheet_downloaded"
+    assert event.user_id == usuario.id
+    assert event.empresa_id == empresa_id
+    assert event.resource_id == str(lote_id)
+    assert event.metadata_json["lote_id"] == lote_id
+    assert event.metadata_json["layout_version"] == "operacional_valor_legado_v1"
+    assert event.metadata_json["total_movimentos"] == 2
+    assert event.metadata_json["export_revision"]
+    assert "Pagamento fornecedor sensivel" not in str(event.metadata_json)
+    assert "DOC-SENSIVEL-001" not in str(event.metadata_json)
+
+
+def test_classified_operational_sheet_requires_jwt_not_api_or_admin_token(client):
+    _, empresa_id, lote_id = _seed_operational_lote_with_movements(permissao="leitura")
+
+    for headers in (
+        {"X-API-Key": "api-key-movimentos"},
+        {"X-Admin-Token": "test-admin-token"},
+    ):
+        response = client.get(
+            f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/{lote_id}/planilha-classificada",
+            headers=headers,
+        )
+
+        assert response.status_code == 401
+
+
+def test_user_without_company_access_cannot_download_classified_operational_sheet(
+    client,
+):
+    from tests.conftest import TestingSessionLocal
+
+    usuario = _usuario(
+        login="sem.download.movimentos",
+        email="sem.download.movimentos@example.com",
+    )
+    _, empresa_id, lote_id = _seed_operational_lote_with_movements(permissao="leitura")
+    with TestingSessionLocal() as session:
+        session.add(usuario)
+        session.commit()
+        session.refresh(usuario)
+
+    response = client.get(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/{lote_id}/planilha-classificada",
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["message"] == "Acesso negado"
+
+
+def test_classified_operational_sheet_does_not_cross_company_boundaries(client):
+    usuario, empresa_id, _ = _seed_operational_lote_with_movements(permissao="leitura")
+    _, outra_empresa_id, outro_lote_id = _seed_operational_lote_with_movements(
+        empresa_overrides={
+            "nome_empresa": "Empresa Download Sem Acesso LTDA",
+            "cnpj_cpf": "77666555000144",
+            "api_key": "api-key-download-sem-acesso",
+            "cod_dominio": 4411,
+        },
+        usuario_overrides={
+            "login": "download.movimentos.sem.acesso",
+            "email": "download.movimentos.sem.acesso@example.com",
+        },
+    )
+
+    response = client.get(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/{outro_lote_id}/planilha-classificada",
+        headers=_auth_headers(usuario),
+    )
+
+    assert outra_empresa_id != empresa_id
+    assert response.status_code == 404
+    assert response.json()["message"] == "Lote operacional não encontrado"
+
+
+def test_global_admin_can_download_classified_operational_sheet_without_company_link(
+    client,
+):
+    from tests.conftest import TestingSessionLocal
+
+    _, empresa_id, lote_id = _seed_operational_lote_with_movements(permissao="leitura")
+    admin = _usuario(
+        login="admin.download.movimentos",
+        email="admin.download.movimentos@example.com",
+        papel="admin",
+    )
+    with TestingSessionLocal() as session:
+        session.add(admin)
+        session.commit()
+        session.refresh(admin)
+
+    response = client.get(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/{lote_id}/planilha-classificada",
+        headers=_auth_headers(admin),
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-disposition"] == (
+        f'attachment; filename="11222333000144-lote{lote_id}-classificada.xlsx"'
+    )
+
+
+def test_classified_operational_sheet_rejects_unknown_layout(client):
+    usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(
+        permissao="leitura",
+        lote_overrides={"layout_version": "operacional_desconhecido_v99"},
+    )
+
+    response = client.get(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/{lote_id}/planilha-classificada",
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["message"] == (
+        "Layout operacional desconhecido: operacional_desconhecido_v99"
+    )
 
 
 def test_user_lists_operational_movements_by_lote_and_status_without_raw_payload(
