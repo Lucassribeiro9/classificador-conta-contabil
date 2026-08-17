@@ -3,7 +3,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, UploadFile
 from sqlalchemy.orm import Session
 
 from api.dependencies import DB_DEPENDENCY, get_current_user
@@ -22,6 +22,10 @@ from core.models import (
     MovimentoOperacionalImportado,
     Usuario,
 )
+from core.movimentos_operacionais_exporter import (
+    MovimentoOperacionalExportError,
+    gerar_planilha_classificada,
+)
 from core.movimentos_operacionais_importer import (
     MovimentoOperacionalImportError,
     import_movimentos_operacionais,
@@ -35,9 +39,14 @@ from core.movimentos_operacionais_review import (
     MovimentoReviewError,
     review_movimento_operacional,
 )
+from core.movimentos_operacionais_snapshot import (
+    LoteOperacionalSnapshotNotFound,
+    build_lote_operacional_snapshot,
+)
 
 
 router = APIRouter(prefix="/companies/{company_id}/movimentos-operacionais")
+XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 @router.get("/lotes", response_model=MovimentoOperacionalLoteListResponse)
@@ -125,6 +134,59 @@ def list_company_operational_movements(
         page=page,
         limit=limit,
         has_next=offset + len(movimentos) < total,
+    )
+
+
+@router.get("/lotes/{lote_id}/planilha-classificada")
+def download_company_operational_classified_sheet(
+    company_id: int,
+    lote_id: int,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = DB_DEPENDENCY,
+) -> Response:
+    """Baixa a planilha classificada de um lote operacional da empresa."""
+    empresa = _ensure_company_for_operational_query(db, company_id)
+    denial_detail = _movimentos_read_denial_detail(current_user, empresa.id)
+    if denial_detail is not None:
+        raise HTTPException(status_code=403, detail=denial_detail)
+
+    try:
+        snapshot = build_lote_operacional_snapshot(
+            db,
+            empresa_id=empresa.id,
+            lote_id=lote_id,
+        )
+        content = gerar_planilha_classificada(snapshot)
+    except LoteOperacionalSnapshotNotFound as exc:
+        raise HTTPException(
+            status_code=404,
+            detail="Lote operacional não encontrado",
+        ) from exc
+    except MovimentoOperacionalExportError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    record_audit_event(
+        db,
+        event_type="operational_movements.classified_sheet_downloaded",
+        user_id=current_user.id,
+        empresa_id=empresa.id,
+        resource_id=str(lote_id),
+        metadata={
+            "lote_id": lote_id,
+            "export_revision": snapshot.export_revision,
+            "layout_version": snapshot.layout_version,
+            "total_movimentos": len(snapshot.movimentos),
+        },
+    )
+    db.commit()
+
+    filename = _classified_sheet_filename(empresa.cnpj_cpf, lote_id)
+    return Response(
+        content=content,
+        media_type=XLSX_MEDIA_TYPE,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
     )
 
 
@@ -302,6 +364,12 @@ def review_company_operational_movement(
         db.rollback()
         raise HTTPException(status_code=400, detail=str(exc))
 
+
+
+def _classified_sheet_filename(cnpj_cpf: str, lote_id: int) -> str:
+    """Monta nome de download sem dados livres da empresa."""
+    documento = "".join(char for char in cnpj_cpf if char.isdigit())
+    return f"{documento}-lote{lote_id}-classificada.xlsx"
 
 
 def _save_upload_to_temp_xlsx(file: UploadFile) -> str:
