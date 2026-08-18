@@ -287,6 +287,23 @@ class MovimentoOperacionalLoteListResponse(BaseModel):
     has_next: bool
 
 
+class MovimentoOperacionalFeedbackLinhaResponse(BaseModel):
+    linha_original: Optional[int] = None
+    movimento_id: Optional[int] = None
+    status: str
+    mensagem: str
+
+
+class MovimentoOperacionalFeedbackImportResponse(BaseModel):
+    total_linhas: int
+    total_aplicado: int
+    total_ignorado: int
+    total_invalido: int
+    total_conflitante: int
+    total_nao_autorizado: int
+    resultados: list[MovimentoOperacionalFeedbackLinhaResponse]
+
+
 class MovimentoOperacionalReviewRequest(BaseModel):
     action: str  # "approve", "correct", "reject"
     conta_final: Optional[int] = None

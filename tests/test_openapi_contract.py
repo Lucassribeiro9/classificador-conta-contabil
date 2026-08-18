@@ -26,6 +26,7 @@ EXPECTED_PATHS = {
     "/api/v1/companies/{company_id}/movimentos-operacionais/import",
     "/api/v1/companies/{company_id}/movimentos-operacionais/lotes",
     "/api/v1/companies/{company_id}/movimentos-operacionais/lotes/{lote_id}/planilha-classificada",
+    "/api/v1/companies/{company_id}/movimentos-operacionais/lotes/{lote_id}/planilha-classificada/feedback",
     "/api/v1/companies/{company_id}/razao/import",
     "/api/v1/companies/{company_id}/razao/lotes",
     "/api/v1/admin/plano-contas/import",

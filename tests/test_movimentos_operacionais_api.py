@@ -736,6 +736,167 @@ def test_classificar_movimentos_returns_controlled_error_when_model_is_missing(
     assert "DOC-SENSIVEL-MODELO-AUSENTE" not in str(event.metadata_json)
 
 
+def _feedback_roundtrip_xlsx(rows: list[dict]) -> bytes:
+    headers = [
+        "lote_id",
+        "movimento_id",
+        "linha_original",
+        "layout_version",
+        "export_revision",
+        "row_version",
+        "contrapartida_sugerida",
+        "confidence_sugerida",
+        "status_atual",
+        "mensagem_validacao",
+        "decisao_revisao",
+        "contrapartida_final",
+        "observacao_revisao",
+    ]
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Movimentos"
+    sheet.append(headers)
+    for row in rows:
+        sheet.append([row.get(header) for header in headers])
+    output = BytesIO()
+    workbook.save(output)
+    workbook.close()
+    output.seek(0)
+    return output.read()
+
+
+def test_import_classified_sheet_feedback_endpoint_applies_partial_file(client):
+    from tests.conftest import TestingSessionLocal
+
+    usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(
+        permissao="operacao"
+    )
+
+    with TestingSessionLocal() as session:
+        session.add(
+            ContaContabil(
+                codigo=20001,
+                classificacao="2.0.0",
+                nome="Conta 20001",
+                tipo="A",
+                grau=3,
+            )
+        )
+        session.commit()
+        movimentos = (
+            session.query(MovimentoOperacionalImportado)
+            .filter_by(lote_id=lote_id)
+            .order_by(MovimentoOperacionalImportado.id.asc())
+            .all()
+        )
+        movimentos[0].status = "sugerido"
+        movimentos[0].contrapartida_sugerida = 20001
+        movimentos[0].confidence_sugerida = 0.91
+        session.commit()
+        rows = [
+            {
+                "lote_id": lote_id,
+                "movimento_id": movimentos[0].id,
+                "linha_original": movimentos[0].linha_original,
+                "layout_version": "operacional_valor_legado_v1",
+                "export_revision": "revision-api",
+                "row_version": movimentos[0].row_version,
+                "contrapartida_sugerida": 20001,
+                "confidence_sugerida": 0.91,
+                "status_atual": "sugerido",
+                "decisao_revisao": "aprovar",
+                "contrapartida_final": 20001,
+            },
+            {
+                "lote_id": lote_id,
+                "movimento_id": movimentos[1].id,
+                "linha_original": movimentos[1].linha_original,
+                "layout_version": "operacional_valor_legado_v1",
+                "export_revision": "revision-api",
+                "row_version": movimentos[1].row_version,
+                "status_atual": movimentos[1].status,
+                "decisao_revisao": "",
+            },
+        ]
+
+    response = client.post(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/{lote_id}/planilha-classificada/feedback",
+        files={
+            "file": (
+                "feedback.xlsx",
+                _feedback_roundtrip_xlsx(rows),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["total_linhas"] == 2
+    assert response.json()["total_aplicado"] == 1
+    assert response.json()["total_ignorado"] == 1
+    assert [item["status"] for item in response.json()["resultados"]] == [
+        "aplicada",
+        "ignorada",
+    ]
+
+    with TestingSessionLocal() as session:
+        movimento = session.get(MovimentoOperacionalImportado, movimentos[0].id)
+        event_types = [event.event_type for event in session.query(AuditEvent).all()]
+
+    assert movimento.status == "aprovado"
+    assert movimento.contrapartida_final == 20001
+    assert "operational_movements.feedback_imported" in event_types
+
+
+def test_import_classified_sheet_feedback_returns_400_for_structural_error(client):
+    usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(
+        permissao="operacao"
+    )
+    workbook = Workbook()
+    workbook.active.title = "OutraAba"
+    output = BytesIO()
+    workbook.save(output)
+    workbook.close()
+    output.seek(0)
+
+    response = client.post(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/{lote_id}/planilha-classificada/feedback",
+        files={
+            "file": (
+                "feedback.xlsx",
+                output.read(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["message"] == "Aba Movimentos não encontrada"
+
+
+def test_import_classified_sheet_feedback_requires_operational_permission(client):
+    usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(
+        permissao="leitura"
+    )
+
+    response = client.post(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/{lote_id}/planilha-classificada/feedback",
+        files={
+            "file": (
+                "feedback.xlsx",
+                _feedback_roundtrip_xlsx([]),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["message"] == "Permissão insuficiente"
+
+
 def test_review_movimento_approve_success(client):
     from tests.conftest import TestingSessionLocal
     from core.models import ContaContabil
