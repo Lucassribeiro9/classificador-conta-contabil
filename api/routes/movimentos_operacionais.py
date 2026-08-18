@@ -10,6 +10,7 @@ from api.dependencies import DB_DEPENDENCY, get_current_user
 from api.schemas import (
     ClassificacaoMovimentoOperacionalResponse,
     ImportacaoMovimentoOperacionalResponse,
+    MovimentoOperacionalFeedbackImportResponse,
     MovimentoOperacionalListResponse,
     MovimentoOperacionalLoteListResponse,
     MovimentoOperacionalResponse,
@@ -25,6 +26,10 @@ from core.models import (
 from core.movimentos_operacionais_exporter import (
     MovimentoOperacionalExportError,
     gerar_planilha_classificada,
+)
+from core.movimentos_operacionais_feedback_importer import (
+    MovimentoOperacionalFeedbackImportError,
+    importar_feedback_planilha_classificada,
 )
 from core.movimentos_operacionais_importer import (
     MovimentoOperacionalImportError,
@@ -188,6 +193,50 @@ def download_company_operational_classified_sheet(
             "Content-Disposition": f'attachment; filename="{filename}"',
         },
     )
+
+
+@router.post(
+    "/lotes/{lote_id}/planilha-classificada/feedback",
+    response_model=MovimentoOperacionalFeedbackImportResponse,
+)
+def import_company_operational_classified_sheet_feedback(
+    company_id: int,
+    lote_id: int,
+    file: UploadFile,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = DB_DEPENDENCY,
+) -> MovimentoOperacionalFeedbackImportResponse:
+    """Importa revisoes em lote da planilha classificada."""
+    empresa = _ensure_company_for_operational_query(db, company_id)
+    denial_detail = _movimentos_permission_denial_detail(current_user, empresa.id)
+    if denial_detail is not None:
+        raise HTTPException(status_code=403, detail=denial_detail)
+
+    if not file.filename or not file.filename.lower().endswith(".xlsx"):
+        raise HTTPException(status_code=400, detail="Arquivo deve ser .xlsx")
+
+    temp_path = _save_upload_to_temp_xlsx(file)
+    try:
+        resumo = importar_feedback_planilha_classificada(
+            db,
+            temp_path,
+            empresa_id=empresa.id,
+            lote_id=lote_id,
+            usuario_id=current_user.id,
+        )
+        db.commit()
+        return MovimentoOperacionalFeedbackImportResponse.model_validate(
+            resumo,
+            from_attributes=True,
+        )
+    except MovimentoOperacionalFeedbackImportError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        os.unlink(temp_path)
 
 
 @router.post("/import", response_model=ImportacaoMovimentoOperacionalResponse)
