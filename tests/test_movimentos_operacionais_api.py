@@ -778,6 +778,44 @@ def test_review_movimento_reject_success(client):
     assert response.json()["contrapartida_final"] is None
 
 
+def test_review_movimento_rejects_finalized_status(client):
+    from tests.conftest import TestingSessionLocal
+    from core.models import ContaContabil
+
+    usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(
+        permissao="operacao"
+    )
+
+    with TestingSessionLocal() as session:
+        conta = ContaContabil(
+            codigo=20001,
+            classificacao="2.0.0",
+            nome="Conta 20001",
+            tipo="A",
+            grau=3,
+        )
+        session.add(conta)
+        session.commit()
+        mov = (
+            session.query(MovimentoOperacionalImportado)
+            .filter_by(lote_id=lote_id)
+            .first()
+        )
+        mov.status = "aprovado"
+        mov.contrapartida_final = 20001
+        session.commit()
+        mov_id = mov.id
+
+    response = client.post(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/{lote_id}/movimentos/{mov_id}/review",
+        json={"action": "correct", "conta_final": 20001},
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["message"] == "Status não permite revisão"
+
+
 def test_review_movimento_without_permission(client):
     from tests.conftest import TestingSessionLocal
     usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(permissao="leitura")
