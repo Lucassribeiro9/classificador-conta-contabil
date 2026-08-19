@@ -78,6 +78,7 @@ def _reject_movimento(
     usuario_id: int,
 ) -> None:
     """Rejeita movimento e remove qualquer par final previamente preenchido."""
+    _increment_row_version(movimento)
     movimento.status = "rejeitado"
     movimento.contrapartida_final = None
     movimento.conta_debito = None
@@ -151,6 +152,7 @@ def _apply_final_account_review(
     conta_final: int,
 ) -> None:
     """Aplica aprovacao ou correcao sem alterar entrada, sugestao ou confianca."""
+    _increment_row_version(movimento)
     movimento.contrapartida_final = conta_final
     movimento.status = "aprovado" if action == "approve" else "corrigido"
     movimento.elegivel_treino = True
@@ -170,3 +172,8 @@ def _apply_final_account_review(
         resource_id=str(movimento.id),
         metadata={"conta_final": conta_final},
     )
+
+
+def _increment_row_version(movimento: MovimentoOperacionalImportado) -> None:
+    """Avanca a versao exportavel do movimento apos uma revisao aplicada."""
+    movimento.row_version = (movimento.row_version or 0) + 1
