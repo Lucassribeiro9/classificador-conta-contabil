@@ -92,6 +92,10 @@ def _movimento(
     valor_original: Decimal = Decimal("-250.75"),
     valor_absoluto: Decimal = Decimal("250.75"),
     direcao: str = "credito",
+    saldo_observado_original: str | None = None,
+    saldo_observado_decimal: Decimal | None = None,
+    saldo_calculado_decimal: Decimal | None = None,
+    warnings_saldo: list[str] | None = None,
 ) -> MovimentoOperacionalImportado:
     return MovimentoOperacionalImportado(
         lote=lote,
@@ -115,6 +119,10 @@ def _movimento(
         mensagens_validacao=[],
         conta_debito=None,
         conta_credito=None,
+        saldo_observado_original=saldo_observado_original,
+        saldo_observado_decimal=saldo_observado_decimal,
+        saldo_calculado_decimal=saldo_calculado_decimal,
+        warnings_saldo=warnings_saldo or [],
     )
 
 
@@ -226,6 +234,10 @@ def test_classificar_movimentos_usa_contrato_interno_independente_do_layout(
         valor_original=Decimal("1500.00"),
         valor_absoluto=Decimal("1500.00"),
         direcao="debito",
+        saldo_observado_original="1500",
+        saldo_observado_decimal=Decimal("1500.00"),
+        saldo_calculado_decimal=Decimal("1500.00"),
+        warnings_saldo=[],
     )
     session.add(pendente)
     session.commit()

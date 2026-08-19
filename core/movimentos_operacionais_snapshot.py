@@ -146,8 +146,8 @@ def _to_snapshot_item(
         contrapartida_final=movimento.contrapartida_final,
         status_atual=movimento.status,
         mensagem_validacao=list(movimento.mensagens_validacao or []),
-        saldo_observado_original=None,
-        saldo_observado_decimal=None,
-        saldo_calculado_decimal=None,
-        warnings_saldo=[],
+        saldo_observado_original=movimento.saldo_observado_original,
+        saldo_observado_decimal=movimento.saldo_observado_decimal,
+        saldo_calculado_decimal=movimento.saldo_calculado_decimal,
+        warnings_saldo=list(movimento.warnings_saldo or []),
     )

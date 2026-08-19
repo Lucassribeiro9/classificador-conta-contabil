@@ -99,6 +99,10 @@ def _movimento(
     confidence_sugerida: float | None = None,
     mensagens_validacao: list[str] | None = None,
     row_version: int = 1,
+    saldo_observado_original: str | None = None,
+    saldo_observado_decimal: Decimal | None = None,
+    saldo_calculado_decimal: Decimal | None = None,
+    warnings_saldo: list[str] | None = None,
 ) -> MovimentoOperacionalImportado:
     return MovimentoOperacionalImportado(
         lote=lote,
@@ -124,6 +128,10 @@ def _movimento(
         conta_credito=10046 if contrapartida_final else None,
         linha_original=linha_original,
         row_version=row_version,
+        saldo_observado_original=saldo_observado_original,
+        saldo_observado_decimal=saldo_observado_decimal,
+        saldo_calculado_decimal=saldo_calculado_decimal,
+        warnings_saldo=warnings_saldo or [],
     )
 
 
@@ -197,6 +205,47 @@ def test_snapshot_preserva_ordem_versoes_e_separa_entrada_sugestao_e_decisao(ses
     assert aprovado.contrapartida_sugerida == 20722
     assert aprovado.contrapartida_final == 30722
     assert aprovado.status_atual == "aprovado"
+
+
+def test_snapshot_reflete_saldos_persistidos(session):
+    empresa = _empresa(api_key="api-key-snapshot-saldo")
+    usuario = _usuario()
+    lote = _lote(
+        empresa,
+        usuario,
+        layout_version="operacional_valor_saldo_v1",
+    )
+    session.add(lote)
+    session.flush()
+    session.add(
+        _movimento(
+            lote,
+            empresa,
+            linha_original=1,
+            status="sugerido",
+            saldo_observado_original="1000",
+            saldo_observado_decimal=Decimal("1000.00"),
+            saldo_calculado_decimal=Decimal("950.00"),
+            warnings_saldo=[
+                "Saldo observado diverge do saldo calculado para a conta financeira."
+            ],
+        )
+    )
+    session.commit()
+
+    snapshot = build_lote_operacional_snapshot(
+        session,
+        empresa_id=empresa.id,
+        lote_id=lote.id,
+    )
+
+    item = snapshot.movimentos[0]
+    assert item.saldo_observado_original == "1000"
+    assert item.saldo_observado_decimal == Decimal("1000.00")
+    assert item.saldo_calculado_decimal == Decimal("950.00")
+    assert item.warnings_saldo == [
+        "Saldo observado diverge do saldo calculado para a conta financeira."
+    ]
 
 
 def test_snapshot_bloqueia_lote_inexistente_ou_de_outra_empresa(session):

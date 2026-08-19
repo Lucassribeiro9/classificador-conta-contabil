@@ -223,6 +223,7 @@ def _parse_movimento_row(
         for field in (
             *_BASE_REQUIRED_COLUMNS,
             _VALUE_COLUMN,
+            _SALDO_COLUMN,
             _DEBITO_COLUMN,
             _CREDITO_COLUMN,
             *_OPTIONAL_COLUMNS,
@@ -240,6 +241,7 @@ def _parse_movimento_row(
         "conta_financeira": _clean_integer_like_number(raw["conta_financeira"]),
         "historico": _clean_text(raw["historico"]),
         "valor": _normalized_value(raw, layout_version),
+        "saldo": raw[_SALDO_COLUMN],
         "contrapartida": _clean_integer_like_number(raw["contrapartida"]),
         "tipo_movimento": _clean_text(raw["tipo_movimento"]),
         "documento": _clean_text(raw["documento"]),

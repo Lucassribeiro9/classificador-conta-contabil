@@ -192,6 +192,29 @@ def test_parse_movimentos_operacionais_normaliza_debito_do_layout_b(tmp_path):
     assert "credito" not in result.movimentos[0]
 
 
+def test_parse_movimentos_operacionais_preserva_saldo_bruto(tmp_path):
+    """Deve retornar saldo bruto da planilha para normalizacao no importador."""
+
+    xlsx_path = tmp_path / "layout-a-saldo.xlsx"
+    _write_workbook(
+        xlsx_path,
+        [
+            ["Empresa", "EMPRESA OPERACIONAL TESTE LTDA"],
+            ["Codigo dominio", "1122"],
+            ["CNPJ/CPF", "11.222.333/0001-44"],
+            ["Periodo inicio", "01/01/2025"],
+            ["Periodo fim", "31/01/2025"],
+            [],
+            ["data", "conta_financeira", "historico", "valor", "saldo"],
+            ["02/01/2025", 10046, "RECEBIMENTO CLIENTE", 1500, 2500],
+        ],
+    )
+
+    result = parse_movimentos_operacionais_xlsx(xlsx_path)
+
+    assert result.movimentos[0]["saldo"] == 2500
+
+
 def test_parse_movimentos_operacionais_ler_fixture_preenchida(tmp_path):
     """Deve ler a fixture preenchida e retornar metadados e movimentos."""
 
@@ -209,6 +232,7 @@ def test_parse_movimentos_operacionais_ler_fixture_preenchida(tmp_path):
         "conta_financeira": 10046,
         "historico": "RECEBTO.DUPLICATAS",
         "valor": 3660.15,
+        "saldo": None,
         "contrapartida": 10722,
         "tipo_movimento": "entrada",
         "documento": "OFX-0001",

@@ -70,6 +70,7 @@ def import_movimentos_operacionais(
     contas_vinculadas = _load_contas_vinculadas(session, empresa_id)
     warnings = _metadata_warnings(empresa, parsed.metadata.codigo_dominio)
     imported = 0
+    saldo_por_conta: dict[int, Decimal] = {}
 
     lote = LoteImportacaoMovimentoOperacional(
         empresa_id=empresa_id,
@@ -103,7 +104,18 @@ def import_movimentos_operacionais(
         if not validation.is_valid:
             continue
 
-        session.add(_to_model(lote.id, empresa_id, validation, linha_original=index))
+        saldo_info = _saldo_info(movimento, validation, saldo_por_conta)
+        if saldo_info["warnings_saldo"]:
+            warnings.append({"linha": index, "warnings": saldo_info["warnings_saldo"]})
+        session.add(
+            _to_model(
+                lote.id,
+                empresa_id,
+                validation,
+                linha_original=index,
+                saldo_info=saldo_info,
+            )
+        )
         imported += 1
 
     invalid = len(parsed.movimentos) - imported
@@ -323,10 +335,17 @@ def _to_model(
     validation: _LinhaValidada,
     *,
     linha_original: int,
+    saldo_info: Mapping[str, Any] | None = None,
 ) -> MovimentoOperacionalImportado:
     """Converte linha validada para modelo ORM."""
 
     movimento = validation.movimento
+    saldo_info = saldo_info or {
+        "saldo_observado_original": None,
+        "saldo_observado_decimal": None,
+        "saldo_calculado_decimal": None,
+        "warnings_saldo": [],
+    }
     return MovimentoOperacionalImportado(
         lote_id=lote_id,
         empresa_id=empresa_id,
@@ -336,6 +355,10 @@ def _to_model(
         historico_normalizado=movimento["historico_normalizado"],
         valor_original=movimento["valor_original"],
         valor_absoluto=movimento["valor_absoluto"],
+        saldo_observado_original=saldo_info["saldo_observado_original"],
+        saldo_observado_decimal=saldo_info["saldo_observado_decimal"],
+        saldo_calculado_decimal=saldo_info["saldo_calculado_decimal"],
+        warnings_saldo=saldo_info["warnings_saldo"],
         direcao=movimento["direcao"],
         tipo_movimento=movimento["tipo_movimento"],
         documento=movimento["documento"],
@@ -352,6 +375,76 @@ def _to_model(
         conta_debito=None,
         conta_credito=None,
     )
+
+
+def _saldo_info(
+    movimento: Mapping[str, Any],
+    validation: _LinhaValidada,
+    saldo_por_conta: dict[int, Decimal],
+) -> dict[str, Any]:
+    """Preserva saldo observado e calcula saldo por conta financeira."""
+
+    conta_financeira = validation.movimento["conta_financeira"]
+    valor_original = validation.movimento["valor_original"]
+    saldo_raw = movimento.get("saldo")
+    saldo_original = _saldo_original(saldo_raw)
+    saldo_observado = _parse_decimal(saldo_raw)
+    warnings_saldo: list[str] = []
+
+    if saldo_original is None:
+        warnings_saldo.append(
+            "Saldo ausente; conferencia por saldo limitada para esta linha."
+        )
+    elif saldo_observado is None:
+        warnings_saldo.append(
+            "Saldo informado invalido; conferencia por saldo limitada para esta linha."
+        )
+
+    if conta_financeira not in saldo_por_conta:
+        if saldo_observado is not None:
+            saldo_calculado = saldo_observado
+        else:
+            saldo_calculado = valor_original
+            if saldo_original is None:
+                warnings_saldo.append(
+                    "Saldo inicial ausente; saldo calculado partiu de zero."
+                )
+    else:
+        saldo_calculado = saldo_por_conta[conta_financeira] + valor_original
+
+    saldo_calculado = _money_decimal(saldo_calculado)
+    saldo_por_conta[conta_financeira] = saldo_calculado
+
+    if (
+        saldo_observado is not None
+        and _money_decimal(saldo_observado) != saldo_calculado
+    ):
+        warnings_saldo.append(
+            "Saldo observado diverge do saldo calculado para a conta financeira."
+        )
+
+    return {
+        "saldo_observado_original": saldo_original,
+        "saldo_observado_decimal": _money_decimal(saldo_observado)
+        if saldo_observado is not None
+        else None,
+        "saldo_calculado_decimal": saldo_calculado,
+        "warnings_saldo": warnings_saldo,
+    }
+
+
+def _saldo_original(value: Any) -> str | None:
+    """Preserva o saldo como recebido quando preenchido."""
+
+    if _is_blank(value):
+        return None
+    return str(value).strip()
+
+
+def _money_decimal(value: Decimal) -> Decimal:
+    """Normaliza decimal monetario para duas casas."""
+
+    return value.quantize(Decimal("0.01"))
 
 
 def _load_contas_por_codigo(session: Session) -> dict[int, ContaContabil]:
