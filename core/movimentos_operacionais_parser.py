@@ -24,10 +24,15 @@ class MovimentoOperacionalMetadata:
 class MovimentoOperacionalParseResult:
     metadata: MovimentoOperacionalMetadata
     movimentos: list[dict[str, Any]]
+    layout_version: str
 
 
 _SHEET_NAME = "Movimentos"
-_REQUIRED_COLUMNS = ("data", "conta_financeira", "historico", "valor")
+_BASE_REQUIRED_COLUMNS = ("data", "conta_financeira", "historico")
+_VALUE_COLUMN = "valor"
+_SALDO_COLUMN = "saldo"
+_DEBITO_COLUMN = "debito"
+_CREDITO_COLUMN = "credito"
 _OPTIONAL_COLUMNS = (
     "contrapartida",
     "tipo_movimento",
@@ -39,9 +44,16 @@ _SYSTEM_COLUMNS = (
     "confidence_sugerida",
     "mensagem_validacao",
 )
+_LAYOUT_COLUMNS = (
+    *_BASE_REQUIRED_COLUMNS,
+    _VALUE_COLUMN,
+    _SALDO_COLUMN,
+    _DEBITO_COLUMN,
+    _CREDITO_COLUMN,
+)
 _COLUMN_ALIASES = {
     column: column
-    for column in (*_REQUIRED_COLUMNS, *_OPTIONAL_COLUMNS, *_SYSTEM_COLUMNS)
+    for column in (*_LAYOUT_COLUMNS, *_OPTIONAL_COLUMNS, *_SYSTEM_COLUMNS)
 }
 
 
@@ -67,6 +79,7 @@ def parse_movimentos_operacionais_xlsx(
         sheet = workbook[_SHEET_NAME]
         metadata_values: dict[str, Any] = {}
         header_by_column: dict[str, int] | None = None
+        layout_version: str | None = None
         movimentos: list[dict[str, Any]] = []
 
         for row in sheet.iter_rows(values_only=True):
@@ -78,6 +91,7 @@ def parse_movimentos_operacionais_xlsx(
             maybe_header = _header_by_column(row)
             if maybe_header is not None:
                 header_by_column = maybe_header
+                layout_version = _detect_layout_version(header_by_column)
                 continue
 
             if header_by_column is None:
@@ -94,9 +108,11 @@ def parse_movimentos_operacionais_xlsx(
                 "colunas obrigatorias nao encontrado."
             )
 
+        assert layout_version is not None
         return MovimentoOperacionalParseResult(
             metadata=metadata,
             movimentos=movimentos,
+            layout_version=layout_version,
         )
     finally:
         workbook.close()
@@ -136,7 +152,7 @@ def _first_clean_text_after(row: tuple[Any, ...], index: int) -> str | None:
 
 
 def _header_by_column(row: tuple[Any, ...]) -> dict[str, int] | None:
-    """Detecta o cabecalho quando todas as colunas obrigatorias existem."""
+    """Detecta o cabecalho por colunas base e decisorias de layout."""
 
     header_by_field: dict[str, int] = {}
     for index, value in enumerate(row):
@@ -144,10 +160,54 @@ def _header_by_column(row: tuple[Any, ...]) -> dict[str, int] | None:
         if field_name is not None:
             header_by_field[field_name] = index
 
-    if not all(column in header_by_field for column in _REQUIRED_COLUMNS):
+    if not all(column in header_by_field for column in _BASE_REQUIRED_COLUMNS):
         return None
 
-    return header_by_field
+    if _detectable_layout(header_by_field):
+        return header_by_field
+
+    return None
+
+
+def _detectable_layout(header_by_column: dict[str, int]) -> bool:
+    """Indica se o cabecalho contem uma assinatura de layout conhecida."""
+
+    has_valor = _VALUE_COLUMN in header_by_column
+    has_saldo = _SALDO_COLUMN in header_by_column
+    has_debito = _DEBITO_COLUMN in header_by_column
+    has_credito = _CREDITO_COLUMN in header_by_column
+
+    if has_valor and (has_debito or has_credito):
+        return True
+    if has_valor:
+        return True
+    return has_debito and has_credito and has_saldo
+
+
+def _detect_layout_version(header_by_column: dict[str, int]) -> str:
+    """Classifica a versao conceitual do layout pelo cabecalho."""
+
+    has_valor = _VALUE_COLUMN in header_by_column
+    has_saldo = _SALDO_COLUMN in header_by_column
+    has_debito = _DEBITO_COLUMN in header_by_column
+    has_credito = _CREDITO_COLUMN in header_by_column
+
+    if has_valor and (has_debito or has_credito):
+        raise MovimentoOperacionalParseError(
+            "Layout de movimentos operacionais ambiguo: cabecalho contem valor "
+            "junto com debito ou credito."
+        )
+    if has_valor and has_saldo:
+        return "operacional_valor_saldo_v1"
+    if has_valor:
+        return "operacional_valor_legado_v1"
+    if has_debito and has_credito and has_saldo:
+        return "operacional_debito_credito_saldo_v1"
+
+    raise MovimentoOperacionalParseError(
+        "Layout de movimentos operacionais invalido: cabecalho com colunas "
+        "obrigatorias nao encontrado."
+    )
 
 
 def _parse_movimento_row(
@@ -158,7 +218,13 @@ def _parse_movimento_row(
 
     raw = {
         field: _cell(row, header_by_column.get(field))
-        for field in (*_REQUIRED_COLUMNS, *_OPTIONAL_COLUMNS)
+        for field in (
+            *_BASE_REQUIRED_COLUMNS,
+            _VALUE_COLUMN,
+            _DEBITO_COLUMN,
+            _CREDITO_COLUMN,
+            *_OPTIONAL_COLUMNS,
+        )
     }
     if all(_is_blank_value(value) for value in raw.values()):
         return None
