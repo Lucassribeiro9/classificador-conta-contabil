@@ -588,6 +588,392 @@ def test_importar_feedback_usa_primeira_linha_valida_como_referencia_export_revi
         assert resumo.total_aplicado == 1
 
 
+def test_importar_feedback_ignora_reenvio_idempotente_de_aprovacao_sem_duplicar_decisao(
+    tmp_path,
+    setup_db,
+):
+    usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(
+        permissao="operacao"
+    )
+
+    with TestingSessionLocal() as session:
+        session.add(
+            ContaContabil(
+                codigo=44001,
+                classificacao="4.4.0",
+                nome="Conta Idempotencia Aprovacao",
+                tipo="A",
+                grau=3,
+            )
+        )
+        session.commit()
+        movimento = (
+            session.query(MovimentoOperacionalImportado)
+            .filter_by(lote_id=lote_id)
+            .order_by(MovimentoOperacionalImportado.id.asc())
+            .first()
+        )
+        movimento.status = "sugerido"
+        row_version_exportado = movimento.row_version
+        rows = [
+            {
+                "lote_id": lote_id,
+                "movimento_id": movimento.id,
+                "linha_original": movimento.linha_original,
+                "layout_version": "operacional_valor_legado_v1",
+                "export_revision": "revision-idempotente-aprovar",
+                "row_version": row_version_exportado,
+                "status_atual": movimento.status,
+                "decisao_revisao": "aprovar",
+                "contrapartida_final": 44001,
+            }
+        ]
+        feedback_path = _write_feedback_file(tmp_path, rows)
+
+        primeiro_resumo = importar_feedback_planilha_classificada(
+            session,
+            feedback_path,
+            empresa_id=empresa_id,
+            lote_id=lote_id,
+            usuario_id=usuario.id,
+        )
+        session.flush()
+        row_version_apos_primeira_importacao = movimento.row_version
+
+        segundo_resumo = importar_feedback_planilha_classificada(
+            session,
+            feedback_path,
+            empresa_id=empresa_id,
+            lote_id=lote_id,
+            usuario_id=usuario.id,
+        )
+        session.flush()
+
+        assert primeiro_resumo.resultados[0].status == "aplicada"
+        assert segundo_resumo.total_ignorado == 1
+        assert segundo_resumo.total_conflitante == 0
+        assert segundo_resumo.resultados[0].status == "ignorada"
+        assert segundo_resumo.resultados[0].mensagem == "Decisão já aplicada anteriormente"
+        assert movimento.status == "aprovado"
+        assert movimento.contrapartida_final == 44001
+        assert movimento.row_version == row_version_apos_primeira_importacao
+        assert movimento.row_version == row_version_exportado + 1
+
+        eventos_decisorios = (
+            session.query(AuditEvent)
+            .filter(
+                AuditEvent.event_type == "operational_movements.aprovado",
+                AuditEvent.resource_id == str(movimento.id),
+            )
+            .all()
+        )
+        assert len(eventos_decisorios) == 1
+
+
+def test_importar_feedback_ignora_reenvio_idempotente_de_correcao_e_rejeicao(
+    tmp_path,
+    setup_db,
+):
+    usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(
+        permissao="operacao"
+    )
+
+    with TestingSessionLocal() as session:
+        session.add(
+            ContaContabil(
+                codigo=45001,
+                classificacao="4.5.0",
+                nome="Conta Idempotencia Correcao",
+                tipo="A",
+                grau=3,
+            )
+        )
+        session.commit()
+        movimentos = (
+            session.query(MovimentoOperacionalImportado)
+            .filter_by(lote_id=lote_id)
+            .order_by(MovimentoOperacionalImportado.id.asc())
+            .all()
+        )
+        movimentos[0].status = "revisao"
+        movimentos[1].status = "revisao"
+        row_version_correcao = movimentos[0].row_version
+        row_version_rejeicao = movimentos[1].row_version
+        rows = [
+            {
+                "lote_id": lote_id,
+                "movimento_id": movimentos[0].id,
+                "linha_original": movimentos[0].linha_original,
+                "layout_version": "operacional_valor_legado_v1",
+                "export_revision": "revision-idempotente-correcao-rejeicao",
+                "row_version": row_version_correcao,
+                "status_atual": movimentos[0].status,
+                "decisao_revisao": "corrigir",
+                "contrapartida_final": 45001,
+            },
+            {
+                "lote_id": lote_id,
+                "movimento_id": movimentos[1].id,
+                "linha_original": movimentos[1].linha_original,
+                "layout_version": "operacional_valor_legado_v1",
+                "export_revision": "revision-idempotente-correcao-rejeicao",
+                "row_version": row_version_rejeicao,
+                "status_atual": movimentos[1].status,
+                "decisao_revisao": "rejeitar",
+            },
+        ]
+        feedback_path = _write_feedback_file(tmp_path, rows)
+
+        primeiro_resumo = importar_feedback_planilha_classificada(
+            session,
+            feedback_path,
+            empresa_id=empresa_id,
+            lote_id=lote_id,
+            usuario_id=usuario.id,
+        )
+        session.flush()
+        row_versions_apos_primeira_importacao = [
+            movimentos[0].row_version,
+            movimentos[1].row_version,
+        ]
+
+        segundo_resumo = importar_feedback_planilha_classificada(
+            session,
+            feedback_path,
+            empresa_id=empresa_id,
+            lote_id=lote_id,
+            usuario_id=usuario.id,
+        )
+        session.flush()
+
+        assert [item.status for item in primeiro_resumo.resultados] == [
+            "aplicada",
+            "aplicada",
+        ]
+        assert segundo_resumo.total_ignorado == 2
+        assert segundo_resumo.total_conflitante == 0
+        assert [item.status for item in segundo_resumo.resultados] == [
+            "ignorada",
+            "ignorada",
+        ]
+        assert [item.mensagem for item in segundo_resumo.resultados] == [
+            "Decisão já aplicada anteriormente",
+            "Decisão já aplicada anteriormente",
+        ]
+        assert movimentos[0].status == "corrigido"
+        assert movimentos[0].contrapartida_final == 45001
+        assert movimentos[1].status == "rejeitado"
+        assert movimentos[1].contrapartida_final is None
+        assert [movimentos[0].row_version, movimentos[1].row_version] == (
+            row_versions_apos_primeira_importacao
+        )
+
+        eventos_correcao = (
+            session.query(AuditEvent)
+            .filter(
+                AuditEvent.event_type == "operational_movements.corrigido",
+                AuditEvent.resource_id == str(movimentos[0].id),
+            )
+            .all()
+        )
+        eventos_rejeicao = (
+            session.query(AuditEvent)
+            .filter(
+                AuditEvent.event_type == "operational_movements.rejected",
+                AuditEvent.resource_id == str(movimentos[1].id),
+            )
+            .all()
+        )
+        assert len(eventos_correcao) == 1
+        assert len(eventos_rejeicao) == 1
+
+
+def test_importar_feedback_trata_decisao_diferente_contra_versao_antiga_como_conflito(
+    tmp_path,
+    setup_db,
+):
+    usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(
+        permissao="operacao"
+    )
+
+    with TestingSessionLocal() as session:
+        session.add(
+            ContaContabil(
+                codigo=46001,
+                classificacao="4.6.0",
+                nome="Conta Decisao Diferente",
+                tipo="A",
+                grau=3,
+            )
+        )
+        session.commit()
+        movimento = (
+            session.query(MovimentoOperacionalImportado)
+            .filter_by(lote_id=lote_id)
+            .order_by(MovimentoOperacionalImportado.id.asc())
+            .first()
+        )
+        movimento.status = "revisao"
+        row_version_exportado = movimento.row_version
+        review_movimento_operacional(
+            db=session,
+            movimento_id=movimento.id,
+            empresa_id=empresa_id,
+            usuario_id=usuario.id,
+            action="correct",
+            conta_final=46001,
+        )
+        session.flush()
+
+        rows = [
+            {
+                "lote_id": lote_id,
+                "movimento_id": movimento.id,
+                "linha_original": movimento.linha_original,
+                "layout_version": "operacional_valor_legado_v1",
+                "export_revision": "revision-decisao-diferente",
+                "row_version": row_version_exportado,
+                "status_atual": "revisao",
+                "decisao_revisao": "aprovar",
+                "contrapartida_final": 46001,
+            }
+        ]
+
+        resumo = importar_feedback_planilha_classificada(
+            session,
+            _write_feedback_file(tmp_path, rows),
+            empresa_id=empresa_id,
+            lote_id=lote_id,
+            usuario_id=usuario.id,
+        )
+
+        assert resumo.total_conflitante == 1
+        assert resumo.total_ignorado == 0
+        assert resumo.resultados[0].status == "conflitante"
+        assert movimento.status == "corrigido"
+        assert movimento.contrapartida_final == 46001
+
+
+def test_importar_feedback_nao_trata_planilha_muito_antiga_como_idempotente(
+    tmp_path,
+    setup_db,
+):
+    usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(
+        permissao="operacao"
+    )
+
+    with TestingSessionLocal() as session:
+        session.add(
+            ContaContabil(
+                codigo=47001,
+                classificacao="4.7.0",
+                nome="Conta Versao Muito Antiga",
+                tipo="A",
+                grau=3,
+            )
+        )
+        session.commit()
+        movimento = (
+            session.query(MovimentoOperacionalImportado)
+            .filter_by(lote_id=lote_id)
+            .order_by(MovimentoOperacionalImportado.id.asc())
+            .first()
+        )
+        movimento.status = "sugerido"
+        row_version_exportado = movimento.row_version
+        review_movimento_operacional(
+            db=session,
+            movimento_id=movimento.id,
+            empresa_id=empresa_id,
+            usuario_id=usuario.id,
+            action="approve",
+            conta_final=47001,
+        )
+        movimento.status = "revisao"
+        review_movimento_operacional(
+            db=session,
+            movimento_id=movimento.id,
+            empresa_id=empresa_id,
+            usuario_id=usuario.id,
+            action="approve",
+            conta_final=47001,
+        )
+        session.flush()
+
+        rows = [
+            {
+                "lote_id": lote_id,
+                "movimento_id": movimento.id,
+                "linha_original": movimento.linha_original,
+                "layout_version": "operacional_valor_legado_v1",
+                "export_revision": "revision-muito-antiga",
+                "row_version": row_version_exportado,
+                "status_atual": "sugerido",
+                "decisao_revisao": "aprovar",
+                "contrapartida_final": 47001,
+            }
+        ]
+
+        resumo = importar_feedback_planilha_classificada(
+            session,
+            _write_feedback_file(tmp_path, rows),
+            empresa_id=empresa_id,
+            lote_id=lote_id,
+            usuario_id=usuario.id,
+        )
+
+        assert movimento.row_version > row_version_exportado + 1
+        assert resumo.total_conflitante == 1
+        assert resumo.resultados[0].status == "conflitante"
+
+
+def test_importar_feedback_ignora_linha_sem_decisao_mesmo_com_versao_antiga(
+    tmp_path,
+    setup_db,
+):
+    usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(
+        permissao="operacao"
+    )
+
+    with TestingSessionLocal() as session:
+        movimento = (
+            session.query(MovimentoOperacionalImportado)
+            .filter_by(lote_id=lote_id)
+            .order_by(MovimentoOperacionalImportado.id.asc())
+            .first()
+        )
+        movimento.status = "sugerido"
+        row_version_exportado = movimento.row_version
+        movimento.row_version = row_version_exportado + 1
+        session.flush()
+
+        rows = [
+            {
+                "lote_id": lote_id,
+                "movimento_id": movimento.id,
+                "linha_original": movimento.linha_original,
+                "layout_version": "operacional_valor_legado_v1",
+                "export_revision": "revision-sem-decisao",
+                "row_version": row_version_exportado,
+                "status_atual": "sugerido",
+                "decisao_revisao": "",
+            }
+        ]
+
+        resumo = importar_feedback_planilha_classificada(
+            session,
+            _write_feedback_file(tmp_path, rows),
+            empresa_id=empresa_id,
+            lote_id=lote_id,
+            usuario_id=usuario.id,
+        )
+
+        assert resumo.total_ignorado == 1
+        assert resumo.total_conflitante == 0
+        assert resumo.resultados[0].status == "ignorada"
+        assert resumo.resultados[0].mensagem == "Linha sem decisão de revisão"
+
+
 def test_importar_feedback_retorna_linhas_invalidas_sem_bloquear_validas(
     tmp_path,
     setup_db,
