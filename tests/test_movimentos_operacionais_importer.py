@@ -20,6 +20,7 @@ from core.movimentos_operacionais_importer import (
     MovimentoOperacionalImportError,
     import_movimentos_operacionais,
 )
+from core.movimentos_operacionais_parser import MovimentoOperacionalParseError
 
 
 @pytest.fixture()
@@ -94,6 +95,7 @@ def _write_movimentos_workbook(
     *,
     cnpj_cpf="11.222.333/0001-44",
     codigo_dominio="1122",
+    headers=None,
     rows=None,
 ):
     """Grava planilha operacional simples para exercitar o importador."""
@@ -108,7 +110,8 @@ def _write_movimentos_workbook(
     sheet.append(["Periodo fim", "31/01/2025"])
     sheet.append([])
     sheet.append(
-        [
+        headers
+        or [
             "data",
             "conta_financeira",
             "historico",
@@ -123,6 +126,129 @@ def _write_movimentos_workbook(
         sheet.append(row)
     workbook.save(path)
     workbook.close()
+
+
+def test_import_movimentos_operacionais_persiste_layout_valor_saldo(session, tmp_path):
+    """Deve persistir a versao oficial do layout A detectada pelo parser."""
+
+    empresa = _empresa()
+    usuario = _usuario()
+    session.add_all([empresa, usuario, _conta(10046), _conta(10722)])
+    session.flush()
+    session.add_all([_vinculo(empresa.id, 10046), _vinculo(empresa.id, 10722)])
+    session.flush()
+    xlsx_path = tmp_path / "movimentos-valor-saldo.xlsx"
+    _write_movimentos_workbook(
+        xlsx_path,
+        headers=[
+            "data",
+            "conta_financeira",
+            "historico",
+            "valor",
+            "saldo",
+            "contrapartida",
+            "tipo_movimento",
+            "documento",
+            "observacao",
+        ],
+        rows=[
+            [
+                "02/01/2025",
+                10046,
+                "RECEBTO.DUPLICATAS",
+                3660.15,
+                5000.15,
+                10722,
+                "entrada",
+                "OFX-0001",
+                "Layout com saldo",
+            ],
+        ],
+    )
+
+    result = import_movimentos_operacionais(
+        session,
+        xlsx_path,
+        empresa_id=empresa.id,
+        usuario_id=usuario.id,
+        original_filename="movimentos-valor-saldo.xlsx",
+    )
+
+    lote = session.query(LoteImportacaoMovimentoOperacional).one()
+    assert result.status == "completed"
+    assert lote.layout_version == "operacional_valor_saldo_v1"
+
+
+def test_import_movimentos_operacionais_persiste_layout_debito_credito_saldo_sem_linhas(
+    session,
+    tmp_path,
+):
+    """Deve persistir layout B sem antecipar normalizacao de debito/credito."""
+
+    empresa = _empresa()
+    usuario = _usuario()
+    session.add_all([empresa, usuario])
+    session.flush()
+    xlsx_path = tmp_path / "movimentos-debito-credito-saldo.xlsx"
+    _write_movimentos_workbook(
+        xlsx_path,
+        headers=[
+            "data",
+            "conta_financeira",
+            "historico",
+            "debito",
+            "credito",
+            "saldo",
+            "contrapartida",
+            "tipo_movimento",
+            "documento",
+            "observacao",
+        ],
+    )
+
+    result = import_movimentos_operacionais(
+        session,
+        xlsx_path,
+        empresa_id=empresa.id,
+        usuario_id=usuario.id,
+        original_filename="movimentos-debito-credito-saldo.xlsx",
+    )
+
+    lote = session.query(LoteImportacaoMovimentoOperacional).one()
+    assert result.total_linhas == 0
+    assert lote.layout_version == "operacional_debito_credito_saldo_v1"
+
+
+def test_import_movimentos_operacionais_nao_persiste_layout_ambiguo(session, tmp_path):
+    """Deve bloquear layout ambiguo antes de criar lote."""
+
+    empresa = _empresa()
+    usuario = _usuario()
+    session.add_all([empresa, usuario])
+    session.flush()
+    xlsx_path = tmp_path / "movimentos-ambiguo.xlsx"
+    _write_movimentos_workbook(
+        xlsx_path,
+        headers=[
+            "data",
+            "conta_financeira",
+            "historico",
+            "valor",
+            "debito",
+            "credito",
+        ],
+    )
+
+    with pytest.raises(MovimentoOperacionalParseError):
+        import_movimentos_operacionais(
+            session,
+            xlsx_path,
+            empresa_id=empresa.id,
+            usuario_id=usuario.id,
+            original_filename="movimentos-ambiguo.xlsx",
+        )
+
+    assert session.query(LoteImportacaoMovimentoOperacional).count() == 0
 
 
 def test_import_movimentos_operacionais_persiste_lote_parcial_e_movimentos(session, tmp_path):

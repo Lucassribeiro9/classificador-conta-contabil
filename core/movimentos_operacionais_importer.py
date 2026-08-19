@@ -85,7 +85,7 @@ def import_movimentos_operacionais(
         periodo_fim=periodo_fim,
         cnpj_cpf_arquivo=parsed.metadata.cnpj_cpf,
         codigo_dominio_arquivo=parsed.metadata.codigo_dominio or None,
-        layout_version="operacional_valor_legado_v1",
+        layout_version=parsed.layout_version,
     )
     session.add(lote)
     session.flush()
