@@ -191,22 +191,6 @@ def _process_feedback_row(
     ):
         return _unauthorized_row(linha_original, movimento_id)
 
-    if int(row["row_version"]) != movimento.row_version:
-        return ResultadoLinhaFeedbackOperacional(
-            linha_original=linha_original,
-            movimento_id=movimento_id,
-            status="conflitante",
-            mensagem="Linha desatualizada em relação ao movimento atual",
-        )
-
-    if _readonly_changed(row, movimento):
-        return ResultadoLinhaFeedbackOperacional(
-            linha_original=linha_original,
-            movimento_id=movimento_id,
-            status="invalida",
-            mensagem="Campo somente leitura alterado",
-        )
-
     decisao = _normalize_text(row.get("decisao_revisao"))
     if not decisao:
         return ResultadoLinhaFeedbackOperacional(
@@ -221,6 +205,30 @@ def _process_feedback_row(
             movimento_id=movimento_id,
             status="invalida",
             mensagem="Decisão de revisão inválida",
+        )
+
+    row_version = int(row["row_version"])
+    if row_version != movimento.row_version:
+        if _is_idempotent_replay(row, movimento, decisao):
+            return ResultadoLinhaFeedbackOperacional(
+                linha_original=linha_original,
+                movimento_id=movimento_id,
+                status="ignorada",
+                mensagem="Decisão já aplicada anteriormente",
+            )
+        return ResultadoLinhaFeedbackOperacional(
+            linha_original=linha_original,
+            movimento_id=movimento_id,
+            status="conflitante",
+            mensagem="Linha desatualizada em relação ao movimento atual",
+        )
+
+    if _readonly_changed(row, movimento):
+        return ResultadoLinhaFeedbackOperacional(
+            linha_original=linha_original,
+            movimento_id=movimento_id,
+            status="invalida",
+            mensagem="Campo somente leitura alterado",
         )
 
     try:
@@ -246,6 +254,30 @@ def _process_feedback_row(
         status="aplicada",
         mensagem="Decisão aplicada",
     )
+
+
+def _is_idempotent_replay(
+    row: dict[str, Any],
+    movimento: MovimentoOperacionalImportado,
+    decisao: str,
+) -> bool:
+    if movimento.row_version != int(row["row_version"]) + 1:
+        return False
+
+    conta_final = _optional_int(row.get("contrapartida_final"))
+    if decisao == "aprovar":
+        return (
+            movimento.status == "aprovado"
+            and movimento.contrapartida_final == conta_final
+        )
+    if decisao == "corrigir":
+        return (
+            movimento.status == "corrigido"
+            and movimento.contrapartida_final == conta_final
+        )
+    if decisao == "rejeitar":
+        return movimento.status == "rejeitado" and movimento.contrapartida_final is None
+    return False
 
 
 def _has_valid_control_values(row: dict[str, Any]) -> bool:
