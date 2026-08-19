@@ -77,14 +77,24 @@ def importar_feedback_planilha_classificada(
     """Importa revisoes em lote de planilha classificada com resultado parcial."""
     rows = _read_feedback_rows(path)
     resultados: list[ResultadoLinhaFeedbackOperacional] = []
+    expected_export_revision: str | None = None
 
     for row in rows:
+        export_revision = _normalize_text(row.get("export_revision"))
+        if (
+            expected_export_revision is None
+            and export_revision
+            and _has_valid_control_values(row)
+        ):
+            expected_export_revision = export_revision
+
         resultado = _process_feedback_row(
             db,
             row,
             empresa_id=empresa_id,
             lote_id=lote_id,
             usuario_id=usuario_id,
+            expected_export_revision=expected_export_revision,
         )
         resultados.append(resultado)
 
@@ -146,6 +156,7 @@ def _process_feedback_row(
     empresa_id: int,
     lote_id: int,
     usuario_id: int,
+    expected_export_revision: str | None,
 ) -> ResultadoLinhaFeedbackOperacional:
     linha_original = _optional_int(row.get("linha_original"))
     movimento_id = _optional_int(row.get("movimento_id"))
@@ -158,6 +169,17 @@ def _process_feedback_row(
             mensagem="Campos de controle inválidos",
         )
 
+    if (
+        expected_export_revision is not None
+        and _normalize_text(row.get("export_revision")) != expected_export_revision
+    ):
+        return ResultadoLinhaFeedbackOperacional(
+            linha_original=linha_original,
+            movimento_id=movimento_id,
+            status="invalida",
+            mensagem="export_revision divergente no arquivo",
+        )
+
     if int(row["lote_id"]) != lote_id:
         return _unauthorized_row(linha_original, movimento_id)
 
@@ -168,6 +190,14 @@ def _process_feedback_row(
         or movimento.lote_id != lote_id
     ):
         return _unauthorized_row(linha_original, movimento_id)
+
+    if int(row["row_version"]) != movimento.row_version:
+        return ResultadoLinhaFeedbackOperacional(
+            linha_original=linha_original,
+            movimento_id=movimento_id,
+            status="conflitante",
+            mensagem="Linha desatualizada em relação ao movimento atual",
+        )
 
     if _readonly_changed(row, movimento):
         return ResultadoLinhaFeedbackOperacional(
