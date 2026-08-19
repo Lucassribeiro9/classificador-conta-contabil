@@ -128,6 +128,70 @@ def test_parse_movimentos_operacionais_rejeita_layout_ambiguo(tmp_path):
         parse_movimentos_operacionais_xlsx(xlsx_path)
 
 
+def test_parse_movimentos_operacionais_normaliza_credito_do_layout_b(tmp_path):
+    """Deve converter credito do extrato em valor interno positivo."""
+
+    xlsx_path = tmp_path / "layout-b-credito.xlsx"
+    _write_workbook(
+        xlsx_path,
+        [
+            ["Empresa", "EMPRESA OPERACIONAL TESTE LTDA"],
+            ["Codigo dominio", "1122"],
+            ["CNPJ/CPF", "11.222.333/0001-44"],
+            ["Periodo inicio", "01/01/2025"],
+            ["Periodo fim", "31/01/2025"],
+            [],
+            [
+                "data",
+                "conta_financeira",
+                "historico",
+                "debito",
+                "credito",
+                "saldo",
+            ],
+            ["02/01/2025", 10046, "RECEBIMENTO CLIENTE", None, 1500, 2500],
+        ],
+    )
+
+    result = parse_movimentos_operacionais_xlsx(xlsx_path)
+
+    assert result.movimentos[0]["valor"] == 1500
+    assert "debito" not in result.movimentos[0]
+    assert "credito" not in result.movimentos[0]
+
+
+def test_parse_movimentos_operacionais_normaliza_debito_do_layout_b(tmp_path):
+    """Deve converter debito do extrato em valor interno negativo."""
+
+    xlsx_path = tmp_path / "layout-b-debito.xlsx"
+    _write_workbook(
+        xlsx_path,
+        [
+            ["Empresa", "EMPRESA OPERACIONAL TESTE LTDA"],
+            ["Codigo dominio", "1122"],
+            ["CNPJ/CPF", "11.222.333/0001-44"],
+            ["Periodo inicio", "01/01/2025"],
+            ["Periodo fim", "31/01/2025"],
+            [],
+            [
+                "data",
+                "conta_financeira",
+                "historico",
+                "debito",
+                "credito",
+                "saldo",
+            ],
+            ["03/01/2025", 10046, "PAGAMENTO FORNECEDOR", 300, None, 2200],
+        ],
+    )
+
+    result = parse_movimentos_operacionais_xlsx(xlsx_path)
+
+    assert result.movimentos[0]["valor"] == -300
+    assert "debito" not in result.movimentos[0]
+    assert "credito" not in result.movimentos[0]
+
+
 def test_parse_movimentos_operacionais_ler_fixture_preenchida(tmp_path):
     """Deve ler a fixture preenchida e retornar metadados e movimentos."""
 

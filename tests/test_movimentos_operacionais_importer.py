@@ -251,6 +251,143 @@ def test_import_movimentos_operacionais_nao_persiste_layout_ambiguo(session, tmp
     assert session.query(LoteImportacaoMovimentoOperacional).count() == 0
 
 
+def test_import_movimentos_operacionais_normaliza_layout_b_e_mantem_invalidos_recuperaveis(
+    session,
+    tmp_path,
+):
+    """Deve importar validos do layout B e contabilizar invalidos por linha."""
+
+    empresa = _empresa()
+    usuario = _usuario()
+    session.add_all([empresa, usuario, _conta(10046), _conta(10722)])
+    session.flush()
+    session.add_all([_vinculo(empresa.id, 10046), _vinculo(empresa.id, 10722)])
+    session.flush()
+    xlsx_path = tmp_path / "movimentos-layout-b-parcial.xlsx"
+    _write_movimentos_workbook(
+        xlsx_path,
+        headers=[
+            "data",
+            "conta_financeira",
+            "historico",
+            "debito",
+            "credito",
+            "saldo",
+            "contrapartida",
+            "tipo_movimento",
+            "documento",
+            "observacao",
+        ],
+        rows=[
+            [
+                "02/01/2025",
+                10046,
+                "RECEBIMENTO CLIENTE",
+                None,
+                1500,
+                2500,
+                10722,
+                "entrada",
+                "OFX-0001",
+                "Credito valido",
+            ],
+            [
+                "03/01/2025",
+                10046,
+                "PAGAMENTO FORNECEDOR",
+                300,
+                None,
+                2200,
+                10722,
+                "saida",
+                "OFX-0002",
+                "Debito valido",
+            ],
+            [
+                "04/01/2025",
+                10046,
+                "AMBOS PREENCHIDOS",
+                100,
+                200,
+                2300,
+                10722,
+                "entrada",
+                "OFX-0003",
+                "Invalido",
+            ],
+            [
+                "05/01/2025",
+                10046,
+                "AMBOS VAZIOS",
+                None,
+                None,
+                2300,
+                10722,
+                "entrada",
+                "OFX-0004",
+                "Invalido",
+            ],
+            [
+                "06/01/2025",
+                10046,
+                "VALOR ZERO",
+                0,
+                None,
+                2300,
+                10722,
+                "saida",
+                "OFX-0005",
+                "Invalido",
+            ],
+            [
+                "07/01/2025",
+                10046,
+                "VALOR NEGATIVO",
+                None,
+                -10,
+                2290,
+                10722,
+                "entrada",
+                "OFX-0006",
+                "Invalido",
+            ],
+        ],
+    )
+
+    result = import_movimentos_operacionais(
+        session,
+        xlsx_path,
+        empresa_id=empresa.id,
+        usuario_id=usuario.id,
+        original_filename="movimentos-layout-b-parcial.xlsx",
+    )
+
+    lote = session.query(LoteImportacaoMovimentoOperacional).one()
+    movimentos = (
+        session.query(MovimentoOperacionalImportado)
+        .order_by(MovimentoOperacionalImportado.data)
+        .all()
+    )
+    assert lote.layout_version == "operacional_debito_credito_saldo_v1"
+    assert result.status == "completed_with_warnings"
+    assert result.total_linhas == 6
+    assert result.total_importadas == 2
+    assert result.total_invalidas == 4
+    assert [warning["linha"] for warning in result.warnings] == [3, 4, 5, 6]
+    assert {
+        tuple(warning["warnings"]) for warning in result.warnings
+    } == {("Valor do movimento ausente, invalido ou zero.",)}
+    assert [movimento.valor_original for movimento in movimentos] == [
+        Decimal("1500.00"),
+        Decimal("-300.00"),
+    ]
+    assert [movimento.valor_absoluto for movimento in movimentos] == [
+        Decimal("1500.00"),
+        Decimal("300.00"),
+    ]
+    assert [movimento.direcao for movimento in movimentos] == ["debito", "credito"]
+
+
 def test_import_movimentos_operacionais_persiste_lote_parcial_e_movimentos(session, tmp_path):
     """Deve persistir validos/recuperaveis e ignorar invalidos em lote parcial."""
 

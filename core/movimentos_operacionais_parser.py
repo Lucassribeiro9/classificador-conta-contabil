@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 import re
 from typing import Any
@@ -97,7 +98,7 @@ def parse_movimentos_operacionais_xlsx(
             if header_by_column is None:
                 continue
 
-            movimento = _parse_movimento_row(row, header_by_column)
+            movimento = _parse_movimento_row(row, header_by_column, layout_version)
             if movimento is not None:
                 movimentos.append(movimento)
 
@@ -213,6 +214,7 @@ def _detect_layout_version(header_by_column: dict[str, int]) -> str:
 def _parse_movimento_row(
     row: tuple[Any, ...],
     header_by_column: dict[str, int],
+    layout_version: str | None,
 ) -> dict[str, Any] | None:
     """Converte uma linha de planilha em movimento operacional bruto."""
 
@@ -237,12 +239,49 @@ def _parse_movimento_row(
         "data": data,
         "conta_financeira": _clean_integer_like_number(raw["conta_financeira"]),
         "historico": _clean_text(raw["historico"]),
-        "valor": raw["valor"],
+        "valor": _normalized_value(raw, layout_version),
         "contrapartida": _clean_integer_like_number(raw["contrapartida"]),
         "tipo_movimento": _clean_text(raw["tipo_movimento"]),
         "documento": _clean_text(raw["documento"]),
         "observacao": _clean_text(raw["observacao"]),
     }
+
+
+def _normalized_value(raw: dict[str, Any], layout_version: str | None) -> Any:
+    """Converge layouts operacionais para valor assinado interno."""
+
+    if layout_version != "operacional_debito_credito_saldo_v1":
+        return raw[_VALUE_COLUMN]
+
+    debito = raw[_DEBITO_COLUMN]
+    credito = raw[_CREDITO_COLUMN]
+    has_debito = not _is_blank_value(debito)
+    has_credito = not _is_blank_value(credito)
+
+    if has_debito == has_credito:
+        return None
+
+    if has_credito:
+        credito_decimal = _decimal_layout_value(credito)
+        if credito_decimal is None or credito_decimal < 0:
+            return None
+        return credito_decimal
+
+    debito_decimal = _decimal_layout_value(debito)
+    if debito_decimal is None or debito_decimal < 0:
+        return None
+    return -debito_decimal
+
+
+def _decimal_layout_value(value: Any) -> Decimal | None:
+    """Converte valor simples do layout sem aceitar formatos localizados."""
+
+    if _is_blank_value(value):
+        return None
+    try:
+        return Decimal(str(value).strip())
+    except InvalidOperation:
+        return None
 
 
 def _build_metadata(metadata_values: dict[str, Any]) -> MovimentoOperacionalMetadata:

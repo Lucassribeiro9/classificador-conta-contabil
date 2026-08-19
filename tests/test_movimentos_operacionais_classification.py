@@ -58,7 +58,12 @@ def _usuario() -> Usuario:
     )
 
 
-def _lote(empresa: Empresa, usuario: Usuario) -> LoteImportacaoMovimentoOperacional:
+def _lote(
+    empresa: Empresa,
+    usuario: Usuario,
+    *,
+    layout_version: str = "operacional_valor_legado_v1",
+) -> LoteImportacaoMovimentoOperacional:
     return LoteImportacaoMovimentoOperacional(
         empresa=empresa,
         usuario=usuario,
@@ -73,6 +78,7 @@ def _lote(empresa: Empresa, usuario: Usuario) -> LoteImportacaoMovimentoOperacio
         periodo_fim=date(2026, 1, 31),
         cnpj_cpf_arquivo=empresa.cnpj_cpf,
         codigo_dominio_arquivo=str(empresa.cod_dominio),
+        layout_version=layout_version,
     )
 
 
@@ -83,6 +89,9 @@ def _movimento(
     status: str,
     historico_normalizado: str,
     tipo_movimento: str | None = "saida",
+    valor_original: Decimal = Decimal("-250.75"),
+    valor_absoluto: Decimal = Decimal("250.75"),
+    direcao: str = "credito",
 ) -> MovimentoOperacionalImportado:
     return MovimentoOperacionalImportado(
         lote=lote,
@@ -91,9 +100,9 @@ def _movimento(
         conta_financeira=10046,
         historico=f"{historico_normalizado} bruto",
         historico_normalizado=historico_normalizado,
-        valor_original=Decimal("-250.75"),
-        valor_absoluto=Decimal("250.75"),
-        direcao="credito",
+        valor_original=valor_original,
+        valor_absoluto=valor_absoluto,
+        direcao=direcao,
         tipo_movimento=tipo_movimento,
         documento="DOC-SENSIVEL-001",
         observacao="Observacao sensivel",
@@ -195,3 +204,43 @@ def test_classificar_movimentos_pendentes_persiste_sugestao_e_auditoria(
     assert event.metadata_json["total_revisao"] == 0
     assert "pagamento fornecedor" not in str(event.metadata_json)
     assert "DOC-SENSIVEL-001" not in str(event.metadata_json)
+
+
+def test_classificar_movimentos_usa_contrato_interno_independente_do_layout(
+    session,
+    tmp_path,
+):
+    empresa = _empresa()
+    usuario = _usuario()
+    lote = _lote(
+        empresa,
+        usuario,
+        layout_version="operacional_debito_credito_saldo_v1",
+    )
+    pendente = _movimento(
+        lote,
+        empresa,
+        status="pendente",
+        historico_normalizado="recebimento cliente boleto",
+        tipo_movimento="entrada",
+        valor_original=Decimal("1500.00"),
+        valor_absoluto=Decimal("1500.00"),
+        direcao="debito",
+    )
+    session.add(pendente)
+    session.commit()
+    _train_razao_dataset_model(session, tmp_path, empresa.id)
+
+    result = classificar_movimentos_operacionais_pendentes(
+        session,
+        empresa_id=empresa.id,
+        model_dir=tmp_path,
+    )
+
+    session.refresh(pendente)
+    assert result["quantidade_processada"] == 1
+    assert pendente.status == "sugerido"
+    assert pendente.contrapartida_sugerida in {20001, 30001}
+    assert pendente.valor_original == Decimal("1500.00")
+    assert pendente.valor_absoluto == Decimal("1500.00")
+    assert pendente.direcao == "debito"
