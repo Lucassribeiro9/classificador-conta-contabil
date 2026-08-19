@@ -541,6 +541,16 @@ class MovimentoOperacionalImportado(Base):
     valor_absoluto: Mapped[Decimal] = mapped_column(
         Numeric(precision=12, scale=2), nullable=False
     )
+    saldo_observado_original: Mapped[Optional[str]] = mapped_column(
+        String, nullable=True
+    )
+    saldo_observado_decimal: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(precision=12, scale=2), nullable=True
+    )
+    saldo_calculado_decimal: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(precision=12, scale=2), nullable=True
+    )
+    warnings_saldo: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     direcao: Mapped[str] = mapped_column(String(10), nullable=False)
     tipo_movimento: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
     documento: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)

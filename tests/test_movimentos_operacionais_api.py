@@ -282,11 +282,19 @@ def test_user_with_operacao_permission_imports_operational_movements(client):
     assert response.status_code == 200
     assert response.json() == {
         "lote_id": 1,
-        "status": "completed",
+        "status": "completed_with_warnings",
         "total_linhas": 1,
         "total_importadas": 1,
         "total_invalidas": 0,
-        "warnings": [],
+        "warnings": [
+            {
+                "linha": 1,
+                "warnings": [
+                    "Saldo ausente; conferencia por saldo limitada para esta linha.",
+                    "Saldo inicial ausente; saldo calculado partiu de zero.",
+                ],
+            }
+        ],
     }
 
     with TestingSessionLocal() as session:

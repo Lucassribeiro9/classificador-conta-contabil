@@ -388,6 +388,141 @@ def test_import_movimentos_operacionais_normaliza_layout_b_e_mantem_invalidos_re
     assert [movimento.direcao for movimento in movimentos] == ["debito", "credito"]
 
 
+def test_import_movimentos_operacionais_persiste_e_calcula_saldos_por_conta(
+    session,
+    tmp_path,
+):
+    """Deve preservar saldo observado e calcular sequencias independentes."""
+
+    empresa = _empresa()
+    usuario = _usuario()
+    session.add_all([empresa, usuario, _conta(10046), _conta(20000), _conta(10722)])
+    session.flush()
+    session.add_all(
+        [
+            _vinculo(empresa.id, 10046),
+            _vinculo(empresa.id, 20000),
+            _vinculo(empresa.id, 10722),
+        ]
+    )
+    session.flush()
+    xlsx_path = tmp_path / "movimentos-saldos.xlsx"
+    _write_movimentos_workbook(
+        xlsx_path,
+        headers=[
+            "data",
+            "conta_financeira",
+            "historico",
+            "valor",
+            "saldo",
+            "contrapartida",
+            "tipo_movimento",
+            "documento",
+            "observacao",
+        ],
+        rows=[
+            ["02/01/2025", 10046, "SALDO INICIAL OBSERVADO", 100, 1000, 10722, "entrada"],
+            ["03/01/2025", 20000, "OUTRA CONTA INICIAL", 50, 500, 10722, "entrada"],
+            ["04/01/2025", 10046, "SAIDA CONFERIDA", -100, 900, 10722, "saida"],
+            ["05/01/2025", 20000, "SALDO DIVERGENTE", 25, 999, 10722, "entrada"],
+            ["06/01/2025", 10046, "SALDO AUSENTE", -50, None, 10722, "saida"],
+            ["07/01/2025", 10046, "SALDO INVALIDO", -50, "saldo invalido", 10722, "saida"],
+        ],
+    )
+
+    result = import_movimentos_operacionais(
+        session,
+        xlsx_path,
+        empresa_id=empresa.id,
+        usuario_id=usuario.id,
+        original_filename="movimentos-saldos.xlsx",
+    )
+
+    lote = session.query(LoteImportacaoMovimentoOperacional).one()
+    movimentos = (
+        session.query(MovimentoOperacionalImportado)
+        .order_by(MovimentoOperacionalImportado.linha_original)
+        .all()
+    )
+    assert result.status == "completed_with_warnings"
+    assert lote.status == "completed_with_warnings"
+    assert result.total_importadas == 6
+    assert [mov.saldo_observado_original for mov in movimentos] == [
+        "1000",
+        "500",
+        "900",
+        "999",
+        None,
+        "saldo invalido",
+    ]
+    assert [mov.saldo_observado_decimal for mov in movimentos] == [
+        Decimal("1000.00"),
+        Decimal("500.00"),
+        Decimal("900.00"),
+        Decimal("999.00"),
+        None,
+        None,
+    ]
+    assert [mov.saldo_calculado_decimal for mov in movimentos] == [
+        Decimal("1000.00"),
+        Decimal("500.00"),
+        Decimal("900.00"),
+        Decimal("525.00"),
+        Decimal("850.00"),
+        Decimal("800.00"),
+    ]
+    assert movimentos[3].warnings_saldo == [
+        "Saldo observado diverge do saldo calculado para a conta financeira."
+    ]
+    assert movimentos[4].warnings_saldo == [
+        "Saldo ausente; conferencia por saldo limitada para esta linha."
+    ]
+    assert movimentos[5].warnings_saldo == [
+        "Saldo informado invalido; conferencia por saldo limitada para esta linha."
+    ]
+    assert movimentos[3].status == "pre_classificado"
+    assert movimentos[4].status == "pre_classificado"
+    assert movimentos[5].status == "pre_classificado"
+
+
+def test_import_movimentos_operacionais_legado_registra_warning_de_saldo_ausente(
+    session,
+    tmp_path,
+):
+    """Deve manter legado compativel e avisar ausencia de saldo por movimento."""
+
+    empresa = _empresa()
+    usuario = _usuario()
+    session.add_all([empresa, usuario, _conta(10046), _conta(10722)])
+    session.flush()
+    session.add_all([_vinculo(empresa.id, 10046), _vinculo(empresa.id, 10722)])
+    session.flush()
+    xlsx_path = tmp_path / "movimentos-legado-saldo-ausente.xlsx"
+    _write_movimentos_workbook(
+        xlsx_path,
+        rows=[["02/01/2025", 10046, "RECEBTO.DUPLICATAS", 100, 10722, "entrada"]],
+    )
+
+    result = import_movimentos_operacionais(
+        session,
+        xlsx_path,
+        empresa_id=empresa.id,
+        usuario_id=usuario.id,
+        original_filename="movimentos-legado-saldo-ausente.xlsx",
+    )
+
+    movimento = session.query(MovimentoOperacionalImportado).one()
+    assert result.status == "completed_with_warnings"
+    assert movimento.saldo_observado_original is None
+    assert movimento.saldo_observado_decimal is None
+    assert movimento.saldo_calculado_decimal == Decimal("100.00")
+    assert movimento.warnings_saldo == [
+        "Saldo ausente; conferencia por saldo limitada para esta linha.",
+        "Saldo inicial ausente; saldo calculado partiu de zero.",
+    ]
+    assert movimento.status == "pre_classificado"
+
+
 def test_import_movimentos_operacionais_persiste_lote_parcial_e_movimentos(session, tmp_path):
     """Deve persistir validos/recuperaveis e ignorar invalidos em lote parcial."""
 
@@ -470,8 +605,23 @@ def test_import_movimentos_operacionais_persiste_lote_parcial_e_movimentos(sessi
             "warnings": ["Codigo dominio do arquivo diverge da empresa selecionada."],
         },
         {
+            "linha": 1,
+            "warnings": [
+                "Saldo ausente; conferencia por saldo limitada para esta linha.",
+                "Saldo inicial ausente; saldo calculado partiu de zero.",
+            ],
+        },
+        {
+            "linha": 2,
+            "warnings": ["Saldo ausente; conferencia por saldo limitada para esta linha."],
+        },
+        {
             "linha": 3,
             "warnings": ["Contrapartida 103382 nao vinculada a empresa."],
+        },
+        {
+            "linha": 3,
+            "warnings": ["Saldo ausente; conferencia por saldo limitada para esta linha."],
         },
         {
             "linha": 4,
@@ -562,7 +712,7 @@ def test_import_movimentos_operacionais_bloqueia_reimportacao_por_file_hash(
         usuario_id=usuario.id,
         original_filename="movimentos-duplicado.xlsx",
     )
-    assert first_result.status == "completed"
+    assert first_result.status == "completed_with_warnings"
 
     with pytest.raises(
         MovimentoOperacionalImportError,
