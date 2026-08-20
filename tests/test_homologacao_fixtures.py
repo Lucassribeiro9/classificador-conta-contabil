@@ -154,11 +154,43 @@ def test_homologacao_fixtures_complete_importer_flow(session, tmp_path):
     ]
     assert movimentos_result.warnings == [
         {
+            "linha": 1,
+            "warnings": [
+                "Saldo ausente; conferencia por saldo limitada para esta linha.",
+                "Saldo inicial ausente; saldo calculado partiu de zero.",
+            ],
+        },
+        {
+            "linha": 2,
+            "warnings": [
+                "Saldo ausente; conferencia por saldo limitada para esta linha."
+            ],
+        },
+        {
+            "linha": 3,
+            "warnings": [
+                "Saldo ausente; conferencia por saldo limitada para esta linha."
+            ],
+        },
+        {
             "linha": 4,
             "warnings": [
                 "Tipo de movimento transferencia exige contrapartida."
             ],
-        }
+        },
+        {
+            "linha": 4,
+            "warnings": [
+                "Saldo ausente; conferencia por saldo limitada para esta linha."
+            ],
+        },
+        {
+            "linha": 5,
+            "warnings": [
+                "Saldo ausente; conferencia por saldo limitada para esta linha.",
+                "Saldo inicial ausente; saldo calculado partiu de zero.",
+            ],
+        },
     ]
 
     dataset = build_dataset_treino_contrapartida(session, empresa_id=empresa.id)
