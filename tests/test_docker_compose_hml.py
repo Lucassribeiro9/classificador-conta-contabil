@@ -58,6 +58,9 @@ def test_hml_compose_uses_only_environment_scoped_runtime_variables():
             "${JWT_SECRET_KEY_HML:?Defina JWT_SECRET_KEY_HML no ambiente de homologacao}"
         ),
         "JWT_ALGORITHM": "${JWT_ALGORITHM_HML:-HS256}",
+        "SERVICE_CREDENTIAL_SECRET": (
+            "${SERVICE_CREDENTIAL_SECRET_HML:?Defina SERVICE_CREDENTIAL_SECRET_HML no ambiente de homologacao}"
+        ),
         "CORS_ALLOWED_ORIGINS": (
             "${CORS_ALLOWED_ORIGINS_HML:-https://classificador-hml.interno}"
         ),
@@ -88,6 +91,7 @@ def test_hml_environment_example_and_validation_commands_are_sanitized():
         "DATABASE_URL_HML=postgresql+psycopg://classificador_hml:CHANGE_ME",
         "ADMIN_TOKEN_HML=CHANGE_ME",
         "JWT_SECRET_KEY_HML=CHANGE_ME",
+        "SERVICE_CREDENTIAL_SECRET_HML=CHANGE_ME",
         "CORS_ALLOWED_ORIGINS_HML=https://classificador-hml.interno",
     }
     assert all(variable in env_example for variable in expected_variables)

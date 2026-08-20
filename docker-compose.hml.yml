@@ -31,6 +31,7 @@ services:
       ADMIN_TOKEN: ${ADMIN_TOKEN_HML:?Defina ADMIN_TOKEN_HML no ambiente de homologacao}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY_HML:?Defina JWT_SECRET_KEY_HML no ambiente de homologacao}
       JWT_ALGORITHM: ${JWT_ALGORITHM_HML:-HS256}
+      SERVICE_CREDENTIAL_SECRET: ${SERVICE_CREDENTIAL_SECRET_HML:?Defina SERVICE_CREDENTIAL_SECRET_HML no ambiente de homologacao}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS_HML:-https://classificador-hml.interno}
     command: >-
       sh -c "alembic upgrade head &&
