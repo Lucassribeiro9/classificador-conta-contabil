@@ -2,12 +2,35 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_serializer,
+    field_validator,
+)
 
 # Os parametros passados nos modelos devem ser iguais aos do banco de dados
 
 ALLOWED_USER_ROLES = {"admin", "contador", "operador"}
 ALLOWED_COMPANY_PERMISSIONS = {"leitura", "operacao", "admin_empresa"}
+
+
+def safe_balance_original(value):
+    """
+    Normaliza o valor do saldo observado original, garantindo que seja um número decimal válido.
+    Retorna None se o valor for inválido ou vazio.
+    """
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        Decimal(text.replace(",", "."))
+    except Exception:
+        return None
+    return text
 
 
 def normalize_optional_int(value):
@@ -275,6 +298,7 @@ class MovimentoOperacionalLoteResponse(BaseModel):
     total_invalidas: int
     periodo_inicio: date
     periodo_fim: date
+    layout_version: str
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
@@ -325,6 +349,10 @@ class MovimentoOperacionalResponse(BaseModel):
     valor_absoluto: Decimal
     direcao: str
     tipo_movimento: Optional[str] = None
+    saldo_observado_original: Optional[str] = None
+    saldo_observado_decimal: Optional[Decimal] = None
+    saldo_calculado_decimal: Optional[Decimal] = None
+    warnings_saldo: list[str] = Field(default_factory=list)
     contrapartida_informada: Optional[int] = None
     contrapartida_sugerida: Optional[int] = None
     contrapartida_final: Optional[int] = None
@@ -334,6 +362,11 @@ class MovimentoOperacionalResponse(BaseModel):
     mensagens_validacao: list
     conta_debito: Optional[int] = None
     conta_credito: Optional[int] = None
+
+    @field_serializer("saldo_observado_original")
+    def serialize_saldo_observado_original(self, value: Optional[str]):
+        return safe_balance_original(value)
+
     model_config = ConfigDict(from_attributes=True)
 
 

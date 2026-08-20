@@ -329,6 +329,13 @@ def test_fluxo_operacional_importa_classifica_revisa_audita_e_isola_empresa(
     assert approve_response.status_code == 200
     assert approve_response.json()["status"] == "aprovado"
     assert approve_response.json()["contrapartida_final"] == 20001
+    assert approve_response.json()["saldo_observado_original"] is None
+    assert approve_response.json()["saldo_observado_decimal"] is None
+    assert approve_response.json()["saldo_calculado_decimal"] == "-250.75"
+    assert approve_response.json()["warnings_saldo"] == [
+        "Saldo ausente; conferencia por saldo limitada para esta linha.",
+        "Saldo inicial ausente; saldo calculado partiu de zero.",
+    ]
     assert correct_response.status_code == 200
     assert correct_response.json()["status"] == "corrigido"
     assert correct_response.json()["contrapartida_final"] == 30001

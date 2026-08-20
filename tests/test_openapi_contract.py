@@ -76,3 +76,23 @@ def test_openapi_declares_public_error_envelope_schema():
     assert error_schema["properties"]["message"]["type"] == "string"
     assert error_schema["properties"]["details"]["type"] == "object"
     assert error_schema["properties"]["request_id"]["type"] == "string"
+
+
+def test_openapi_declares_operational_lote_layout_version():
+    schema = app.openapi()
+    lote_schema = schema["components"]["schemas"]["MovimentoOperacionalLoteResponse"]
+
+    assert "layout_version" in lote_schema["properties"]
+    assert lote_schema["properties"]["layout_version"]["type"] == "string"
+
+
+def test_openapi_declares_operational_movement_balance_fields():
+    schema = app.openapi()
+    movimento_schema = schema["components"]["schemas"]["MovimentoOperacionalResponse"]
+    properties = movimento_schema["properties"]
+
+    assert "saldo_observado_original" in properties
+    assert "saldo_observado_decimal" in properties
+    assert "saldo_calculado_decimal" in properties
+    assert "warnings_saldo" in properties
+    assert properties["warnings_saldo"]["items"]["type"] == "string"
