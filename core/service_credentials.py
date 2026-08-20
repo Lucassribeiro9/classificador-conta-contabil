@@ -139,12 +139,16 @@ def rotacionar_credencial_servico(
     )
 
 
-def autenticar_credencial_servico(
+def identificar_credencial_servico(
     session: Session,
     secret: str,
 ) -> IdentidadeServico | None:
-    """Valida um segredo de servico e retorna a identidade ativa correspondente.
-    Retorna None se a credencial nao for valida ou estiver revogada."""
+    """Identifica a credencial de servico sem exigir identidade ativa.
+
+    A funcao valida fingerprint e hash HMAC. Ela permite que dependencias de
+    autorizacao diferenciem segredo invalido de identidade existente porem
+    inativa ou revogada, sem expor o segredo puro.
+    """
     fingerprint = _credential_fingerprint(secret)
     identidade = (
         session.query(IdentidadeServico)
@@ -153,10 +157,24 @@ def autenticar_credencial_servico(
     )
     if identidade is None:
         return None
-    if identidade.status != "ativa":
-        return None
+
     expected_hash = _credential_hash(secret)
     if not hmac.compare_digest(identidade.credential_hash, expected_hash):
+        return None
+
+    return identidade
+
+
+def autenticar_credencial_servico(
+    session: Session,
+    secret: str,
+) -> IdentidadeServico | None:
+    """Valida um segredo de servico e retorna a identidade ativa correspondente.
+    Retorna None se a credencial nao for valida ou estiver revogada."""
+    identidade = identificar_credencial_servico(session, secret)
+    if identidade is None:
+        return None
+    if identidade.status != "ativa":
         return None
 
     identidade.last_used_at = datetime.now()

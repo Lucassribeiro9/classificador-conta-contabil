@@ -1,5 +1,6 @@
 import jwt
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from fastapi import Depends, Header, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -11,7 +12,8 @@ from core.audit import (
     set_audit_user_id,
 )
 from core.config import settings
-from core.models import Empresa, Usuario
+from core.models import Empresa, IdentidadeServico, Usuario
+from core.service_credentials import identificar_credencial_servico
 from core.database import SessionLocal
 
 bearer_scheme = HTTPBearer()
@@ -35,6 +37,59 @@ def get_db():
 
 
 DB_DEPENDENCY = Depends(get_db)
+
+
+@dataclass(frozen=True)
+class ServiceCompanyContext:
+    """Contexto seguro de uma identidade de servico autorizada para empresa."""
+
+    identidade: IdentidadeServico
+    empresa: Empresa
+    credential_fingerprint: str
+
+
+def require_service_company_scope(required_scope: str) -> Callable:
+    """Cria dependencia para validar credencial de servico, empresa e escopo.
+
+    A credencial deve ser enviada por `X-Service-Credential`. JWT humano,
+    `X-API-Key` e `X-Admin-Token` nao concedem acesso por esta dependencia.
+    """
+
+    def dependency(
+        company_id: int,
+        x_service_credential: str | None = Header(
+            default=None, alias="X-Service-Credential"
+        ),
+        db: Session = DB_DEPENDENCY,
+    ) -> ServiceCompanyContext:
+        if not x_service_credential:
+            raise HTTPException(status_code=401, detail="Credencial de serviço ausente")
+
+        identidade = identificar_credencial_servico(db, x_service_credential)
+        if identidade is None:
+            raise HTTPException(status_code=401, detail="Credencial de serviço inválida")
+        if identidade.status != "ativa":
+            raise HTTPException(status_code=403, detail="Identidade de serviço inativa")
+
+        empresa = db.get(Empresa, company_id)
+        if empresa is None:
+            raise HTTPException(status_code=404, detail="Empresa não encontrada")
+
+        escopos = {escopo.escopo for escopo in identidade.escopos}
+        if required_scope not in escopos:
+            raise HTTPException(status_code=403, detail="Escopo de serviço insuficiente")
+
+        empresas_autorizadas = {vinculo.empresa_id for vinculo in identidade.empresas}
+        if company_id not in empresas_autorizadas:
+            raise HTTPException(status_code=403, detail="Acesso negado para empresa")
+
+        return ServiceCompanyContext(
+            identidade=identidade,
+            empresa=empresa,
+            credential_fingerprint=identidade.credential_fingerprint,
+        )
+
+    return dependency
 
 
 def get_current_user(
