@@ -109,6 +109,11 @@ class Empresa(Base):
         "AuditEvent",
         back_populates="empresa",
     )
+    identidades_servico: Mapped[list["IdentidadeServicoEmpresa"]] = relationship(
+        "IdentidadeServicoEmpresa",
+        back_populates="empresa",
+        cascade="all, delete-orphan",
+    )
 
 
 class Usuario(Base):
@@ -206,6 +211,119 @@ class UsuarioEmpresaPermissao(Base):
     )
     empresa: Mapped["Empresa"] = relationship(
         "Empresa", back_populates="permissoes_usuarios"
+    )
+
+
+class IdentidadeServico(Base):
+    """Representa uma identidade propria para integracoes automatizadas."""
+
+    __tablename__ = "identidades_servico"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('ativa', 'inativa', 'revogada')",
+            name="ck_identidades_servico_status",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    identifier: Mapped[str] = mapped_column(
+        String(80), unique=True, index=True, nullable=False
+    )
+    nome: Mapped[str] = mapped_column(String(120), nullable=False)
+    credential_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    credential_fingerprint: Mapped[str] = mapped_column(
+        String(80), unique=True, index=True, nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(20), default="ativa", nullable=False)
+    created_by_user_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("usuarios.id"), nullable=True
+    )
+    revoked_by_user_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("usuarios.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, onupdate=datetime.now, nullable=False
+    )
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    empresas: Mapped[list["IdentidadeServicoEmpresa"]] = relationship(
+        "IdentidadeServicoEmpresa",
+        back_populates="identidade_servico",
+        cascade="all, delete-orphan",
+    )
+    escopos: Mapped[list["IdentidadeServicoEscopo"]] = relationship(
+        "IdentidadeServicoEscopo",
+        back_populates="identidade_servico",
+        cascade="all, delete-orphan",
+    )
+
+
+class IdentidadeServicoEmpresa(Base):
+    """Vincula uma identidade de servico a uma empresa autorizada."""
+
+    __tablename__ = "identidade_servico_empresas"
+    __table_args__ = (
+        Index(
+            "uq_identidade_servico_empresas_identidade_empresa",
+            "identidade_servico_id",
+            "empresa_id",
+            unique=True,
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    identidade_servico_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("identidades_servico.id", ondelete="CASCADE"), nullable=False
+    )
+    empresa_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("empresas.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, nullable=False
+    )
+
+    identidade_servico: Mapped["IdentidadeServico"] = relationship(
+        "IdentidadeServico", back_populates="empresas"
+    )
+    empresa: Mapped["Empresa"] = relationship(
+        "Empresa", back_populates="identidades_servico"
+    )
+
+
+class IdentidadeServicoEscopo(Base):
+    """Escopo concedido a uma identidade de servico."""
+
+    __tablename__ = "identidade_servico_escopos"
+    __table_args__ = (
+        CheckConstraint(
+            "escopo IN ('empresas:read', 'ml:classificar', "
+            "'movimentos:download', 'movimentos:feedback')",
+            name="ck_identidade_servico_escopos_escopo",
+        ),
+        Index(
+            "uq_identidade_servico_escopos_identidade_escopo",
+            "identidade_servico_id",
+            "escopo",
+            unique=True,
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    identidade_servico_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("identidades_servico.id", ondelete="CASCADE"), nullable=False
+    )
+    escopo: Mapped[str] = mapped_column(String(40), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, nullable=False
+    )
+
+    identidade_servico: Mapped["IdentidadeServico"] = relationship(
+        "IdentidadeServico", back_populates="escopos"
     )
 
 
