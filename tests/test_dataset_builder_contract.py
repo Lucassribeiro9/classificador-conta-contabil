@@ -831,6 +831,47 @@ def test_dataset_builder_includes_only_approved_and_corrected_operational_moveme
     assert "DOC-NAO-DEVE-ENTRAR" not in str(dataset.linhas)
 
 
+def test_dataset_builder_keeps_operational_balance_out_of_training_features(session):
+    empresa = _empresa()
+    lote = _lote_movimentos(empresa)
+    session.add_all(
+        [
+            _conta(10046, is_financial_origin=True),
+            _conta(50057, is_financial_origin=False),
+            _movimento(
+                lote=lote,
+                empresa=empresa,
+                historico_normalizado="pagamento fornecedor",
+                contrapartida_final=50057,
+                status="aprovado",
+                conta_debito=50057,
+                conta_credito=10046,
+                saldo_observado_original="12345.67",
+                saldo_observado_decimal=Decimal("12345.67"),
+                saldo_calculado_decimal=Decimal("12000.00"),
+                warnings_saldo=[
+                    "Saldo observado diverge do saldo calculado para a conta financeira."
+                ],
+            ),
+        ]
+    )
+    session.commit()
+
+    dataset = build_dataset_treino_contrapartida(session, empresa_id=empresa.id)
+
+    assert dataset.linhas == [
+        {
+            "features": "pagamento fornecedor origem_10046 direcao_credito",
+            "target_conta_contrapartida": 50057,
+        }
+    ]
+    features = dataset.linhas[0]["features"]
+    assert "12345.67" not in features
+    assert "12000.00" not in features
+    assert "Saldo observado diverge" not in features
+    assert "saldo" not in features.lower()
+
+
 @pytest.mark.parametrize(
     "overrides",
     [
