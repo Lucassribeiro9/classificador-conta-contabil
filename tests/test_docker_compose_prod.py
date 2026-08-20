@@ -60,6 +60,7 @@ def test_prod_example_and_runbook_require_release_gate_without_real_secrets():
         "DATABASE_URL_PROD=postgresql+psycopg://classificador_prod:CHANGE_ME",
         "ADMIN_TOKEN_PROD=CHANGE_ME",
         "JWT_SECRET_KEY_PROD=CHANGE_ME",
+        "SERVICE_CREDENTIAL_SECRET_PROD=CHANGE_ME",
         "CORS_ALLOWED_ORIGINS=https://classificador.interno",
     }
     assert all(variable in env_example for variable in expected_variables)
