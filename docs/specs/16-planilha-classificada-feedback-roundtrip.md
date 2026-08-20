@@ -15,14 +15,16 @@ revisoes recentes.
 ## Contexto e Premissas
 
 - Esta spec pertence ao Ciclo 2 da Release 1, rastreado pela issue #362.
-- A issue #366 cria apenas esta spec; implementacao fica para issues futuras.
+- A issue #366 criou esta spec e a issue #417 consolidou as decisoes de
+  versionamento, rotas e rastreabilidade apos as primeiras implementacoes.
 - O contrato dos movimentos operacionais e dos dois layouts oficiais esta na
   Spec 08.
 - O download deve usar o mesmo layout/versionamento do lote importado.
 - O arquivo deve ser reconstruido a partir dos templates oficiais e dos dados
   persistidos, sem depender do binario original enviado pelo usuario.
-- A decisao de autenticacao de integracoes e n8n fica na issue #351. Esta spec
-  apenas exige identidade de servico autorizada, sem expor segredo ao frontend.
+- A decisao arquitetural de autenticacao de integracoes e n8n foi aprovada na
+  issue #351. Esta spec apenas exige identidade de servico autorizada, com
+  escopos explicitos, sem expor segredo ao frontend nem duplicar a Spec 02.
 - O endpoint individual de revisao permanece valido e deve compartilhar a mesma
   regra de dominio usada pelo round-trip.
 
@@ -32,7 +34,7 @@ revisoes recentes.
 - Armazenar o arquivo original enviado pelo usuario.
 - Alterar sugestao, confianca ou status sugerido por reimportacao.
 - Adaptar o workflow n8n nesta issue.
-- Resolver a estrategia final de autenticacao da #351.
+- Implementar credenciais de servico, escopos ou rotacao definidos pela #351.
 - PDF, OFX e layout Dominio.
 - Autoaprovar classificacoes por confianca.
 - Alterar o frontend nesta spec.
@@ -102,6 +104,10 @@ agrupar a exportacao em auditoria, respostas e diagnostico. Na primeira versao,
 concorrencia real por linha depende de `row_version`. Na importacao, o sistema
 deve validar presenca e consistencia de `export_revision` dentro do arquivo e
 do lote informado, sem bloquear por exportacao desconhecida no banco.
+
+Essas decisoes sao canonicas para o round-trip da Release 1: `row_version` e a
+unica estrategia de concorrencia por linha, `export_revision` identifica cada
+download e as rotas acima sao os contratos publicos definitivos desta spec.
 
 ### Snapshot Minimo Exportavel
 
@@ -381,52 +387,63 @@ sensiveis, segredos ou dados de outra empresa.
 - `export_revision` tem origem, ciclo e uso definidos.
 - Frontend, arquivo e integracao compartilham a mesma regra de dominio.
 - Regras de acesso por empresa e auditoria estao definidas.
-- A dependencia da #351 esta explicita sem decidir credenciais nesta spec.
+- A dependencia da #351 esta explicita sem duplicar credenciais nesta spec.
 - Tarefas futuras cabem em PRs pequenos.
+
+## Estado de Implementacao e Rastreabilidade
+
+As tarefas abaixo foram sugeridas na criacao da spec. Na Release 1, as primeiras
+fatias foram materializadas nas issues #418 a #424, mantendo esta spec como a
+fonte do contrato e evitando a geracao de issues duplicadas. Novas issues devem
+ser abertas apenas para lacunas reais ou evolucoes ainda fora desse recorte.
 
 ## Tarefas e Issues Sugeridas
 
-1. `feat(exportacao): gerar planilha classificada por layout do lote`
+1. `feat(exportacao): criar snapshot versionado do lote operacional` - #418
+
+2. `feat(exportacao): gerar planilha classificada por layout do lote` - #419
    - Reconstruir arquivo a partir dos templates e dados persistidos.
    - Preservar ordem, identificadores, `layout_version`, `row_version` e
      `export_revision`.
    - Cobrir layout A, layout B e legado.
 
-2. `feat(exportacao): expor endpoint autenticado de download`
+3. `feat(api): expor download autenticado da planilha classificada` - #420
    - Implementar GET `/api/v1/companies/{company_id}/movimentos-operacionais/lotes/{lote_id}/planilha-classificada`.
    - Validar empresa, lote, usuario/integracao e permissao.
    - Retornar arquivo do estado atual com auditoria segura de `export_revision`.
 
-3. `feat(feedback): criar regra compartilhada de revisao operacional`
+4. `refactor(feedback): centralizar regra de revisao operacional` - #421
    - Consolidar a regra conceitual `review_movimento_operacional`.
    - Reutilizar a mesma regra para endpoint individual e round-trip.
    - Validar decisao, contrapartida final, status, `row_version` e conta por empresa.
 
-4. `feat(feedback): importar revisoes em lote por planilha`
+5. `feat(feedback): importar revisoes em lote por planilha` - #422
    - Implementar POST `/api/v1/companies/{company_id}/movimentos-operacionais/lotes/{lote_id}/planilha-classificada/feedback`.
    - Ler arquivo retornado pelo sistema.
    - Aplicar processamento parcial com HTTP 200 e resultado por linha.
    - Retornar HTTP 400 para erro estrutural de arquivo.
    - Preservar campos somente leitura.
 
-5. `feat(feedback): implementar concorrencia otimista no round-trip`
+6. `feat(feedback): impedir sobrescrita por planilha desatualizada` - #423
    - Validar `row_version` e consistencia de `export_revision`.
    - Retornar conflitos por linha sem bloquear linhas validas.
    - Rejeitar planilha antiga sem sobrescrever revisao recente.
 
-6. `feat(feedback): implementar idempotencia de reenvio`
+7. `feat(feedback): tornar reenvio do round-trip idempotente` - #424
    - Detectar decisao ja aplicada contra o mesmo `row_version`.
    - Retornar `ignorada` para reenvio idempotente.
    - Evitar duplicidade de feedback e auditoria decisoria.
 
-7. `test(exportacao): cobrir consumo sem frontend`
+8. `test(exportacao): cobrir consumo sem frontend`
    - Validar fluxo por API para integracao autorizada.
-   - Manter #351 como dependencia para credencial final.
+   - Manter a implementacao final da identidade de servico em issue propria de
+     autenticacao/integracao.
 
-8. `docs(exportacao): documentar roteiro manual do round-trip`
+9. `docs(exportacao): documentar roteiro manual do round-trip`
    - Descrever download, edicao permitida, reenvio, conflitos e evidencias de
      homologacao.
 
-## Open Questions
+## Pendencias Futuras
 
-- A estrategia final de credencial de integracao depende da issue #351.
+- Implementar e validar as credenciais de servico, escopos, rotacao e revogacao
+  definidos pela #351 nas issues proprias de autenticacao e integracao.
