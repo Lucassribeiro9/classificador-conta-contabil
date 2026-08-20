@@ -7,11 +7,15 @@ from openpyxl import Workbook, load_workbook
 from pwdlib import PasswordHash
 
 from core.config import settings
+from core.service_credentials import emitir_credencial_servico
 from core.models import (
     AuditEvent,
     ContaContabil,
     Empresa,
     EmpresaContaContabil,
+    IdentidadeServico,
+    IdentidadeServicoEmpresa,
+    IdentidadeServicoEscopo,
     LoteImportacaoMovimentoOperacional,
     MovimentoOperacionalImportado,
     Usuario,
@@ -33,6 +37,16 @@ def jwt_settings():
     finally:
         settings.JWT_SECRET_KEY = previous_secret
         settings.JWT_ALGORITHM = previous_algorithm
+
+
+@pytest.fixture(autouse=True)
+def service_credential_settings():
+    previous_secret = settings.SERVICE_CREDENTIAL_SECRET
+    settings.SERVICE_CREDENTIAL_SECRET = "segredo-hmac-de-teste"
+    try:
+        yield
+    finally:
+        settings.SERVICE_CREDENTIAL_SECRET = previous_secret
 
 
 def _usuario(**overrides) -> Usuario:
@@ -96,6 +110,31 @@ def _access_token(usuario: Usuario) -> str:
 
 def _auth_headers(usuario: Usuario) -> dict[str, str]:
     return {"Authorization": f"Bearer {_access_token(usuario)}"}
+
+
+def _service_headers_for_empresa(
+    empresa_id: int, *, escopo: str, status: str = "ativa"
+) -> dict[str, str]:
+    from tests.conftest import TestingSessionLocal
+
+    with TestingSessionLocal() as session:
+        empresa = session.get(Empresa, empresa_id)
+        identidade = IdentidadeServico(
+            identifier=f"n8n-{empresa.cod_dominio}-{escopo.split(':')[-1]}",
+            nome="n8n Integracao",
+            credential_hash="pendente",
+            credential_fingerprint="pendente",
+            status=status,
+            empresas=[IdentidadeServicoEmpresa(empresa=empresa)],
+            escopos=[IdentidadeServicoEscopo(escopo=escopo)],
+        )
+        session.add(identidade)
+        session.commit()
+        credencial = emitir_credencial_servico(session, identidade_id=identidade.id)
+        if status != "ativa":
+            identidade.status = status
+        session.commit()
+    return {"X-Service-Credential": credencial.secret}
 
 
 def _movimentos_xlsx(cnpj_cpf: str = "11.222.333/0001-44") -> bytes:
@@ -459,6 +498,41 @@ def test_user_with_leitura_permission_downloads_classified_operational_sheet(cli
     assert event.metadata_json["export_revision"]
     assert "Pagamento fornecedor sensivel" not in str(event.metadata_json)
     assert "DOC-SENSIVEL-001" not in str(event.metadata_json)
+
+
+def test_service_with_download_scope_downloads_classified_operational_sheet(client):
+    from tests.conftest import TestingSessionLocal
+
+    _usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(
+        permissao="leitura"
+    )
+    headers = _service_headers_for_empresa(empresa_id, escopo="movimentos:download")
+
+    response = client.get(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/{lote_id}/planilha-classificada",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    workbook = load_workbook(BytesIO(response.content))
+    assert workbook["Movimentos"].max_row == 3
+
+    with TestingSessionLocal() as session:
+        event = session.query(AuditEvent).filter_by(
+            event_type="operational_movements.classified_sheet_downloaded"
+        ).one()
+
+    assert event.user_id is None
+    assert event.empresa_id == empresa_id
+    assert event.resource_id == str(lote_id)
+    assert event.metadata_json["actor_type"] == "service"
+    assert event.metadata_json["scope"] == "movimentos:download"
+    assert event.metadata_json["identidade_servico_id"]
+    assert event.metadata_json["identifier"].startswith("n8n-")
+    assert event.metadata_json["credential_fingerprint"].startswith("fp_")
+    assert "X-Service-Credential" not in str(event.metadata_json)
+    assert headers["X-Service-Credential"] not in str(event.metadata_json)
 
 
 def test_classified_operational_sheet_requires_jwt_not_api_or_admin_token(client):
@@ -888,6 +962,260 @@ def test_import_classified_sheet_feedback_endpoint_applies_partial_file(client):
     assert movimento.status == "aprovado"
     assert movimento.contrapartida_final == 20001
     assert "operational_movements.feedback_imported" in event_types
+
+
+def test_roundtrip_rejects_ambiguous_human_and_service_credentials(client):
+    usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(
+        permissao="leitura"
+    )
+    service_headers = _service_headers_for_empresa(
+        empresa_id, escopo="movimentos:download"
+    )
+
+    response = client.get(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/{lote_id}/planilha-classificada",
+        headers={**_auth_headers(usuario), **service_headers},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["message"] == "Credenciais ambíguas"
+
+
+def test_service_scope_is_independent_between_download_and_feedback(client):
+    _usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(
+        permissao="operacao"
+    )
+    download_headers = _service_headers_for_empresa(
+        empresa_id, escopo="movimentos:download"
+    )
+    feedback_headers = _service_headers_for_empresa(
+        empresa_id, escopo="movimentos:feedback"
+    )
+
+    feedback_response = client.post(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/{lote_id}/planilha-classificada/feedback",
+        files={
+            "file": (
+                "feedback.xlsx",
+                _feedback_roundtrip_xlsx([]),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+        headers=download_headers,
+    )
+    download_response = client.get(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/{lote_id}/planilha-classificada",
+        headers=feedback_headers,
+    )
+
+    assert feedback_response.status_code == 403
+    assert download_response.status_code == 403
+
+
+def test_service_cross_company_is_blocked_and_audited(client):
+    from tests.conftest import TestingSessionLocal
+
+    _usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(
+        permissao="leitura"
+    )
+    _outro_usuario, outra_empresa_id, _outro_lote_id = _seed_operational_lote_with_movements(
+        empresa_overrides={
+            "nome_empresa": "Outra Empresa Integracao LTDA",
+            "cnpj_cpf": "66555444000133",
+            "api_key": "api-key-outra-integracao",
+            "cod_dominio": 6655,
+        },
+        usuario_overrides={
+            "login": "outra.integracao",
+            "email": "outra.integracao@example.com",
+        },
+    )
+    headers = _service_headers_for_empresa(
+        outra_empresa_id, escopo="movimentos:download"
+    )
+
+    response = client.get(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/{lote_id}/planilha-classificada",
+        headers=headers,
+    )
+
+    assert response.status_code == 403
+    with TestingSessionLocal() as session:
+        event = session.query(AuditEvent).filter_by(
+            event_type="operational_movements.service_access_denied"
+        ).one()
+
+    assert event.user_id is None
+    assert event.empresa_id == empresa_id
+    assert event.metadata_json["actor_type"] == "service"
+    assert event.metadata_json["reason"] == "access_denied"
+    assert event.metadata_json["scope"] == "movimentos:download"
+    assert headers["X-Service-Credential"] not in str(event.metadata_json)
+
+
+def test_service_lote_inexistente_is_blocked_and_audited(client):
+    from tests.conftest import TestingSessionLocal
+
+    _usuario, empresa_id, _lote_id = _seed_operational_lote_with_movements(
+        permissao="leitura"
+    )
+    headers = _service_headers_for_empresa(empresa_id, escopo="movimentos:download")
+
+    response = client.get(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/9999/planilha-classificada",
+        headers=headers,
+    )
+
+    assert response.status_code == 404
+    with TestingSessionLocal() as session:
+        event = session.query(AuditEvent).filter_by(
+            event_type="operational_movements.service_access_denied"
+        ).one()
+
+    assert event.user_id is None
+    assert event.empresa_id == empresa_id
+    assert event.resource_id == "9999"
+    assert event.metadata_json["reason"] == "lote_not_found"
+    assert event.metadata_json["scope"] == "movimentos:download"
+    assert headers["X-Service-Credential"] not in str(event.metadata_json)
+
+
+def test_revoked_service_identity_is_blocked_and_audited(client):
+    from tests.conftest import TestingSessionLocal
+
+    _usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(
+        permissao="leitura"
+    )
+    headers = _service_headers_for_empresa(
+        empresa_id, escopo="movimentos:download", status="revogada"
+    )
+
+    response = client.get(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/{lote_id}/planilha-classificada",
+        headers=headers,
+    )
+
+    assert response.status_code == 403
+    with TestingSessionLocal() as session:
+        event = session.query(AuditEvent).filter_by(
+            event_type="operational_movements.service_access_denied"
+        ).one()
+
+    assert event.metadata_json["reason"] == "inactive_or_revoked"
+    assert event.metadata_json["credential_fingerprint"].startswith("fp_")
+    assert headers["X-Service-Credential"] not in str(event.metadata_json)
+
+
+def test_service_with_feedback_scope_imports_classified_sheet_feedback(client):
+    from tests.conftest import TestingSessionLocal
+
+    _usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(
+        permissao="operacao"
+    )
+    headers = _service_headers_for_empresa(empresa_id, escopo="movimentos:feedback")
+
+    with TestingSessionLocal() as session:
+        session.add(_conta(20001))
+        session.commit()
+        movimentos = (
+            session.query(MovimentoOperacionalImportado)
+            .filter_by(lote_id=lote_id)
+            .order_by(MovimentoOperacionalImportado.id.asc())
+            .all()
+        )
+        movimentos[0].status = "sugerido"
+        movimentos[0].contrapartida_sugerida = 20001
+        movimentos[0].confidence_sugerida = 0.91
+        session.commit()
+        movimento_id = movimentos[0].id
+        rows = [
+            {
+                "lote_id": lote_id,
+                "movimento_id": movimentos[0].id,
+                "linha_original": movimentos[0].linha_original,
+                "layout_version": "operacional_valor_legado_v1",
+                "export_revision": "revision-service-api",
+                "row_version": movimentos[0].row_version,
+                "contrapartida_sugerida": 20001,
+                "confidence_sugerida": 0.91,
+                "status_atual": "sugerido",
+                "decisao_revisao": "aprovar",
+                "contrapartida_final": 20001,
+            }
+        ]
+
+    response = client.post(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/{lote_id}/planilha-classificada/feedback",
+        files={
+            "file": (
+                "feedback.xlsx",
+                _feedback_roundtrip_xlsx(rows),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["total_aplicado"] == 1
+
+    with TestingSessionLocal() as session:
+        movimento = session.get(MovimentoOperacionalImportado, movimento_id)
+        imported_event = (
+            session.query(AuditEvent)
+            .filter_by(event_type="operational_movements.feedback_imported")
+            .one()
+        )
+        decision_event = (
+            session.query(AuditEvent)
+            .filter_by(
+                event_type="operational_movements.aprovado",
+                resource_id=str(movimento_id),
+            )
+            .one()
+        )
+
+    assert movimento.status == "aprovado"
+    assert imported_event.user_id is None
+    assert imported_event.metadata_json["actor_type"] == "service"
+    assert imported_event.metadata_json["scope"] == "movimentos:feedback"
+    assert decision_event.user_id is None
+    assert decision_event.metadata_json["actor_type"] == "service"
+    assert headers["X-Service-Credential"] not in str(imported_event.metadata_json)
+
+
+def test_service_feedback_lote_inexistente_is_blocked_and_audited(client):
+    from tests.conftest import TestingSessionLocal
+
+    _usuario, empresa_id, _lote_id = _seed_operational_lote_with_movements(
+        permissao="operacao"
+    )
+    headers = _service_headers_for_empresa(empresa_id, escopo="movimentos:feedback")
+
+    response = client.post(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/9999/planilha-classificada/feedback",
+        files={
+            "file": (
+                "feedback.xlsx",
+                _feedback_roundtrip_xlsx([]),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 404
+    with TestingSessionLocal() as session:
+        event = session.query(AuditEvent).filter_by(
+            event_type="operational_movements.service_access_denied"
+        ).one()
+
+    assert event.user_id is None
+    assert event.empresa_id == empresa_id
+    assert event.resource_id == "9999"
+    assert event.metadata_json["reason"] == "lote_not_found"
+    assert event.metadata_json["scope"] == "movimentos:feedback"
+    assert headers["X-Service-Credential"] not in str(event.metadata_json)
 
 
 def test_import_classified_sheet_feedback_returns_400_for_structural_error(client):

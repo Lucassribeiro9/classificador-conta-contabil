@@ -23,15 +23,22 @@ def review_movimento_operacional(
     db: Session,
     movimento_id: int,
     empresa_id: int,
-    usuario_id: int,
+    usuario_id: int | None,
     action: str,
+    actor_metadata: dict | None = None,
     conta_final: int | None = None,
 ) -> MovimentoOperacionalImportado:
     """Revisa um movimento operacional individual com regra reutilizavel."""
     movimento = _get_revisable_movimento(db, movimento_id, empresa_id)
 
     if action == "reject":
-        _reject_movimento(db, movimento, empresa_id=empresa_id, usuario_id=usuario_id)
+        _reject_movimento(
+            db,
+            movimento,
+            empresa_id=empresa_id,
+            usuario_id=usuario_id,
+            actor_metadata=actor_metadata,
+        )
         return movimento
 
     if action in ACTIONS_WITH_FINAL_ACCOUNT:
@@ -40,6 +47,7 @@ def review_movimento_operacional(
             db,
             empresa_id=empresa_id,
             usuario_id=usuario_id,
+            actor_metadata=actor_metadata,
             movimento_id=movimento.id,
             conta_codigo=conta_codigo,
         )
@@ -48,6 +56,7 @@ def review_movimento_operacional(
             movimento,
             empresa_id=empresa_id,
             usuario_id=usuario_id,
+            actor_metadata=actor_metadata,
             action=action,
             conta_final=conta_codigo,
         )
@@ -75,7 +84,8 @@ def _reject_movimento(
     movimento: MovimentoOperacionalImportado,
     *,
     empresa_id: int,
-    usuario_id: int,
+    usuario_id: int | None,
+    actor_metadata: dict | None = None,
 ) -> None:
     """Rejeita movimento e remove qualquer par final previamente preenchido."""
     _increment_row_version(movimento)
@@ -90,7 +100,7 @@ def _reject_movimento(
         user_id=usuario_id,
         empresa_id=empresa_id,
         resource_id=str(movimento.id),
-        metadata={"action": "reject"},
+        metadata={**(actor_metadata or {"actor_type": "user"}), "action": "reject"},
     )
 
 
@@ -105,7 +115,8 @@ def _ensure_empresa_conta_link(
     db: Session,
     *,
     empresa_id: int,
-    usuario_id: int,
+    usuario_id: int | None,
+    actor_metadata: dict | None,
     movimento_id: int,
     conta_codigo: int,
 ) -> None:
@@ -138,7 +149,11 @@ def _ensure_empresa_conta_link(
         event_type="empresa_conta.created_by_review",
         user_id=usuario_id,
         empresa_id=empresa_id,
-        metadata={"conta_codigo": conta_codigo, "movimento_id": movimento_id},
+        metadata={
+            **(actor_metadata or {"actor_type": "user"}),
+            "conta_codigo": conta_codigo,
+            "movimento_id": movimento_id,
+        },
     )
 
 
@@ -147,8 +162,9 @@ def _apply_final_account_review(
     movimento: MovimentoOperacionalImportado,
     *,
     empresa_id: int,
-    usuario_id: int,
+    usuario_id: int | None,
     action: str,
+    actor_metadata: dict | None = None,
     conta_final: int,
 ) -> None:
     """Aplica aprovacao ou correcao sem alterar entrada, sugestao ou confianca."""
@@ -170,7 +186,10 @@ def _apply_final_account_review(
         user_id=usuario_id,
         empresa_id=empresa_id,
         resource_id=str(movimento.id),
-        metadata={"conta_final": conta_final},
+        metadata={
+            **(actor_metadata or {"actor_type": "user"}),
+            "conta_final": conta_final,
+        },
     )
 
 
