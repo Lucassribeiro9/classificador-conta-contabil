@@ -408,6 +408,7 @@ def test_user_with_leitura_permission_lists_own_operational_lotes(client):
             "total_invalidas": 0,
             "periodo_inicio": "2026-01-01",
             "periodo_fim": "2026-01-31",
+            "layout_version": "operacional_valor_legado_v1",
             "created_at": response.json()["items"][0]["created_at"],
         }
     ]
@@ -572,7 +573,32 @@ def test_user_lists_operational_movements_by_lote_and_status_without_raw_payload
     client,
 ):
     usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(
-        permissao="leitura"
+        permissao="leitura",
+        movimentos=[
+            {
+                "data": date(2026, 1, 3),
+                "conta_financeira": 10046,
+                "historico": "Transferencia sem contrapartida sensivel",
+                "historico_normalizado": "transferencia sem contrapartida",
+                "valor_original": -100,
+                "valor_absoluto": 100,
+                "direcao": "credito",
+                "tipo_movimento": "transferencia",
+                "documento": "DOC-SENSIVEL-002",
+                "observacao": "Outra observacao sensivel",
+                "contrapartida_informada": None,
+                "status": "revisao",
+                "mensagens_validacao": [
+                    "Tipo de movimento transferencia exige contrapartida."
+                ],
+                "saldo_observado_original": "saldo digitado manualmente",
+                "saldo_observado_decimal": None,
+                "saldo_calculado_decimal": 1500,
+                "warnings_saldo": [
+                    "Saldo informado invalido; conferencia por saldo limitada para esta linha."
+                ],
+            }
+        ],
     )
 
     response = client.get(
@@ -594,6 +620,12 @@ def test_user_lists_operational_movements_by_lote_and_status_without_raw_payload
             "valor_absoluto": "100.00",
             "direcao": "credito",
             "tipo_movimento": "transferencia",
+            "saldo_observado_original": None,
+            "saldo_observado_decimal": None,
+            "saldo_calculado_decimal": "1500.00",
+            "warnings_saldo": [
+                "Saldo informado invalido; conferencia por saldo limitada para esta linha."
+            ],
             "contrapartida_informada": None,
             "contrapartida_sugerida": None,
             "contrapartida_final": None,
@@ -612,6 +644,7 @@ def test_user_lists_operational_movements_by_lote_and_status_without_raw_payload
     assert "documento" not in item
     assert "observacao" not in item
     assert "DOC-SENSIVEL-002" not in str(response.json())
+    assert "saldo digitado manualmente" not in str(response.json())
 
 
 def test_user_without_company_access_cannot_list_operational_lotes(client):
