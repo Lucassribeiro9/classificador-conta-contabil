@@ -96,3 +96,31 @@ def test_openapi_declares_operational_movement_balance_fields():
     assert "saldo_calculado_decimal" in properties
     assert "warnings_saldo" in properties
     assert properties["warnings_saldo"]["items"]["type"] == "string"
+
+
+def test_roundtrip_endpoints_document_service_credential_header(client):
+    schema = client.get("/openapi.json").json()
+    paths = schema["paths"]
+    endpoints = [
+        (
+            "/api/v1/companies/{company_id}/movimentos-operacionais/lotes/{lote_id}/planilha-classificada",
+            "get",
+        ),
+        (
+            "/api/v1/companies/{company_id}/movimentos-operacionais/lotes/{lote_id}/planilha-classificada/feedback",
+            "post",
+        ),
+    ]
+
+    for path, method in endpoints:
+        parameters = paths[path][method]["parameters"]
+        service_header = [
+            parameter
+            for parameter in parameters
+            if parameter["in"] == "header"
+            and parameter["name"] == "X-Service-Credential"
+        ]
+        operation = paths[path][method]
+        assert service_header
+        assert service_header[0]["required"] is False
+        assert any("HTTPBearer" in security for security in operation.get("security", []))

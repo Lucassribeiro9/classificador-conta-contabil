@@ -72,7 +72,8 @@ def importar_feedback_planilha_classificada(
     *,
     empresa_id: int,
     lote_id: int,
-    usuario_id: int,
+    usuario_id: int | None,
+    actor_metadata: dict[str, Any] | None = None,
 ) -> ResumoFeedbackOperacional:
     """Importa revisoes em lote de planilha classificada com resultado parcial."""
     rows = _read_feedback_rows(path)
@@ -94,6 +95,7 @@ def importar_feedback_planilha_classificada(
             empresa_id=empresa_id,
             lote_id=lote_id,
             usuario_id=usuario_id,
+            actor_metadata=actor_metadata,
             expected_export_revision=expected_export_revision,
         )
         resultados.append(resultado)
@@ -106,6 +108,7 @@ def importar_feedback_planilha_classificada(
         empresa_id=empresa_id,
         resource_id=str(lote_id),
         metadata={
+            **(actor_metadata or {"actor_type": "user"}),
             "lote_id": lote_id,
             "total_linhas": resumo.total_linhas,
             "total_aplicado": resumo.total_aplicado,
@@ -155,7 +158,8 @@ def _process_feedback_row(
     *,
     empresa_id: int,
     lote_id: int,
-    usuario_id: int,
+    usuario_id: int | None,
+    actor_metadata: dict[str, Any] | None,
     expected_export_revision: str | None,
 ) -> ResultadoLinhaFeedbackOperacional:
     linha_original = _optional_int(row.get("linha_original"))
@@ -237,6 +241,7 @@ def _process_feedback_row(
             movimento_id=movimento.id,
             empresa_id=empresa_id,
             usuario_id=usuario_id,
+            actor_metadata=actor_metadata,
             action=ACTION_MAP[decisao],
             conta_final=_optional_int(row.get("contrapartida_final")),
         )

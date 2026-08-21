@@ -3,10 +3,24 @@ import os
 import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    Header,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+)
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
-from api.dependencies import DB_DEPENDENCY, get_current_user
+from api.dependencies import (
+    DB_DEPENDENCY,
+    get_current_user,
+    require_service_company_scope,
+)
+from core.service_credentials import identificar_credencial_servico
 from api.schemas import (
     ClassificacaoMovimentoOperacionalResponse,
     ImportacaoMovimentoOperacionalResponse,
@@ -21,6 +35,7 @@ from core.models import (
     Empresa,
     LoteImportacaoMovimentoOperacional,
     MovimentoOperacionalImportado,
+    IdentidadeServico,
     Usuario,
 )
 from core.movimentos_operacionais_exporter import (
@@ -52,6 +67,125 @@ from core.movimentos_operacionais_snapshot import (
 
 router = APIRouter(prefix="/companies/{company_id}/movimentos-operacionais")
 XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+optional_bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def _service_audit_metadata(identidade: IdentidadeServico, scope: str) -> dict:
+    return {
+        "actor_type": "service",
+        "identidade_servico_id": identidade.id,
+        "identifier": identidade.identifier,
+        "credential_fingerprint": identidade.credential_fingerprint,
+        "scope": scope,
+    }
+
+
+def _reject_ambiguous_roundtrip_auth(
+    credentials: HTTPAuthorizationCredentials | None,
+    x_service_credential: str | None,
+) -> None:
+    if credentials is not None and x_service_credential:
+        raise HTTPException(status_code=400, detail="Credenciais ambíguas")
+
+
+def _get_current_user_from_optional_bearer(
+    credentials: HTTPAuthorizationCredentials | None, db: Session
+) -> Usuario:
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="Token ausente")
+    return get_current_user(credentials=credentials, db=db)
+
+
+def _ensure_human_download_access(
+    current_user: Usuario, empresa: Empresa
+) -> tuple[int, dict]:
+    denial_detail = _movimentos_read_denial_detail(current_user, empresa.id)
+    if denial_detail is not None:
+        raise HTTPException(status_code=403, detail=denial_detail)
+    return current_user.id, {"actor_type": "user"}
+
+
+def _ensure_human_feedback_access(
+    current_user: Usuario, empresa: Empresa
+) -> tuple[int, dict]:
+    denial_detail = _movimentos_permission_denial_detail(current_user, empresa.id)
+    if denial_detail is not None:
+        raise HTTPException(status_code=403, detail=denial_detail)
+    return current_user.id, {"actor_type": "user"}
+
+
+def _service_denial_reason(exc: HTTPException) -> str:
+    detail = str(exc.detail)
+    if "inativa" in detail:
+        return "inactive_or_revoked"
+    if "Escopo" in detail:
+        return "insufficient_scope"
+    if "empresa" in detail or "Acesso negado" in detail:
+        return "access_denied"
+    return "service_access_denied"
+
+
+def _record_service_access_denied(
+    db: Session,
+    *,
+    company_id: int,
+    scope: str,
+    secret: str,
+    reason: str,
+    resource_id: str | None = None,
+) -> None:
+    identidade = identificar_credencial_servico(db, secret)
+    metadata = {"actor_type": "service", "scope": scope, "reason": reason}
+    if identidade is not None:
+        metadata.update(_service_audit_metadata(identidade, scope))
+        metadata["reason"] = reason
+    record_audit_event(
+        db,
+        event_type="operational_movements.service_access_denied",
+        user_id=None,
+        empresa_id=company_id,
+        resource_id=resource_id,
+        metadata=metadata,
+    )
+    db.commit()
+
+
+def _ensure_roundtrip_lote_exists(db: Session, *, empresa_id: int, lote_id: int) -> None:
+    lote = (
+        db.query(LoteImportacaoMovimentoOperacional)
+        .filter(
+            LoteImportacaoMovimentoOperacional.id == lote_id,
+            LoteImportacaoMovimentoOperacional.empresa_id == empresa_id,
+        )
+        .first()
+    )
+    if lote is None:
+        raise HTTPException(status_code=404, detail="Lote operacional não encontrado")
+
+
+def _require_roundtrip_service_context(
+    db: Session,
+    *,
+    company_id: int,
+    scope: str,
+    x_service_credential: str,
+):
+    try:
+        return require_service_company_scope(scope)(
+            company_id=company_id,
+            x_service_credential=x_service_credential,
+            db=db,
+        )
+    except HTTPException as exc:
+        if exc.status_code in {403, 404}:
+            _record_service_access_denied(
+                db,
+                company_id=company_id,
+                scope=scope,
+                secret=x_service_credential,
+                reason=_service_denial_reason(exc),
+            )
+        raise
 
 
 @router.get("/lotes", response_model=MovimentoOperacionalLoteListResponse)
@@ -146,14 +280,31 @@ def list_company_operational_movements(
 def download_company_operational_classified_sheet(
     company_id: int,
     lote_id: int,
-    current_user: Usuario = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials | None = Depends(optional_bearer_scheme),
+    x_service_credential: str | None = Header(
+        default=None, alias="X-Service-Credential"
+    ),
     db: Session = DB_DEPENDENCY,
 ) -> Response:
     """Baixa a planilha classificada de um lote operacional da empresa."""
+    _reject_ambiguous_roundtrip_auth(credentials, x_service_credential)
     empresa = _ensure_company_for_operational_query(db, company_id)
-    denial_detail = _movimentos_read_denial_detail(current_user, empresa.id)
-    if denial_detail is not None:
-        raise HTTPException(status_code=403, detail=denial_detail)
+    if x_service_credential:
+        service_context = _require_roundtrip_service_context(
+            db,
+            company_id=company_id,
+            scope="movimentos:download",
+            x_service_credential=x_service_credential,
+        )
+        actor_user_id = None
+        actor_metadata = _service_audit_metadata(
+            service_context.identidade, "movimentos:download"
+        )
+    else:
+        current_user = _get_current_user_from_optional_bearer(credentials, db)
+        actor_user_id, actor_metadata = _ensure_human_download_access(
+            current_user, empresa
+        )
 
     try:
         snapshot = build_lote_operacional_snapshot(
@@ -163,6 +314,15 @@ def download_company_operational_classified_sheet(
         )
         content = gerar_planilha_classificada(snapshot)
     except LoteOperacionalSnapshotNotFound as exc:
+        if x_service_credential:
+            _record_service_access_denied(
+                db,
+                company_id=company_id,
+                scope="movimentos:download",
+                secret=x_service_credential,
+                reason="lote_not_found",
+                resource_id=str(lote_id),
+            )
         raise HTTPException(
             status_code=404,
             detail="Lote operacional não encontrado",
@@ -173,10 +333,11 @@ def download_company_operational_classified_sheet(
     record_audit_event(
         db,
         event_type="operational_movements.classified_sheet_downloaded",
-        user_id=current_user.id,
+        user_id=actor_user_id,
         empresa_id=empresa.id,
         resource_id=str(lote_id),
         metadata={
+            **actor_metadata,
             "lote_id": lote_id,
             "export_revision": snapshot.export_revision,
             "layout_version": snapshot.layout_version,
@@ -203,14 +364,45 @@ def import_company_operational_classified_sheet_feedback(
     company_id: int,
     lote_id: int,
     file: UploadFile,
-    current_user: Usuario = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials | None = Depends(optional_bearer_scheme),
+    x_service_credential: str | None = Header(
+        default=None, alias="X-Service-Credential"
+    ),
     db: Session = DB_DEPENDENCY,
 ) -> MovimentoOperacionalFeedbackImportResponse:
     """Importa revisoes em lote da planilha classificada."""
+    _reject_ambiguous_roundtrip_auth(credentials, x_service_credential)
     empresa = _ensure_company_for_operational_query(db, company_id)
-    denial_detail = _movimentos_permission_denial_detail(current_user, empresa.id)
-    if denial_detail is not None:
-        raise HTTPException(status_code=403, detail=denial_detail)
+    if x_service_credential:
+        service_context = _require_roundtrip_service_context(
+            db,
+            company_id=company_id,
+            scope="movimentos:feedback",
+            x_service_credential=x_service_credential,
+        )
+        actor_user_id = None
+        actor_metadata = _service_audit_metadata(
+            service_context.identidade, "movimentos:feedback"
+        )
+    else:
+        current_user = _get_current_user_from_optional_bearer(credentials, db)
+        actor_user_id, actor_metadata = _ensure_human_feedback_access(
+            current_user, empresa
+        )
+
+    try:
+        _ensure_roundtrip_lote_exists(db, empresa_id=empresa.id, lote_id=lote_id)
+    except HTTPException as exc:
+        if x_service_credential and exc.status_code == 404:
+            _record_service_access_denied(
+                db,
+                company_id=company_id,
+                scope="movimentos:feedback",
+                secret=x_service_credential,
+                reason="lote_not_found",
+                resource_id=str(lote_id),
+            )
+        raise
 
     if not file.filename or not file.filename.lower().endswith(".xlsx"):
         raise HTTPException(status_code=400, detail="Arquivo deve ser .xlsx")
@@ -222,7 +414,8 @@ def import_company_operational_classified_sheet_feedback(
             temp_path,
             empresa_id=empresa.id,
             lote_id=lote_id,
-            usuario_id=current_user.id,
+            usuario_id=actor_user_id,
+            actor_metadata=actor_metadata,
         )
         db.commit()
         return MovimentoOperacionalFeedbackImportResponse.model_validate(
