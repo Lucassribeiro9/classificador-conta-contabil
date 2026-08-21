@@ -12,7 +12,7 @@ from fastapi import (
     Response,
     UploadFile,
 )
-from fastapi.security import HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from api.dependencies import (
@@ -67,6 +67,7 @@ from core.movimentos_operacionais_snapshot import (
 
 router = APIRouter(prefix="/companies/{company_id}/movimentos-operacionais")
 XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+optional_bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def _service_audit_metadata(identidade: IdentidadeServico, scope: str) -> dict:
@@ -80,21 +81,18 @@ def _service_audit_metadata(identidade: IdentidadeServico, scope: str) -> dict:
 
 
 def _reject_ambiguous_roundtrip_auth(
-    authorization: str | None, x_service_credential: str | None
+    credentials: HTTPAuthorizationCredentials | None,
+    x_service_credential: str | None,
 ) -> None:
-    if authorization and x_service_credential:
+    if credentials is not None and x_service_credential:
         raise HTTPException(status_code=400, detail="Credenciais ambíguas")
 
 
-def _get_current_user_from_authorization_header(
-    authorization: str | None, db: Session
+def _get_current_user_from_optional_bearer(
+    credentials: HTTPAuthorizationCredentials | None, db: Session
 ) -> Usuario:
-    if not authorization:
+    if credentials is None:
         raise HTTPException(status_code=401, detail="Token ausente")
-    scheme, _, token = authorization.partition(" ")
-    if scheme.lower() != "bearer" or not token:
-        raise HTTPException(status_code=401, detail="Token inválido")
-    credentials = HTTPAuthorizationCredentials(scheme=scheme, credentials=token)
     return get_current_user(credentials=credentials, db=db)
 
 
@@ -282,14 +280,14 @@ def list_company_operational_movements(
 def download_company_operational_classified_sheet(
     company_id: int,
     lote_id: int,
-    authorization: str | None = Header(default=None, alias="Authorization"),
+    credentials: HTTPAuthorizationCredentials | None = Depends(optional_bearer_scheme),
     x_service_credential: str | None = Header(
         default=None, alias="X-Service-Credential"
     ),
     db: Session = DB_DEPENDENCY,
 ) -> Response:
     """Baixa a planilha classificada de um lote operacional da empresa."""
-    _reject_ambiguous_roundtrip_auth(authorization, x_service_credential)
+    _reject_ambiguous_roundtrip_auth(credentials, x_service_credential)
     empresa = _ensure_company_for_operational_query(db, company_id)
     if x_service_credential:
         service_context = _require_roundtrip_service_context(
@@ -303,7 +301,7 @@ def download_company_operational_classified_sheet(
             service_context.identidade, "movimentos:download"
         )
     else:
-        current_user = _get_current_user_from_authorization_header(authorization, db)
+        current_user = _get_current_user_from_optional_bearer(credentials, db)
         actor_user_id, actor_metadata = _ensure_human_download_access(
             current_user, empresa
         )
@@ -366,14 +364,14 @@ def import_company_operational_classified_sheet_feedback(
     company_id: int,
     lote_id: int,
     file: UploadFile,
-    authorization: str | None = Header(default=None, alias="Authorization"),
+    credentials: HTTPAuthorizationCredentials | None = Depends(optional_bearer_scheme),
     x_service_credential: str | None = Header(
         default=None, alias="X-Service-Credential"
     ),
     db: Session = DB_DEPENDENCY,
 ) -> MovimentoOperacionalFeedbackImportResponse:
     """Importa revisoes em lote da planilha classificada."""
-    _reject_ambiguous_roundtrip_auth(authorization, x_service_credential)
+    _reject_ambiguous_roundtrip_auth(credentials, x_service_credential)
     empresa = _ensure_company_for_operational_query(db, company_id)
     if x_service_credential:
         service_context = _require_roundtrip_service_context(
@@ -387,7 +385,7 @@ def import_company_operational_classified_sheet_feedback(
             service_context.identidade, "movimentos:feedback"
         )
     else:
-        current_user = _get_current_user_from_authorization_header(authorization, db)
+        current_user = _get_current_user_from_optional_bearer(credentials, db)
         actor_user_id, actor_metadata = _ensure_human_feedback_access(
             current_user, empresa
         )

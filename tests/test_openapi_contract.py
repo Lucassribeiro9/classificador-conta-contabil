@@ -120,5 +120,7 @@ def test_roundtrip_endpoints_document_service_credential_header(client):
             if parameter["in"] == "header"
             and parameter["name"] == "X-Service-Credential"
         ]
+        operation = paths[path][method]
         assert service_header
         assert service_header[0]["required"] is False
+        assert any("HTTPBearer" in security for security in operation.get("security", []))
