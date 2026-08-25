@@ -303,6 +303,10 @@ def _readonly_changed(
         "confidence_sugerida": movimento.confidence_sugerida,
         "status_atual": movimento.status,
         "mensagem_validacao": "; ".join(movimento.mensagens_validacao or []),
+        "saldo_observado_original": movimento.saldo_observado_original,
+        "saldo_observado_decimal": movimento.saldo_observado_decimal,
+        "saldo_calculado_decimal": movimento.saldo_calculado_decimal,
+        "warnings_saldo": "; ".join(movimento.warnings_saldo or []),
     }
     for column in READ_ONLY_COLUMNS:
         if column not in row:
