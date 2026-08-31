@@ -1,3 +1,4 @@
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -240,6 +241,25 @@ def test_parse_movimentos_operacionais_ler_fixture_preenchida(tmp_path):
     }
     assert result.movimentos[2]["contrapartida"] is None
     assert len(result.movimentos) == 5
+
+
+def test_parse_movimentos_operacionais_aceita_periodos_como_data_nativa_excel(
+    tmp_path,
+):
+    """Deve normalizar periodos preenchidos como datas nativas do Excel."""
+
+    xlsx_path = _modelo_preenchido(tmp_path)
+    workbook = load_workbook(xlsx_path)
+    sheet = workbook["Movimentos"]
+    sheet["B5"] = date(2025, 1, 1)
+    sheet["B6"] = date(2025, 1, 31)
+    workbook.save(xlsx_path)
+    workbook.close()
+
+    result = parse_movimentos_operacionais_xlsx(xlsx_path)
+
+    assert result.metadata.periodo_inicio == "2025-01-01"
+    assert result.metadata.periodo_fim == "2025-01-31"
 
 
 def test_parse_movimentos_operacionais_rejeita_arquivo_sem_aba_movimentos(tmp_path):

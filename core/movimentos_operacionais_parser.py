@@ -133,11 +133,11 @@ def _extract_metadata(row: tuple[Any, ...]) -> dict[str, Any]:
             metadata["cnpj_cpf"] = _only_digits(_first_clean_text_after(row, index))
         elif label == "periodo inicio":
             metadata["periodo_inicio"] = _parse_br_date(
-                _first_clean_text_after(row, index)
+                _first_value_after(row, index)
             )
         elif label == "periodo fim":
             metadata["periodo_fim"] = _parse_br_date(
-                _first_clean_text_after(row, index)
+                _first_value_after(row, index)
             )
     return metadata
 
@@ -149,6 +149,15 @@ def _first_clean_text_after(row: tuple[Any, ...], index: int) -> str | None:
         text = _clean_text(value)
         if text:
             return text
+    return None
+
+
+def _first_value_after(row: tuple[Any, ...], index: int) -> Any | None:
+    """Retorna o primeiro valor preenchido apos a coluna informada."""
+
+    for value in row[index + 1 :]:
+        if not _is_blank_value(value):
+            return value
     return None
 
 

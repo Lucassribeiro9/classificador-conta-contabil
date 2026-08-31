@@ -137,15 +137,20 @@ def _service_headers_for_empresa(
     return {"X-Service-Credential": credencial.secret}
 
 
-def _movimentos_xlsx(cnpj_cpf: str = "11.222.333/0001-44") -> bytes:
+def _movimentos_xlsx(
+    cnpj_cpf: str = "11.222.333/0001-44",
+    *,
+    periodo_inicio="01/01/2026",
+    periodo_fim="31/01/2026",
+) -> bytes:
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Movimentos"
     sheet.append(["Empresa", "Empresa Movimentos LTDA"])
     sheet.append(["Codigo dominio", "1122"])
     sheet.append(["CNPJ/CPF", cnpj_cpf])
-    sheet.append(["Periodo inicio", "01/01/2026"])
-    sheet.append(["Periodo fim", "31/01/2026"])
+    sheet.append(["Periodo inicio", periodo_inicio])
+    sheet.append(["Periodo fim", periodo_fim])
     sheet.append([])
     sheet.append(
         [
@@ -179,11 +184,13 @@ def _movimentos_xlsx(cnpj_cpf: str = "11.222.333/0001-44") -> bytes:
     return buffer.read()
 
 
-def _upload_file(filename: str = "movimentos.xlsx") -> dict:
+def _upload_file(
+    filename: str = "movimentos.xlsx", *, content: bytes | None = None
+) -> dict:
     return {
         "file": (
             filename,
-            _movimentos_xlsx(),
+            content if content is not None else _movimentos_xlsx(),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
     }
@@ -351,6 +358,30 @@ def test_user_with_operacao_permission_imports_operational_movements(client):
         assert event.metadata_json["file_hash"].startswith("sha256:")
         assert "Pagamento fornecedor sensivel" not in str(event.metadata_json)
         assert "DOC-SENSIVEL-001" not in str(event.metadata_json)
+
+
+def test_import_operational_movements_endpoint_accepts_native_excel_periods(client):
+    from tests.conftest import TestingSessionLocal
+
+    usuario, empresa_id = _seed_user_company_catalog_and_links("operacao")
+    content = _movimentos_xlsx(
+        periodo_inicio=date(2026, 1, 1),
+        periodo_fim=date(2026, 1, 31),
+    )
+
+    response = client.post(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/import",
+        files=_upload_file("movimentos-periodos-data-nativa.xlsx", content=content),
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["total_importadas"] == 1
+
+    with TestingSessionLocal() as session:
+        lote = session.query(LoteImportacaoMovimentoOperacional).one()
+        assert lote.periodo_inicio == date(2026, 1, 1)
+        assert lote.periodo_fim == date(2026, 1, 31)
 
 
 def test_user_without_company_access_cannot_import_operational_movements(client):
