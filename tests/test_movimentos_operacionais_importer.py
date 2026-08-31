@@ -95,6 +95,8 @@ def _write_movimentos_workbook(
     *,
     cnpj_cpf="11.222.333/0001-44",
     codigo_dominio="1122",
+    periodo_inicio="01/01/2025",
+    periodo_fim="31/01/2025",
     headers=None,
     rows=None,
 ):
@@ -106,8 +108,8 @@ def _write_movimentos_workbook(
     sheet.append(["Empresa", "Empresa Operacional LTDA"])
     sheet.append(["Codigo dominio", codigo_dominio])
     sheet.append(["CNPJ/CPF", cnpj_cpf])
-    sheet.append(["Periodo inicio", "01/01/2025"])
-    sheet.append(["Periodo fim", "31/01/2025"])
+    sheet.append(["Periodo inicio", periodo_inicio])
+    sheet.append(["Periodo fim", periodo_fim])
     sheet.append([])
     sheet.append(
         headers
@@ -126,6 +128,51 @@ def _write_movimentos_workbook(
         sheet.append(row)
     workbook.save(path)
     workbook.close()
+
+
+def test_import_movimentos_operacionais_aceita_periodos_como_data_nativa_excel(
+    session,
+    tmp_path,
+):
+    """Deve importar lote quando os periodos forem datas nativas do Excel."""
+
+    empresa = _empresa()
+    usuario = _usuario()
+    session.add_all([empresa, usuario, _conta(10046), _conta(10722)])
+    session.flush()
+    session.add_all([_vinculo(empresa.id, 10046), _vinculo(empresa.id, 10722)])
+    session.flush()
+    xlsx_path = tmp_path / "movimentos-periodos-data-nativa.xlsx"
+    _write_movimentos_workbook(
+        xlsx_path,
+        periodo_inicio=date(2025, 1, 1),
+        periodo_fim=date(2025, 1, 31),
+        rows=[
+            [
+                "02/01/2025",
+                10046,
+                "RECEBTO.DUPLICATAS",
+                3660.15,
+                10722,
+                "entrada",
+                "OFX-0001",
+                "Periodo em data nativa",
+            ],
+        ],
+    )
+
+    result = import_movimentos_operacionais(
+        session,
+        xlsx_path,
+        empresa_id=empresa.id,
+        usuario_id=usuario.id,
+        original_filename="movimentos-periodos-data-nativa.xlsx",
+    )
+
+    lote = session.query(LoteImportacaoMovimentoOperacional).one()
+    assert result.status == "completed_with_warnings"
+    assert lote.periodo_inicio == date(2025, 1, 1)
+    assert lote.periodo_fim == date(2025, 1, 31)
 
 
 def test_import_movimentos_operacionais_persiste_layout_valor_saldo(session, tmp_path):
