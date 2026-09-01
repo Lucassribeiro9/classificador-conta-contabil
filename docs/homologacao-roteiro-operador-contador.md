@@ -8,6 +8,8 @@ Documentos complementares:
 
 - gate de liberacao: `docs/homologacao-checklist-tecnico.md`;
 - criterios por tela: `docs/frontend-homologacao-mvp-ux.md`;
+- roteiro de round-trip da planilha classificada:
+  `docs/homologacao/roundtrip-planilha-classificada.md`;
 - contrato da massa: `docs/specs/13-homologacao-massa-sanitizada.md`.
 
 ## Regra de Seguranca
