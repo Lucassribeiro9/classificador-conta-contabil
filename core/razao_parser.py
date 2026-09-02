@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 import re
 from typing import Any
@@ -26,7 +27,13 @@ class RazaoParseResult:
 
 
 _REQUIRED_COLUMNS = ("data", "historico", "contrapartida", "debito", "credito")
-_OPTIONAL_COLUMNS = ("numero", "conta_origem")
+_OPTIONAL_COLUMNS = (
+    "numero",
+    "conta_origem",
+    "saldo_anterior",
+    "saldo",
+    "saldo_exercicio",
+)
 _COLUMN_ALIASES = {
     "data": "data",
     "numero": "numero",
@@ -36,6 +43,13 @@ _COLUMN_ALIASES = {
     "cta.c.part.": "contrapartida",
     "debito": "debito",
     "credito": "credito",
+    "saldo anterior": "saldo_anterior",
+    "saldo_anterior": "saldo_anterior",
+    "saldo": "saldo",
+    "saldo-exercicio": "saldo_exercicio",
+    "saldo exercicio": "saldo_exercicio",
+    "saldo_exercicio": "saldo_exercicio",
+    "saldo_exercicio_original": "saldo_exercicio",
 }
 
 
@@ -62,6 +76,7 @@ def _parse_razao_xlsx(path: str | Path, *, require_metadata: bool) -> RazaoParse
         cnpj_cpf: str | None = None
         periodo_inicio: str | None = None
         periodo_fim: str | None = None
+        saldo_anterior_atual: dict[str, Any] | None = None
 
         for row in sheet.iter_rows(values_only=True):
             if _is_empty_row(row):
@@ -94,9 +109,15 @@ def _parse_razao_xlsx(path: str | Path, *, require_metadata: bool) -> RazaoParse
                 continue
 
             if _is_balance_row(row):
+                saldo_anterior_atual = _extract_saldo_anterior(row, header_by_column)
                 continue
 
-            lancamento = _parse_entry_row(row, conta_origem, header_by_column)
+            lancamento = _parse_entry_row(
+                row,
+                conta_origem,
+                header_by_column,
+                saldo_anterior_atual,
+            )
             if lancamento is not None:
                 lancamentos.append(lancamento)
 
@@ -262,6 +283,7 @@ def _parse_entry_row(
     row: tuple[Any, ...],
     conta_origem: str | None,
     header_by_column: dict[str, int | None],
+    saldo_anterior_atual: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     data = _cell(row, header_by_column["data"])
     numero = _cell(row, header_by_column["numero"])
@@ -270,6 +292,9 @@ def _parse_entry_row(
     contrapartida = _cell(row, header_by_column["contrapartida"])
     debito = _cell(row, header_by_column["debito"])
     credito = _cell(row, header_by_column["credito"])
+    saldo_anterior = _parse_saldo(_cell(row, header_by_column["saldo_anterior"]))
+    saldo = _parse_saldo(_cell(row, header_by_column["saldo"]))
+    saldo_exercicio = _parse_saldo(_cell(row, header_by_column["saldo_exercicio"]))
     resolved_conta_origem = conta_origem or _clean_text(row_conta_origem)
 
     if (
@@ -279,7 +304,7 @@ def _parse_entry_row(
     ):
         return None
 
-    return {
+    parsed_row = {
         "conta_origem": _clean_integer_like_text(resolved_conta_origem),
         "data": _format_entry_date(data),
         "numero": _clean_integer_like_text(numero),
@@ -288,6 +313,65 @@ def _parse_entry_row(
         "debito": debito if not _is_blank_value(debito) else None,
         "credito": credito if not _is_blank_value(credito) else None,
     }
+    if saldo_anterior is not None or saldo_anterior_atual is not None:
+        parsed_row["saldo_anterior"] = saldo_anterior or saldo_anterior_atual
+    if saldo is not None:
+        parsed_row["saldo"] = saldo
+    if saldo_exercicio is not None:
+        parsed_row["saldo_exercicio"] = saldo_exercicio
+    return parsed_row
+
+
+def _extract_saldo_anterior(
+    row: tuple[Any, ...],
+    header_by_column: dict[str, int | None],
+) -> dict[str, Any] | None:
+    return (
+        _parse_saldo(_cell(row, header_by_column["saldo_anterior"]))
+        or _parse_saldo(_cell(row, header_by_column["saldo"]))
+        or _parse_saldo(_cell(row, header_by_column["saldo_exercicio"]))
+    )
+
+
+def _parse_saldo(value: Any) -> dict[str, Any] | None:
+    original = _clean_text(value)
+    if original is None:
+        return None
+
+    natureza = None
+    numeric_text = original
+    match = re.search(r"([DC])$", original.strip(), flags=re.IGNORECASE)
+    if match:
+        natureza = match.group(1).upper()
+        numeric_text = original[: match.start()].strip()
+
+    decimal_value = _parse_decimal_text(numeric_text)
+    return {
+        "valor_original": original,
+        "valor_decimal": decimal_value,
+        "natureza": natureza,
+    }
+
+
+def _parse_decimal_text(value: Any) -> Decimal | None:
+    if isinstance(value, Decimal):
+        return value
+    if isinstance(value, int | float):
+        return Decimal(str(value))
+
+    text = _clean_text(value)
+    if text is None:
+        return None
+
+    if "," in text:
+        normalized = text.replace(".", "").replace(",", ".")
+    else:
+        normalized = text
+
+    try:
+        return Decimal(normalized)
+    except InvalidOperation:
+        return None
 
 
 def _cell(row: tuple[Any, ...], index: int | None) -> Any:
