@@ -22,6 +22,12 @@ from core.models import (
 
 password_hash = PasswordHash.recommended()
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
+LEGACY_BALANCE_WARNING = {
+    "linha": 1,
+    "warnings": [
+        "Saldo ausente; conferencia por saldo limitada para esta linha."
+    ],
+}
 
 
 @pytest.fixture(autouse=True)
@@ -244,11 +250,11 @@ def test_user_with_operacao_permission_imports_razao_and_receives_summary(client
     assert response.status_code == 200
     assert response.json() == {
         "lote_id": 1,
-        "status": "completed",
+        "status": "completed_with_warnings",
         "total_linhas": 1,
         "total_importadas": 1,
         "total_invalidas": 0,
-        "warnings": [],
+        "warnings": [LEGACY_BALANCE_WARNING],
     }
 
 
@@ -477,7 +483,7 @@ def test_successful_razao_import_creates_audit_event_with_counters(client):
         assert event.metadata_json["total_linhas"] == 1
         assert event.metadata_json["total_importadas"] == 1
         assert event.metadata_json["total_invalidas"] == 0
-        assert event.metadata_json["warnings"] == []
+        assert event.metadata_json["warnings"] == [LEGACY_BALANCE_WARNING]
         assert event.metadata_json["file_hash"].startswith("sha256:")
         assert "Pagamento fornecedor" not in str(event.metadata_json)
 
@@ -529,7 +535,7 @@ def test_user_with_admin_empresa_permission_imports_razao(client):
     )
 
     assert response.status_code == 200
-    assert response.json()["status"] == "completed"
+    assert response.json()["status"] == "completed_with_warnings"
     assert response.json()["total_importadas"] == 1
 
 

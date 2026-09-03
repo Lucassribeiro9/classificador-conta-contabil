@@ -11,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 from core.database import Base
 from core.models import (
     ContaContabil,
+    FechamentoRazaoMensal,
     EmpresaContaContabil,
     Empresa,
     LancamentoRazaoNormalizado,
@@ -21,6 +22,12 @@ from core.razao_importer import RazaoImportError, import_razao
 
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
+LEGACY_BALANCE_WARNING = {
+    "linha": 1,
+    "warnings": [
+        "Saldo ausente; conferencia por saldo limitada para esta linha."
+    ],
+}
 
 
 @pytest.fixture()
@@ -105,12 +112,12 @@ def test_import_razao_persists_valid_lines_and_completes_lote(session, tmp_path)
     lote = session.query(LoteImportacaoRazao).one()
     lancamento = session.query(LancamentoRazaoNormalizado).one()
     assert result.lote_id == lote.id
-    assert result.status == "completed"
-    assert lote.status == "completed"
+    assert result.status == "completed_with_warnings"
+    assert lote.status == "completed_with_warnings"
     assert lote.total_linhas == 1
     assert lote.total_importadas == 1
     assert lote.total_invalidas == 0
-    assert lote.warnings_metadata == {"warnings": []}
+    assert lote.warnings_metadata == {"warnings": [LEGACY_BALANCE_WARNING]}
     assert lote.empresa_id == empresa.id
     assert lote.usuario_id == usuario.id
     assert lote.original_filename == "razao-valido.xlsx"
@@ -127,6 +134,148 @@ def test_import_razao_persists_valid_lines_and_completes_lote(session, tmp_path)
     assert lancamento.historico == "Pagamento fornecedor"
     assert lancamento.historico_normalizado == "pagamento fornecedor"
     assert lancamento.valor == Decimal("250.75")
+
+
+def test_import_razao_persiste_saldos_normalizados_do_parser(session, tmp_path):
+    empresa = _empresa()
+    usuario = _usuario()
+    session.add_all([empresa, usuario, _conta(10046), _conta(20001)])
+    session.flush()
+    xlsx_path = tmp_path / "razao-com-saldos.xlsx"
+    _write_workbook(
+        xlsx_path,
+        [
+            ["Empresa:", None, empresa.nome_empresa],
+            ["C.N.P.J.:", None, "55.666.777/0001-88"],
+            ["Período:", None, "01/01/2026 - 31/12/2026"],
+            [],
+            ["Conta:", "10046", "BCO. TESTE"],
+            [
+                "Data",
+                "Numero",
+                "Historico",
+                "Contrapartida",
+                "Debito",
+                "Credito",
+                "Saldo",
+                "Saldo-Exercicio",
+            ],
+            [None, None, "Saldo anterior", None, None, None, "1.000,00D", None],
+            [
+                "2026-01-31",
+                "42",
+                "Pagamento fornecedor",
+                "20001",
+                250.75,
+                None,
+                "1.250,75D",
+                "1.250,75D",
+            ],
+        ],
+    )
+
+    result = import_razao(
+        session,
+        xlsx_path,
+        empresa_id=empresa.id,
+        usuario_id=usuario.id,
+        original_filename="razao-com-saldos.xlsx",
+    )
+
+    lancamento = session.query(LancamentoRazaoNormalizado).one()
+    assert result.status == "completed"
+    assert lancamento.saldo_anterior_original == "1.000,00D"
+    assert lancamento.saldo_anterior_decimal == Decimal("1000.00")
+    assert lancamento.saldo_anterior_natureza == "D"
+    assert lancamento.saldo_original == "1.250,75D"
+    assert lancamento.saldo_decimal == Decimal("1250.75")
+    assert lancamento.saldo_natureza == "D"
+    assert lancamento.saldo_exercicio_original == "1.250,75D"
+    assert lancamento.saldo_exercicio_decimal == Decimal("1250.75")
+    assert lancamento.saldo_exercicio_natureza == "D"
+
+
+def test_import_razao_deriva_fechamento_mensal_do_ultimo_saldo_observado(session, tmp_path):
+    empresa = _empresa()
+    usuario = _usuario()
+    session.add_all([empresa, usuario, _conta(10046), _conta(20001)])
+    session.flush()
+    xlsx_path = tmp_path / "razao-fechamento.xlsx"
+    _write_workbook(
+        xlsx_path,
+        [
+            ["Empresa:", None, empresa.nome_empresa],
+            ["C.N.P.J.:", None, "55.666.777/0001-88"],
+            ["Período:", None, "01/01/2026 - 31/12/2026"],
+            [],
+            ["Conta:", "10046", "BCO. TESTE"],
+            [
+                "Data",
+                "Numero",
+                "Historico",
+                "Contrapartida",
+                "Debito",
+                "Credito",
+                "Saldo",
+                "Saldo-Exercicio",
+            ],
+            [None, None, "Saldo anterior", None, None, None, "1.000,00D", None],
+            ["2026-01-10", "41", "Pagamento A", "20001", None, 100.00, "900,00D", "900,00D"],
+            ["2026-01-31", "42", "Pagamento B", "20001", None, 50.00, "850,00D", "850,00D"],
+        ],
+    )
+
+    result = import_razao(
+        session,
+        xlsx_path,
+        empresa_id=empresa.id,
+        usuario_id=usuario.id,
+        original_filename="razao-fechamento.xlsx",
+    )
+
+    fechamento = session.query(FechamentoRazaoMensal).one()
+    assert result.status == "completed"
+    assert fechamento.empresa_id == empresa.id
+    assert fechamento.lote_id == result.lote_id
+    assert fechamento.conta_codigo == 10046
+    assert fechamento.ano == 2026
+    assert fechamento.mes == 1
+    assert fechamento.saldo_observado_original == "850,00D"
+    assert fechamento.saldo_observado_decimal == Decimal("850.00")
+    assert fechamento.saldo_observado_natureza == "D"
+    assert fechamento.saldo_observado_fonte == "saldo_exercicio"
+    assert fechamento.saldo_calculado_decimal == Decimal("850.00")
+    assert fechamento.warnings_saldo == []
+
+
+def test_import_razao_sem_saldo_registra_aviso_sem_criar_fechamento(session, tmp_path):
+    empresa = _empresa()
+    usuario = _usuario()
+    session.add_all([empresa, usuario, _conta(10046), _conta(20001)])
+    session.flush()
+    xlsx_path = tmp_path / "razao-sem-saldo.xlsx"
+    _write_workbook(
+        xlsx_path,
+        [
+            ["Conta:", "10046", "BCO. TESTE"],
+            ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito"],
+            ["2026-01-31", "42", "Pagamento fornecedor", "20001", None, 50.00],
+        ],
+    )
+
+    result = import_razao(
+        session,
+        xlsx_path,
+        empresa_id=empresa.id,
+        usuario_id=usuario.id,
+        original_filename="razao-sem-saldo.xlsx",
+    )
+
+    assert result.status == "completed_with_warnings"
+    assert result.total_importadas == 1
+    assert result.warnings == [LEGACY_BALANCE_WARNING]
+    assert session.query(LancamentoRazaoNormalizado).count() == 1
+    assert session.query(FechamentoRazaoMensal).count() == 0
 
 
 def test_import_razao_fixture_tabular_valida_completa_lote(session):
@@ -239,10 +388,11 @@ def test_import_razao_records_warning_for_invalid_date_format(session, tmp_path)
     assert result.total_importadas == 1
     assert result.total_invalidas == 1
     assert result.warnings == [
+        LEGACY_BALANCE_WARNING,
         {
             "linha": 2,
             "warnings": ["Data do lancamento invalida."],
-        }
+        },
     ]
     assert session.query(LancamentoRazaoNormalizado).count() == 1
 
@@ -276,10 +426,11 @@ def test_import_razao_records_warning_for_invalid_amount_format(session, tmp_pat
     assert result.total_importadas == 1
     assert result.total_invalidas == 1
     assert result.warnings == [
+        LEGACY_BALANCE_WARNING,
         {
             "linha": 2,
             "warnings": ["Valor do lancamento invalido."],
-        }
+        },
     ]
     assert session.query(LancamentoRazaoNormalizado).count() == 1
 
@@ -311,9 +462,9 @@ def test_import_razao_accepts_integer_like_account_codes_with_decimal_suffix(
     )
 
     lancamento = session.query(LancamentoRazaoNormalizado).one()
-    assert result.status == "completed"
+    assert result.status == "completed_with_warnings"
     assert result.total_importadas == 1
-    assert result.warnings == []
+    assert result.warnings == [LEGACY_BALANCE_WARNING]
     assert lancamento.numero_lancamento == "42"
     assert lancamento.conta_origem == 10046
     assert lancamento.conta_contrapartida == 20001
@@ -382,7 +533,7 @@ def test_import_razao_allows_active_company_from_file_cnpj(session, tmp_path):
         original_filename="razao-empresa-ativa.xlsx",
     )
 
-    assert result.status == "completed"
+    assert result.status == "completed_with_warnings"
     assert session.query(LoteImportacaoRazao).count() == 1
     assert session.query(LancamentoRazaoNormalizado).count() == 1
 
@@ -462,12 +613,13 @@ def test_import_razao_persists_valid_lines_and_records_warnings_for_invalid_ones
     assert lote.total_invalidas == 1
     assert lote.warnings_metadata == {
         "warnings": [
+            LEGACY_BALANCE_WARNING,
             {
                 "linha": 2,
                 "warnings": [
                     "Conta de contrapartida 99999 nao encontrada no catalogo."
                 ],
-            }
+            },
         ]
     }
     assert session.query(LancamentoRazaoNormalizado).count() == 1
@@ -628,7 +780,7 @@ def test_import_razao_allows_same_file_hash_for_another_company(session, tmp_pat
         original_filename="razao.xlsx",
     )
 
-    assert result.status == "completed"
+    assert result.status == "completed_with_warnings"
     assert session.query(LoteImportacaoRazao).count() == 2
     assert session.query(LancamentoRazaoNormalizado).count() == 2
 
@@ -672,7 +824,7 @@ def test_import_razao_allows_different_file_for_same_company(session, tmp_path):
         original_filename="razao-2.xlsx",
     )
 
-    assert result.status == "completed"
+    assert result.status == "completed_with_warnings"
     assert session.query(LoteImportacaoRazao).count() == 2
     assert session.query(LancamentoRazaoNormalizado).count() == 2
 

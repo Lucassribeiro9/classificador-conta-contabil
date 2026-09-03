@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from core.models import (
     Empresa,
     EmpresaContaContabil,
+    FechamentoRazaoMensal,
     LancamentoRazaoNormalizado,
     LoteImportacaoRazao,
 )
@@ -56,6 +57,9 @@ def import_razao(
     )
     warnings: list[dict[str, Any]] = []
     imported = 0
+    saldo_sequences: dict[int, Decimal] = {}
+    saldo_absent_warnings: set[int] = set()
+    fechamentos: dict[tuple[int, int, int, int], FechamentoRazaoMensal] = {}
 
     lote = LoteImportacaoRazao(
         empresa_id=empresa_id,
@@ -74,6 +78,7 @@ def import_razao(
     for index, parsed in enumerate(parsed_lancamentos, start=1):
         try:
             normalized = normalize_lancamento_razao(parsed)
+            normalized.update(_saldo_fields_from_parsed(parsed))
             normalized["empresa_id"] = empresa_id
             normalized["numero_lancamento"] = normalized.pop("numero")
             if _is_blank(normalized.get("conta_contrapartida")):
@@ -93,8 +98,20 @@ def import_razao(
             normalized["historico_normalizado"] = normalize_razao_historico(
                 normalized["historico"]
             )
-            session.add(_to_model(lote.id, empresa_id, normalized))
+            model = _to_model(lote.id, empresa_id, normalized)
+            session.add(model)
             _link_contas_to_empresa(session, empresa_id, normalized)
+            _update_fechamento_mensal(
+                session,
+                fechamentos,
+                saldo_sequences,
+                lote.id,
+                empresa_id,
+                normalized,
+                warnings,
+                saldo_absent_warnings,
+                index,
+            )
             imported += 1
         except (RazaoParseError, ValueError, TypeError, InvalidOperation) as exc:
             warnings.append(
@@ -109,7 +126,7 @@ def import_razao(
     lote.total_importadas = imported
     lote.total_invalidas = invalid
     lote.warnings_metadata = {"warnings": warnings}
-    if invalid == 0:
+    if invalid == 0 and not warnings:
         lote.status = "completed"
     elif imported > 0:
         lote.status = "completed_with_warnings"
@@ -183,7 +200,141 @@ def _to_model(
         historico=str(lancamento["historico"]),
         historico_normalizado=str(lancamento["historico_normalizado"]),
         valor=Decimal(str(lancamento["valor"])),
+        saldo_anterior_original=lancamento.get("saldo_anterior_original"),
+        saldo_anterior_decimal=lancamento.get("saldo_anterior_decimal"),
+        saldo_anterior_natureza=lancamento.get("saldo_anterior_natureza"),
+        saldo_original=lancamento.get("saldo_original"),
+        saldo_decimal=lancamento.get("saldo_decimal"),
+        saldo_natureza=lancamento.get("saldo_natureza"),
+        saldo_exercicio_original=lancamento.get("saldo_exercicio_original"),
+        saldo_exercicio_decimal=lancamento.get("saldo_exercicio_decimal"),
+        saldo_exercicio_natureza=lancamento.get("saldo_exercicio_natureza"),
     )
+
+
+def _saldo_fields_from_parsed(lancamento: dict[str, Any]) -> dict[str, Any]:
+    fields: dict[str, Any] = {}
+    for saldo_key, field_prefix in (
+        ("saldo_anterior", "saldo_anterior"),
+        ("saldo", "saldo"),
+        ("saldo_exercicio", "saldo_exercicio"),
+    ):
+        saldo = lancamento.get(saldo_key)
+        if not isinstance(saldo, dict):
+            continue
+        fields[f"{field_prefix}_original"] = saldo.get("valor_original")
+        fields[f"{field_prefix}_decimal"] = saldo.get("valor_decimal")
+        fields[f"{field_prefix}_natureza"] = saldo.get("natureza")
+    return fields
+
+
+
+def _update_fechamento_mensal(
+    session: Session,
+    fechamentos: dict[tuple[int, int, int, int], FechamentoRazaoMensal],
+    saldo_sequences: dict[int, Decimal],
+    lote_id: int,
+    empresa_id: int,
+    lancamento: dict[str, Any],
+    warnings: list[dict[str, Any]],
+    saldo_absent_warnings: set[int],
+    linha: int,
+) -> None:
+    conta_codigo = int(lancamento["conta_origem"])
+    data_lancamento = _parse_date(lancamento["data"])
+    saldo_calculado = _calcula_saldo_lancamento(
+        saldo_sequences, conta_codigo, lancamento
+    )
+    observed_source, observed = _observed_balance(lancamento)
+    warning_messages: list[str] = []
+
+    if observed is None:
+        if conta_codigo not in saldo_absent_warnings:
+            warning_messages.append(
+                "Saldo ausente; conferencia por saldo limitada para esta linha."
+            )
+            saldo_absent_warnings.add(conta_codigo)
+    elif observed.get("decimal") is None or observed.get("natureza") not in {"D", "C"}:
+        warning_messages.append(
+            "Saldo informado invalido; conferencia por saldo limitada para esta linha."
+        )
+    elif _signed_balance(observed["decimal"], observed["natureza"]) != saldo_calculado:
+        warning_messages.append(
+            "Saldo observado diverge do saldo calculado para a conta do razao."
+        )
+
+    if warning_messages:
+        warnings.append({"linha": linha, "warnings": warning_messages})
+
+    if observed is None or observed.get("decimal") is None:
+        return
+
+    key = (empresa_id, conta_codigo, data_lancamento.year, data_lancamento.month)
+    fechamento = fechamentos.get(key)
+    if fechamento is None:
+        fechamento = FechamentoRazaoMensal(
+            lote_id=lote_id,
+            empresa_id=empresa_id,
+            conta_codigo=conta_codigo,
+            ano=data_lancamento.year,
+            mes=data_lancamento.month,
+            warnings_saldo=[],
+        )
+        fechamentos[key] = fechamento
+        session.add(fechamento)
+
+    fechamento.saldo_observado_original = observed.get("original")
+    fechamento.saldo_observado_decimal = observed.get("decimal")
+    fechamento.saldo_observado_natureza = observed.get("natureza")
+    fechamento.saldo_observado_fonte = observed_source
+    fechamento.saldo_calculado_decimal = abs(saldo_calculado)
+    fechamento.warnings_saldo = warning_messages
+
+
+def _calcula_saldo_lancamento(
+    saldo_sequences: dict[int, Decimal],
+    conta_codigo: int,
+    lancamento: dict[str, Any],
+) -> Decimal:
+    if conta_codigo not in saldo_sequences:
+        saldo_sequences[conta_codigo] = _saldo_inicial(lancamento)
+
+    valor = Decimal(str(lancamento["valor"]))
+    if lancamento["direcao"] == "debito":
+        saldo_sequences[conta_codigo] += valor
+    else:
+        saldo_sequences[conta_codigo] -= valor
+    return saldo_sequences[conta_codigo]
+
+
+def _saldo_inicial(lancamento: dict[str, Any]) -> Decimal:
+    valor = lancamento.get("saldo_anterior_decimal")
+    natureza = lancamento.get("saldo_anterior_natureza")
+    if valor is None or natureza not in {"D", "C"}:
+        return Decimal("0")
+    return _signed_balance(valor, natureza)
+
+
+def _observed_balance(lancamento: dict[str, Any]) -> tuple[str | None, dict[str, Any] | None]:
+    if lancamento.get("saldo_exercicio_decimal") is not None:
+        return "saldo_exercicio", {
+            "original": lancamento.get("saldo_exercicio_original"),
+            "decimal": lancamento.get("saldo_exercicio_decimal"),
+            "natureza": lancamento.get("saldo_exercicio_natureza"),
+        }
+    if lancamento.get("saldo_decimal") is not None:
+        return "saldo", {
+            "original": lancamento.get("saldo_original"),
+            "decimal": lancamento.get("saldo_decimal"),
+            "natureza": lancamento.get("saldo_natureza"),
+        }
+    return None, None
+
+
+def _signed_balance(valor: Decimal, natureza: str) -> Decimal:
+    if natureza == "C":
+        return -abs(valor)
+    return abs(valor)
 
 
 def _link_contas_to_empresa(

@@ -15,6 +15,7 @@ from sqlalchemy import (
     JSON,
     Numeric,
     String,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -85,6 +86,11 @@ class Empresa(Base):
     )
     lancamentos_razao: Mapped[list["LancamentoRazaoNormalizado"]] = relationship(
         "LancamentoRazaoNormalizado",
+        back_populates="empresa",
+        cascade="all, delete-orphan",
+    )
+    fechamentos_razao_mensais: Mapped[list["FechamentoRazaoMensal"]] = relationship(
+        "FechamentoRazaoMensal",
         back_populates="empresa",
         cascade="all, delete-orphan",
     )
@@ -478,6 +484,11 @@ class LoteImportacaoRazao(Base):
         back_populates="lote",
         cascade="all, delete-orphan",
     )
+    fechamentos_mensais: Mapped[list["FechamentoRazaoMensal"]] = relationship(
+        "FechamentoRazaoMensal",
+        back_populates="lote",
+        cascade="all, delete-orphan",
+    )
 
 
 class LancamentoRazaoNormalizado(Base):
@@ -490,6 +501,18 @@ class LancamentoRazaoNormalizado(Base):
         CheckConstraint(
             "direcao IN ('debito', 'credito')",
             name="ck_lancamentos_razao_normalizados_direcao",
+        ),
+        CheckConstraint(
+            "saldo_anterior_natureza IS NULL OR saldo_anterior_natureza IN ('D', 'C')",
+            name="ck_lancamentos_razao_normalizados_saldo_anterior_natureza",
+        ),
+        CheckConstraint(
+            "saldo_natureza IS NULL OR saldo_natureza IN ('D', 'C')",
+            name="ck_lancamentos_razao_normalizados_saldo_natureza",
+        ),
+        CheckConstraint(
+            "saldo_exercicio_natureza IS NULL OR saldo_exercicio_natureza IN ('D', 'C')",
+            name="ck_lancamentos_razao_normalizados_saldo_exercicio_natureza",
         ),
     )
 
@@ -509,7 +532,30 @@ class LancamentoRazaoNormalizado(Base):
     direcao: Mapped[str] = mapped_column(String(10), nullable=False)
     historico: Mapped[str] = mapped_column(String, nullable=False)
     historico_normalizado: Mapped[str] = mapped_column(String, nullable=False)
-    valor: Mapped[float] = mapped_column(Numeric(precision=12, scale=2), nullable=False)
+    valor: Mapped[Decimal] = mapped_column(
+        Numeric(precision=12, scale=2), nullable=False
+    )
+    saldo_anterior_original: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    saldo_anterior_decimal: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(precision=14, scale=2), nullable=True
+    )
+    saldo_anterior_natureza: Mapped[Optional[str]] = mapped_column(
+        String(1), nullable=True
+    )
+    saldo_original: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    saldo_decimal: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(precision=14, scale=2), nullable=True
+    )
+    saldo_natureza: Mapped[Optional[str]] = mapped_column(String(1), nullable=True)
+    saldo_exercicio_original: Mapped[Optional[str]] = mapped_column(
+        String, nullable=True
+    )
+    saldo_exercicio_decimal: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(precision=14, scale=2), nullable=True
+    )
+    saldo_exercicio_natureza: Mapped[Optional[str]] = mapped_column(
+        String(1), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.now, nullable=False
     )
@@ -524,6 +570,74 @@ class LancamentoRazaoNormalizado(Base):
         "FeedbackClassificacao",
         back_populates="lancamento",
         cascade="all, delete-orphan",
+    )
+
+
+class FechamentoRazaoMensal(Base):
+    """Representa o fechamento mensal derivado do Razao por empresa e conta."""
+
+    __tablename__ = "fechamentos_razao_mensais"
+    __table_args__ = (
+        CheckConstraint(
+            "mes >= 1 AND mes <= 12",
+            name="ck_fechamentos_razao_mensais_mes",
+        ),
+        CheckConstraint(
+            "saldo_observado_natureza IS NULL OR saldo_observado_natureza IN ('D', 'C')",
+            name="ck_fechamentos_razao_mensais_saldo_observado_natureza",
+        ),
+        UniqueConstraint(
+            "empresa_id",
+            "conta_codigo",
+            "ano",
+            "mes",
+            "lote_id",
+            name="uq_fechamentos_razao_mensais_empresa_conta_mes_lote",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    lote_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("lotes_importacao_razao.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    empresa_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("empresas.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    conta_codigo: Mapped[int] = mapped_column(Integer, nullable=False)
+    ano: Mapped[int] = mapped_column(Integer, nullable=False)
+    mes: Mapped[int] = mapped_column(Integer, nullable=False)
+    saldo_observado_original: Mapped[Optional[str]] = mapped_column(
+        String, nullable=True
+    )
+    saldo_observado_decimal: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(precision=14, scale=2), nullable=True
+    )
+    saldo_observado_natureza: Mapped[Optional[str]] = mapped_column(
+        String(1), nullable=True
+    )
+    saldo_observado_fonte: Mapped[Optional[str]] = mapped_column(
+        String(30), nullable=True
+    )
+    saldo_calculado_decimal: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(precision=14, scale=2), nullable=True
+    )
+    warnings_saldo: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, onupdate=datetime.now, nullable=False
+    )
+
+    lote: Mapped["LoteImportacaoRazao"] = relationship(
+        "LoteImportacaoRazao", back_populates="fechamentos_mensais"
+    )
+    empresa: Mapped["Empresa"] = relationship(
+        "Empresa", back_populates="fechamentos_razao_mensais"
     )
 
 

@@ -140,8 +140,14 @@ def test_homologacao_fixtures_complete_importer_flow(session, tmp_path):
 
     assert plano_result.criadas == len(plano)
     assert plano_result.invalidas == 0
-    assert razao_result.status == "completed"
+    assert razao_result.status == "completed_with_warnings"
     assert razao_result.total_importadas == 12
+    assert len(razao_result.warnings) == 3
+    assert all(
+        warning["warnings"]
+        == ["Saldo ausente; conferencia por saldo limitada para esta linha."]
+        for warning in razao_result.warnings
+    )
     assert movimentos_result.status == "completed_with_warnings"
     assert movimentos_result.total_importadas == 5
     assert movimentos_result.total_invalidas == 0
