@@ -62,7 +62,7 @@ def test_parse_razao_detects_account_blocks_and_ignores_report_noise(tmp_path):
 
     lancamentos = parse_razao_xlsx(xlsx_path)
 
-    assert lancamentos == [
+    assert [_base_lancamento(l) for l in lancamentos] == [
         {
             "conta_origem": "10046",
             "data": "2026-01-02",
@@ -82,6 +82,34 @@ def test_parse_razao_detects_account_blocks_and_ignores_report_noise(tmp_path):
             "credito": 250.75,
         },
     ]
+
+
+def test_parse_razao_identifica_blocos_repetidos_da_mesma_conta(tmp_path):
+    xlsx_path = tmp_path / "razao-blocos-repetidos.xlsx"
+    _write_workbook(
+        xlsx_path,
+        [
+            ["Conta:", "10046", "BCO. SANTANDER"],
+            ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito", "Saldo"],
+            [None, None, "Saldo anterior", None, None, None, "1.000,00D"],
+            ["2026-01-02", "42", "Pagamento A", "20001", None, 100.00, "900,00D"],
+            ["Conta:", "10046", "BCO. SANTANDER"],
+            ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito", "Saldo"],
+            [None, None, "Saldo anterior", None, None, None, "2.000,00D"],
+            ["2026-02-02", "43", "Pagamento B", "20001", None, 100.00, "1.900,00D"],
+        ],
+    )
+
+    lancamentos = parse_razao_xlsx(xlsx_path)
+
+    assert [lancamento["bloco_id"] for lancamento in lancamentos] == [
+        "bloco:1",
+        "bloco:2",
+    ]
+    assert [
+        lancamento["saldo_anterior"]["valor_decimal"]
+        for lancamento in lancamentos
+    ] == [Decimal("1000.00"), Decimal("2000.00")]
 
 
 def test_parse_razao_fixture_sanitizada_representa_layout_real_dominio():
@@ -188,7 +216,7 @@ def test_parse_razao_normalizes_integer_like_numeric_account_codes(tmp_path):
 
     result = parse_razao_xlsx_with_metadata(xlsx_path)
 
-    assert result.lancamentos == [
+    assert [_base_lancamento(l) for l in result.lancamentos] == [
         {
             "conta_origem": "10046",
             "data": "2024-01-31",
@@ -415,6 +443,7 @@ def test_parse_razao_preserva_saldos_do_layout_dominio_sem_gerar_lancamento(tmp_
 
     assert len(result.lancamentos) == 1
     assert result.lancamentos[0] == {
+        "bloco_id": "bloco:1",
         "conta_origem": "10001",
         "data": "2024-01-31",
         "numero": None,
@@ -617,7 +646,7 @@ def test_parse_razao_with_metadata_extracts_company_header(tmp_path):
     assert result.metadata.periodo_inicio == "2024-01-01"
     assert result.metadata.periodo_fim == "2024-12-31"
     assert not hasattr(result.metadata, "cod_dominio")
-    assert result.lancamentos == [
+    assert [_base_lancamento(l) for l in result.lancamentos] == [
         {
             "conta_origem": "10001",
             "data": "2024-01-31",

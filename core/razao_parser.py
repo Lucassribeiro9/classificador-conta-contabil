@@ -77,6 +77,8 @@ def _parse_razao_xlsx(path: str | Path, *, require_metadata: bool) -> RazaoParse
         periodo_inicio: str | None = None
         periodo_fim: str | None = None
         saldo_anterior_atual: dict[str, Any] | None = None
+        bloco_numero = 0
+        bloco_id: str | None = None
 
         for row in sheet.iter_rows(values_only=True):
             if _is_empty_row(row):
@@ -95,6 +97,9 @@ def _parse_razao_xlsx(path: str | Path, *, require_metadata: bool) -> RazaoParse
             conta_bloco = _extract_account_block(row)
             if conta_bloco is not None:
                 conta_origem = conta_bloco
+                bloco_numero += 1
+                bloco_id = f"bloco:{bloco_numero}"
+                saldo_anterior_atual = None
                 continue
 
             maybe_header = _header_by_column(row)
@@ -117,6 +122,7 @@ def _parse_razao_xlsx(path: str | Path, *, require_metadata: bool) -> RazaoParse
                 conta_origem,
                 header_by_column,
                 saldo_anterior_atual,
+                bloco_id,
             )
             if lancamento is not None:
                 lancamentos.append(lancamento)
@@ -284,6 +290,7 @@ def _parse_entry_row(
     conta_origem: str | None,
     header_by_column: dict[str, int | None],
     saldo_anterior_atual: dict[str, Any] | None = None,
+    bloco_id: str | None = None,
 ) -> dict[str, Any] | None:
     data = _cell(row, header_by_column["data"])
     numero = _cell(row, header_by_column["numero"])
@@ -304,8 +311,10 @@ def _parse_entry_row(
     ):
         return None
 
+    conta_origem_normalizada = _clean_integer_like_text(resolved_conta_origem)
     parsed_row = {
-        "conta_origem": _clean_integer_like_text(resolved_conta_origem),
+        "bloco_id": bloco_id or f"conta:{conta_origem_normalizada}",
+        "conta_origem": conta_origem_normalizada,
         "data": _format_entry_date(data),
         "numero": _clean_integer_like_text(numero),
         "historico": _clean_text(historico),
