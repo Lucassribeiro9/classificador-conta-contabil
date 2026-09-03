@@ -144,8 +144,9 @@ def test_homologacao_fixtures_complete_importer_flow(session, tmp_path):
     assert razao_result.total_importadas == 12
     assert len(razao_result.warnings) == 3
     assert all(
-        warning["warnings"]
-        == ["Saldo ausente; conferencia por saldo limitada para esta linha."]
+        warning["codigo"] == "saldo_ausente"
+        and warning["mensagem"]
+        == "Saldo ausente; conferencia por saldo limitada para este bloco."
         for warning in razao_result.warnings
     )
     assert movimentos_result.status == "completed_with_warnings"

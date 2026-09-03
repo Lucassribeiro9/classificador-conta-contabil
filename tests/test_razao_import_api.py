@@ -24,8 +24,14 @@ password_hash = PasswordHash.recommended()
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 LEGACY_BALANCE_WARNING = {
     "linha": 1,
+    "codigo": "saldo_ausente",
+    "mensagem": "Saldo ausente; conferencia por saldo limitada para este bloco.",
+    "detalhes": {
+        "bloco_id": "bloco:1",
+        "conta_codigo": 10046,
+    },
     "warnings": [
-        "Saldo ausente; conferencia por saldo limitada para esta linha."
+        "Saldo ausente; conferencia por saldo limitada para este bloco."
     ],
 }
 
