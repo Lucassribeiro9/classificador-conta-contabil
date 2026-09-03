@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import (
     BaseModel,
@@ -8,6 +8,7 @@ from pydantic import (
     Field,
     field_serializer,
     field_validator,
+    model_serializer,
 )
 
 # Os parametros passados nos modelos devem ser iguais aos do banco de dados
@@ -226,6 +227,44 @@ class ImportacaoPlanoContasResponse(BaseModel):
     invalidas: int
 
 
+class RazaoSaldoValueResponse(BaseModel):
+    fonte: Optional[str] = None
+    valor_original: Optional[str] = None
+    valor_decimal: Optional[Decimal] = None
+    natureza: Optional[str] = None
+
+    @model_serializer(mode="wrap")
+    def serialize_without_absent_fields(self, handler):
+        return {
+            key: value
+            for key, value in handler(self).items()
+            if value is not None
+        }
+
+
+class RazaoSaldoWarningDetailsResponse(BaseModel):
+    bloco_id: str
+    conta_codigo: int
+    saldo_calculado: Optional[RazaoSaldoValueResponse] = None
+    saldo_observado: Optional[RazaoSaldoValueResponse] = None
+
+    @model_serializer(mode="wrap")
+    def serialize_without_absent_balances(self, handler):
+        return {
+            key: value
+            for key, value in handler(self).items()
+            if value is not None
+        }
+
+
+class RazaoSaldoWarningResponse(BaseModel):
+    linha: int
+    codigo: Literal["saldo_ausente", "saldo_invalido", "saldo_divergente"]
+    mensagem: str
+    detalhes: RazaoSaldoWarningDetailsResponse
+    warnings: list[str]
+
+
 class ImportacaoRazaoResponse(BaseModel):
     lote_id: int
     status: str
@@ -233,6 +272,7 @@ class ImportacaoRazaoResponse(BaseModel):
     total_importadas: int
     total_invalidas: int
     warnings: list[dict]
+    warnings_saldo: list[RazaoSaldoWarningResponse] = Field(default_factory=list)
 
 
 class RazaoLoteResponse(BaseModel):
@@ -243,6 +283,7 @@ class RazaoLoteResponse(BaseModel):
     total_linhas: int
     total_importadas: int
     total_invalidas: int
+    warnings_saldo_total: int = 0
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
@@ -277,6 +318,134 @@ class RazaoLancamentoListResponse(BaseModel):
     page: int
     limit: int
     has_next: bool
+
+
+class RazaoFechamentoResponse(BaseModel):
+    id: int
+    lote_id: int
+    empresa_id: int
+    conta_codigo: int
+    ano: int
+    mes: int
+    saldo_observado_original: Optional[str] = None
+    saldo_observado_decimal: Optional[Decimal] = None
+    saldo_observado_natureza: Optional[str] = None
+    saldo_observado_fonte: Optional[str] = None
+    saldo_calculado_decimal: Optional[Decimal] = None
+    divergente: bool
+    warnings_saldo: list[RazaoSaldoWarningResponse] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+
+class RazaoFechamentoListResponse(BaseModel):
+    lote_id: int
+    empresa_id: int
+    status: str
+    warnings_saldo: list[RazaoSaldoWarningResponse] = Field(default_factory=list)
+    items: list[RazaoFechamentoResponse]
+    total: int
+    page: int
+    limit: int
+    has_next: bool
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "lote_id": 42,
+                    "empresa_id": 7,
+                    "status": "completed",
+                    "warnings_saldo": [],
+                    "items": [
+                        {
+                            "id": 101,
+                            "lote_id": 42,
+                            "empresa_id": 7,
+                            "conta_codigo": 10046,
+                            "ano": 2026,
+                            "mes": 1,
+                            "saldo_observado_original": "1.250,75D",
+                            "saldo_observado_decimal": "1250.75",
+                            "saldo_observado_natureza": "D",
+                            "saldo_observado_fonte": "saldo_exercicio",
+                            "saldo_calculado_decimal": "1250.75",
+                            "divergente": False,
+                            "warnings_saldo": [],
+                            "created_at": "2026-02-01T12:00:00",
+                            "updated_at": "2026-02-01T12:00:00",
+                        }
+                    ],
+                    "total": 1,
+                    "page": 1,
+                    "limit": 20,
+                    "has_next": False,
+                },
+                {
+                    "lote_id": 43,
+                    "empresa_id": 7,
+                    "status": "completed_with_warnings",
+                    "warnings_saldo": [
+                        {
+                            "linha": 12,
+                            "codigo": "saldo_divergente",
+                            "mensagem": "Saldo observado diverge do saldo calculado para a conta do razao.",
+                            "detalhes": {
+                                "bloco_id": "bloco:1",
+                                "conta_codigo": 10046,
+                            },
+                            "warnings": ["Saldo observado diverge do saldo calculado para a conta do razao."],
+                        }
+                    ],
+                    "items": [
+                        {
+                            "id": 102,
+                            "lote_id": 43,
+                            "empresa_id": 7,
+                            "conta_codigo": 10046,
+                            "ano": 2026,
+                            "mes": 2,
+                            "saldo_observado_original": "900,00D",
+                            "saldo_observado_decimal": "900.00",
+                            "saldo_observado_natureza": "D",
+                            "saldo_observado_fonte": "saldo_exercicio",
+                            "saldo_calculado_decimal": "850.00",
+                            "divergente": True,
+                            "warnings_saldo": [],
+                            "created_at": "2026-03-01T12:00:00",
+                            "updated_at": "2026-03-01T12:00:00",
+                        }
+                    ],
+                    "total": 1,
+                    "page": 1,
+                    "limit": 20,
+                    "has_next": False,
+                },
+                {
+                    "lote_id": 44,
+                    "empresa_id": 7,
+                    "status": "completed_with_warnings",
+                    "warnings_saldo": [
+                        {
+                            "linha": 1,
+                            "codigo": "saldo_ausente",
+                            "mensagem": "Saldo ausente; conferencia por saldo limitada para este bloco.",
+                            "detalhes": {
+                                "bloco_id": "bloco:1",
+                                "conta_codigo": 10046,
+                            },
+                            "warnings": ["Saldo ausente; conferencia por saldo limitada para este bloco."],
+                        }
+                    ],
+                    "items": [],
+                    "total": 0,
+                    "page": 1,
+                    "limit": 20,
+                    "has_next": False,
+                },
+            ]
+        }
+    )
 
 
 class ImportacaoMovimentoOperacionalResponse(BaseModel):
