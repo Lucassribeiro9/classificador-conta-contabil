@@ -110,8 +110,12 @@ def test_openapi_documents_razao_closing_contract_and_examples():
         "saldo_invalido",
         "saldo_divergente",
     ]
+    assert "warnings_saldo_total" in closing_list["properties"]
+    assert "warnings_saldo_truncados" in closing_list["properties"]
     examples = closing_list["examples"]
     assert len(examples) == 3
+    assert all("warnings_saldo_total" in example for example in examples)
+    assert all("warnings_saldo_truncados" in example for example in examples)
     assert examples[0]["items"][0]["divergente"] is False
     assert examples[1]["items"][0]["divergente"] is True
     assert examples[1]["warnings_saldo"][0]["codigo"] == "saldo_divergente"

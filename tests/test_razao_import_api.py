@@ -404,6 +404,8 @@ def test_user_with_leitura_permission_lists_lote_monthly_closings(client):
     assert body["empresa_id"] == empresa_id
     assert body["status"] == "completed"
     assert body["warnings_saldo"] == [LEGACY_BALANCE_WARNING]
+    assert body["warnings_saldo_total"] == 1
+    assert body["warnings_saldo_truncados"] is False
     assert body["total"] == 1
     assert body["page"] == 1
     assert body["limit"] == 20
@@ -507,6 +509,34 @@ def test_razao_closings_return_empty_page_for_lote_without_closings(client):
     assert response.json()["items"] == []
     assert response.json()["total"] == 0
     assert response.json()["warnings_saldo"] == [LEGACY_BALANCE_WARNING]
+
+
+def test_razao_closings_limit_balance_warning_sample(client):
+    warnings = [
+        {
+            **LEGACY_BALANCE_WARNING,
+            "linha": linha,
+            "detalhes": {
+                **LEGACY_BALANCE_WARNING["detalhes"],
+                "bloco_id": f"bloco:{linha}",
+            },
+        }
+        for linha in range(1, 102)
+    ]
+    usuario, empresa_id, lote_id, _ = _seed_razao_lote_with_lancamento(
+        permissao="leitura",
+        lote_overrides={"warnings_metadata": {"warnings": warnings}},
+    )
+
+    response = client.get(
+        f"/api/v1/companies/{empresa_id}/razao/lotes/{lote_id}/fechamentos",
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 200
+    assert len(response.json()["warnings_saldo"]) == 100
+    assert response.json()["warnings_saldo_total"] == 101
+    assert response.json()["warnings_saldo_truncados"] is True
 
 
 def test_razao_closings_require_authentication(client):

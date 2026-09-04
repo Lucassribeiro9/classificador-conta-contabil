@@ -343,6 +343,8 @@ class RazaoFechamentoListResponse(BaseModel):
     empresa_id: int
     status: str
     warnings_saldo: list[RazaoSaldoWarningResponse] = Field(default_factory=list)
+    warnings_saldo_total: int = 0
+    warnings_saldo_truncados: bool = False
     items: list[RazaoFechamentoResponse]
     total: int
     page: int
@@ -357,6 +359,8 @@ class RazaoFechamentoListResponse(BaseModel):
                     "empresa_id": 7,
                     "status": "completed",
                     "warnings_saldo": [],
+                    "warnings_saldo_total": 0,
+                    "warnings_saldo_truncados": False,
                     "items": [
                         {
                             "id": 101,
@@ -397,6 +401,8 @@ class RazaoFechamentoListResponse(BaseModel):
                             "warnings": ["Saldo observado diverge do saldo calculado para a conta do razao."],
                         }
                     ],
+                    "warnings_saldo_total": 1,
+                    "warnings_saldo_truncados": False,
                     "items": [
                         {
                             "id": 102,
@@ -437,6 +443,8 @@ class RazaoFechamentoListResponse(BaseModel):
                             "warnings": ["Saldo ausente; conferencia por saldo limitada para este bloco."],
                         }
                     ],
+                    "warnings_saldo_total": 1,
+                    "warnings_saldo_truncados": False,
                     "items": [],
                     "total": 0,
                     "page": 1,

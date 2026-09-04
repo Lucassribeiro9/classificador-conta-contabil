@@ -159,11 +159,15 @@ def list_company_razao_fechamentos(
     offset = (page - 1) * limit
     total = query.count()
     fechamentos = query.offset(offset).limit(limit).all()
+    warnings_saldo = _balance_warnings(lote.warnings_metadata)
+    warnings_saldo_total = len(warnings_saldo)
     return RazaoFechamentoListResponse(
         lote_id=lote.id,
         empresa_id=empresa.id,
         status=lote.status,
-        warnings_saldo=_balance_warnings(lote.warnings_metadata),
+        warnings_saldo=warnings_saldo[:100],
+        warnings_saldo_total=warnings_saldo_total,
+        warnings_saldo_truncados=warnings_saldo_total > 100,
         items=[
             RazaoFechamentoResponse(
                 id=fechamento.id,
