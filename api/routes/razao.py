@@ -14,12 +14,16 @@ from api.dependencies import (
 )
 from api.schemas import (
     ImportacaoRazaoResponse,
+    RazaoFechamentoListResponse,
+    RazaoFechamentoResponse,
     RazaoLancamentoListResponse,
     RazaoLoteListResponse,
+    RazaoLoteResponse,
 )
 from core.audit import record_audit_event
 from core.models import (
     Empresa,
+    FechamentoRazaoMensal,
     LancamentoRazaoNormalizado,
     LoteImportacaoRazao,
     Usuario,
@@ -49,7 +53,20 @@ def list_company_razao_lotes(
     total = query.count()
     lotes = query.offset(offset).limit(limit).all()
     return RazaoLoteListResponse(
-        items=lotes,
+        items=[
+            RazaoLoteResponse(
+                id=lote.id,
+                empresa_id=lote.empresa_id,
+                original_filename=lote.original_filename,
+                status=lote.status,
+                total_linhas=lote.total_linhas,
+                total_importadas=lote.total_importadas,
+                total_invalidas=lote.total_invalidas,
+                warnings_saldo_total=len(_balance_warnings(lote.warnings_metadata)),
+                created_at=lote.created_at,
+            )
+            for lote in lotes
+        ],
         total=total,
         page=page,
         limit=limit,
@@ -95,6 +112,105 @@ def list_company_razao_lancamentos(
         limit=limit,
         has_next=offset + len(lancamentos) < total,
     )
+
+
+@router.get(
+    "/lotes/{lote_id}/fechamentos",
+    response_model=RazaoFechamentoListResponse,
+)
+def list_company_razao_fechamentos(
+    company_id: int,
+    lote_id: int,
+    conta_codigo: int | None = Query(None),
+    ano: int | None = Query(None),
+    mes: int | None = Query(None, ge=1, le=12),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    empresa: Empresa = Depends(require_company_access("leitura")),
+    db: Session = DB_DEPENDENCY,
+) -> RazaoFechamentoListResponse:
+    lote = (
+        db.query(LoteImportacaoRazao)
+        .filter(
+            LoteImportacaoRazao.id == lote_id,
+            LoteImportacaoRazao.empresa_id == empresa.id,
+        )
+        .first()
+    )
+    if lote is None:
+        raise HTTPException(status_code=404, detail="Lote de razão não encontrado")
+
+    query = db.query(FechamentoRazaoMensal).filter(
+        FechamentoRazaoMensal.empresa_id == empresa.id,
+        FechamentoRazaoMensal.lote_id == lote_id,
+    )
+    if conta_codigo is not None:
+        query = query.filter(FechamentoRazaoMensal.conta_codigo == conta_codigo)
+    if ano is not None:
+        query = query.filter(FechamentoRazaoMensal.ano == ano)
+    if mes is not None:
+        query = query.filter(FechamentoRazaoMensal.mes == mes)
+    query = query.order_by(
+        FechamentoRazaoMensal.conta_codigo.asc(),
+        FechamentoRazaoMensal.ano.asc(),
+        FechamentoRazaoMensal.mes.asc(),
+        FechamentoRazaoMensal.id.asc(),
+    )
+    offset = (page - 1) * limit
+    total = query.count()
+    fechamentos = query.offset(offset).limit(limit).all()
+    warnings_saldo = _balance_warnings(lote.warnings_metadata)
+    warnings_saldo_total = len(warnings_saldo)
+    return RazaoFechamentoListResponse(
+        lote_id=lote.id,
+        empresa_id=empresa.id,
+        status=lote.status,
+        warnings_saldo=warnings_saldo[:100],
+        warnings_saldo_total=warnings_saldo_total,
+        warnings_saldo_truncados=warnings_saldo_total > 100,
+        items=[
+            RazaoFechamentoResponse(
+                id=fechamento.id,
+                lote_id=fechamento.lote_id,
+                empresa_id=fechamento.empresa_id,
+                conta_codigo=fechamento.conta_codigo,
+                ano=fechamento.ano,
+                mes=fechamento.mes,
+                saldo_observado_original=fechamento.saldo_observado_original,
+                saldo_observado_decimal=fechamento.saldo_observado_decimal,
+                saldo_observado_natureza=fechamento.saldo_observado_natureza,
+                saldo_observado_fonte=fechamento.saldo_observado_fonte,
+                saldo_calculado_decimal=fechamento.saldo_calculado_decimal,
+                divergente=any(
+                    warning.get("codigo") == "saldo_divergente"
+                    for warning in fechamento.warnings_saldo
+                ),
+                warnings_saldo=fechamento.warnings_saldo,
+                created_at=fechamento.created_at,
+                updated_at=fechamento.updated_at,
+            )
+            for fechamento in fechamentos
+        ],
+        total=total,
+        page=page,
+        limit=limit,
+        has_next=offset + len(fechamentos) < total,
+    )
+
+
+def _balance_warnings(source: dict | list | None) -> list[dict]:
+    warnings = (
+        source
+        if isinstance(source, list)
+        else (source or {}).get("warnings", [])
+    )
+    return [
+        warning
+        for warning in warnings
+        if isinstance(warning, dict)
+        and warning.get("codigo")
+        in {"saldo_ausente", "saldo_invalido", "saldo_divergente"}
+    ]
 
 
 @router.post("/import", response_model=ImportacaoRazaoResponse)
@@ -197,7 +313,10 @@ def import_company_razao(
     finally:
         os.unlink(temp_path)
 
-    return ImportacaoRazaoResponse(**resumo.__dict__)
+    return ImportacaoRazaoResponse(
+        **resumo.__dict__,
+        warnings_saldo=_balance_warnings(resumo.warnings),
+    )
 
 
 def _save_upload_to_temp_xlsx(file: UploadFile) -> str:

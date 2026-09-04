@@ -29,6 +29,7 @@ EXPECTED_PATHS = {
     "/api/v1/companies/{company_id}/movimentos-operacionais/lotes/{lote_id}/planilha-classificada/feedback",
     "/api/v1/companies/{company_id}/razao/import",
     "/api/v1/companies/{company_id}/razao/lotes",
+    "/api/v1/companies/{company_id}/razao/lotes/{lote_id}/fechamentos",
     "/api/v1/admin/plano-contas/import",
     "/api/v1/plano-contas",
     "/api/v1/companies/{company_id}/ml/status",
@@ -96,6 +97,30 @@ def test_openapi_declares_operational_movement_balance_fields():
     assert "saldo_calculado_decimal" in properties
     assert "warnings_saldo" in properties
     assert properties["warnings_saldo"]["items"]["type"] == "string"
+
+
+def test_openapi_documents_razao_closing_contract_and_examples():
+    schema = app.openapi()
+    components = schema["components"]["schemas"]
+    closing_list = components["RazaoFechamentoListResponse"]
+    warning = components["RazaoSaldoWarningResponse"]
+
+    assert warning["properties"]["codigo"]["enum"] == [
+        "saldo_ausente",
+        "saldo_invalido",
+        "saldo_divergente",
+    ]
+    assert "warnings_saldo_total" in closing_list["properties"]
+    assert "warnings_saldo_truncados" in closing_list["properties"]
+    examples = closing_list["examples"]
+    assert len(examples) == 3
+    assert all("warnings_saldo_total" in example for example in examples)
+    assert all("warnings_saldo_truncados" in example for example in examples)
+    assert examples[0]["items"][0]["divergente"] is False
+    assert examples[1]["items"][0]["divergente"] is True
+    assert examples[1]["warnings_saldo"][0]["codigo"] == "saldo_divergente"
+    assert examples[2]["items"] == []
+    assert examples[2]["warnings_saldo"][0]["codigo"] == "saldo_ausente"
 
 
 def test_roundtrip_endpoints_document_service_credential_header(client):

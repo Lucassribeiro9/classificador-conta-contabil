@@ -13,6 +13,7 @@ from core.models import (
     AuditEvent,
     ContaContabil,
     Empresa,
+    FechamentoRazaoMensal,
     LancamentoRazaoNormalizado,
     LoteImportacaoRazao,
     Usuario,
@@ -32,6 +33,24 @@ LEGACY_BALANCE_WARNING = {
     },
     "warnings": [
         "Saldo ausente; conferencia por saldo limitada para este bloco."
+    ],
+}
+DIVERGENT_BALANCE_WARNING = {
+    "linha": 2,
+    "codigo": "saldo_divergente",
+    "mensagem": "Saldo observado diverge do saldo calculado para a conta do razao.",
+    "detalhes": {
+        "bloco_id": "bloco:1",
+        "conta_codigo": 10046,
+        "saldo_calculado": {"valor_decimal": "1000.00", "natureza": "D"},
+        "saldo_observado": {
+            "fonte": "saldo",
+            "valor_decimal": "1250.75",
+            "natureza": "D",
+        },
+    },
+    "warnings": [
+        "Saldo observado diverge do saldo calculado para a conta do razao."
     ],
 }
 
@@ -261,12 +280,21 @@ def test_user_with_operacao_permission_imports_razao_and_receives_summary(client
         "total_importadas": 1,
         "total_invalidas": 0,
         "warnings": [LEGACY_BALANCE_WARNING],
+        "warnings_saldo": [LEGACY_BALANCE_WARNING],
     }
 
 
 def test_user_with_leitura_permission_lists_own_razao_lotes_only(client):
     usuario, empresa_id, lote_id, _ = _seed_razao_lote_with_lancamento(
-        permissao="leitura"
+        permissao="leitura",
+        lote_overrides={
+            "warnings_metadata": {
+                "warnings": [
+                    LEGACY_BALANCE_WARNING,
+                    {"linha": 9, "mensagem": "Warning genérico"},
+                ]
+            }
+        },
     )
     _seed_razao_lote_with_lancamento(
         empresa_overrides={
@@ -300,6 +328,7 @@ def test_user_with_leitura_permission_lists_own_razao_lotes_only(client):
             "total_linhas": 1,
             "total_importadas": 1,
             "total_invalidas": 0,
+            "warnings_saldo_total": 1,
             "created_at": response.json()["items"][0]["created_at"],
         }
     ]
@@ -336,6 +365,235 @@ def test_user_with_leitura_permission_lists_lote_lancamentos_without_raw_history
         }
     ]
     assert "historico" not in response.json()["items"][0]
+
+
+def test_user_with_leitura_permission_lists_lote_monthly_closings(client):
+    usuario, empresa_id, lote_id, _ = _seed_razao_lote_with_lancamento(
+        permissao="leitura",
+        lote_overrides={"warnings_metadata": {"warnings": [LEGACY_BALANCE_WARNING]}},
+    )
+    from tests.conftest import TestingSessionLocal
+
+    with TestingSessionLocal() as session:
+        fechamento = FechamentoRazaoMensal(
+            lote_id=lote_id,
+            empresa_id=empresa_id,
+            conta_codigo=10046,
+            ano=2026,
+            mes=1,
+            saldo_observado_original="1.250,75D",
+            saldo_observado_decimal=Decimal("1250.75"),
+            saldo_observado_natureza="D",
+            saldo_observado_fonte="saldo_exercicio",
+            saldo_calculado_decimal=Decimal("1000.00"),
+            warnings_saldo=[DIVERGENT_BALANCE_WARNING],
+        )
+        session.add(fechamento)
+        session.commit()
+        session.refresh(fechamento)
+        fechamento_id = fechamento.id
+
+    response = client.get(
+        f"/api/v1/companies/{empresa_id}/razao/lotes/{lote_id}/fechamentos",
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["lote_id"] == lote_id
+    assert body["empresa_id"] == empresa_id
+    assert body["status"] == "completed"
+    assert body["warnings_saldo"] == [LEGACY_BALANCE_WARNING]
+    assert body["warnings_saldo_total"] == 1
+    assert body["warnings_saldo_truncados"] is False
+    assert body["total"] == 1
+    assert body["page"] == 1
+    assert body["limit"] == 20
+    assert body["has_next"] is False
+    assert body["items"] == [
+        {
+            "id": fechamento_id,
+            "lote_id": lote_id,
+            "empresa_id": empresa_id,
+            "conta_codigo": 10046,
+            "ano": 2026,
+            "mes": 1,
+            "saldo_observado_original": "1.250,75D",
+            "saldo_observado_decimal": "1250.75",
+            "saldo_observado_natureza": "D",
+            "saldo_observado_fonte": "saldo_exercicio",
+            "saldo_calculado_decimal": "1000.00",
+            "divergente": True,
+            "warnings_saldo": [DIVERGENT_BALANCE_WARNING],
+            "created_at": body["items"][0]["created_at"],
+            "updated_at": body["items"][0]["updated_at"],
+        }
+    ]
+    assert "saldo_calculado_natureza" not in body["items"][0]
+
+
+def test_razao_closings_support_filters_and_stable_pagination(client):
+    usuario, empresa_id, lote_id, _ = _seed_razao_lote_with_lancamento(
+        permissao="leitura"
+    )
+    from tests.conftest import TestingSessionLocal
+
+    with TestingSessionLocal() as session:
+        session.add_all(
+            [
+                FechamentoRazaoMensal(
+                    lote_id=lote_id,
+                    empresa_id=empresa_id,
+                    conta_codigo=conta_codigo,
+                    ano=ano,
+                    mes=mes,
+                    saldo_observado_decimal=Decimal("100.00"),
+                    saldo_calculado_decimal=Decimal("100.00"),
+                    warnings_saldo=[],
+                )
+                for conta_codigo, ano, mes in [
+                    (20001, 2026, 2),
+                    (10046, 2026, 2),
+                    (10046, 2026, 1),
+                ]
+            ]
+        )
+        session.commit()
+
+    response = client.get(
+        f"/api/v1/companies/{empresa_id}/razao/lotes/{lote_id}/fechamentos",
+        params={"conta_codigo": 10046, "ano": 2026, "limit": 1, "page": 2},
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["total"] == 2
+    assert response.json()["page"] == 2
+    assert response.json()["limit"] == 1
+    assert response.json()["has_next"] is False
+    assert [
+        (item["conta_codigo"], item["ano"], item["mes"])
+        for item in response.json()["items"]
+    ] == [(10046, 2026, 2)]
+
+
+    month_response = client.get(
+        f"/api/v1/companies/{empresa_id}/razao/lotes/{lote_id}/fechamentos",
+        params={"mes": 1, "limit": 100},
+        headers=_auth_headers(usuario),
+    )
+    assert month_response.status_code == 200
+    assert month_response.json()["limit"] == 100
+    assert [item["mes"] for item in month_response.json()["items"]] == [1]
+
+    excessive_limit_response = client.get(
+        f"/api/v1/companies/{empresa_id}/razao/lotes/{lote_id}/fechamentos",
+        params={"limit": 101},
+        headers=_auth_headers(usuario),
+    )
+    assert excessive_limit_response.status_code == 422
+
+
+def test_razao_closings_return_empty_page_for_lote_without_closings(client):
+    usuario, empresa_id, lote_id, _ = _seed_razao_lote_with_lancamento(
+        permissao="leitura",
+        lote_overrides={"warnings_metadata": {"warnings": [LEGACY_BALANCE_WARNING]}},
+    )
+
+    response = client.get(
+        f"/api/v1/companies/{empresa_id}/razao/lotes/{lote_id}/fechamentos",
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["items"] == []
+    assert response.json()["total"] == 0
+    assert response.json()["warnings_saldo"] == [LEGACY_BALANCE_WARNING]
+
+
+def test_razao_closings_limit_balance_warning_sample(client):
+    warnings = [
+        {
+            **LEGACY_BALANCE_WARNING,
+            "linha": linha,
+            "detalhes": {
+                **LEGACY_BALANCE_WARNING["detalhes"],
+                "bloco_id": f"bloco:{linha}",
+            },
+        }
+        for linha in range(1, 102)
+    ]
+    usuario, empresa_id, lote_id, _ = _seed_razao_lote_with_lancamento(
+        permissao="leitura",
+        lote_overrides={"warnings_metadata": {"warnings": warnings}},
+    )
+
+    response = client.get(
+        f"/api/v1/companies/{empresa_id}/razao/lotes/{lote_id}/fechamentos",
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 200
+    assert len(response.json()["warnings_saldo"]) == 100
+    assert response.json()["warnings_saldo_total"] == 101
+    assert response.json()["warnings_saldo_truncados"] is True
+
+
+def test_razao_closings_require_authentication(client):
+    _, empresa_id, lote_id, _ = _seed_razao_lote_with_lancamento()
+
+    response = client.get(
+        f"/api/v1/companies/{empresa_id}/razao/lotes/{lote_id}/fechamentos"
+    )
+
+    assert response.status_code == 401
+
+
+def test_razao_closings_reject_user_without_company_access(client):
+    usuario_sem_acesso = _usuario(
+        login="sem.acesso.fechamentos",
+        email="sem.acesso.fechamentos@example.com",
+    )
+    _, empresa_id, lote_id, _ = _seed_razao_lote_with_lancamento()
+    from tests.conftest import TestingSessionLocal
+
+    with TestingSessionLocal() as session:
+        session.add(usuario_sem_acesso)
+        session.commit()
+        session.refresh(usuario_sem_acesso)
+
+    response = client.get(
+        f"/api/v1/companies/{empresa_id}/razao/lotes/{lote_id}/fechamentos",
+        headers=_auth_headers(usuario_sem_acesso),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["message"] == "Acesso negado"
+
+
+def test_razao_closings_do_not_cross_company_boundaries(client):
+    usuario, empresa_id, _, _ = _seed_razao_lote_with_lancamento()
+    _, outra_empresa_id, outro_lote_id, _ = _seed_razao_lote_with_lancamento(
+        empresa_overrides={
+            "nome_empresa": "Empresa Fechamento Vizinha LTDA",
+            "cnpj_cpf": "77888999000100",
+            "api_key": "api-key-fechamento-vizinha",
+            "cod_dominio": 9304,
+        },
+        lote_overrides={
+            "original_filename": "razao-fechamento-vizinha.xlsx",
+            "file_hash": "sha256:razao-fechamento-vizinha",
+        },
+    )
+
+    response = client.get(
+        f"/api/v1/companies/{empresa_id}/razao/lotes/{outro_lote_id}/fechamentos",
+        headers=_auth_headers(usuario),
+    )
+
+    assert outra_empresa_id != empresa_id
+    assert response.status_code == 404
+    assert response.json()["message"] == "Lote de razão não encontrado"
 
 
 def test_user_without_company_link_cannot_list_razao_lotes(client):
