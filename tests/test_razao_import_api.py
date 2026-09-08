@@ -663,6 +663,26 @@ def test_user_imports_valid_tabular_fixture_through_endpoint(client):
     assert response.json()["warnings"] == []
 
 
+def test_user_imports_dominio_numeric_balances_through_endpoint(client):
+    usuario, empresa_id = _seed_user_company_and_catalog(
+        "operacao",
+        contas=(10001, 20001),
+    )
+
+    response = client.post(
+        f"/api/v1/companies/{empresa_id}/razao/import",
+        files=_upload_fixture_file("razao_dominio_saldos_sintetico.xlsx"),
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "completed"
+    assert response.json()["total_linhas"] == 3
+    assert response.json()["total_importadas"] == 3
+    assert response.json()["total_invalidas"] == 0
+    assert response.json()["warnings"] == []
+
+
 def test_razao_import_rejects_file_cnpj_from_another_company(client):
     from tests.conftest import TestingSessionLocal
 

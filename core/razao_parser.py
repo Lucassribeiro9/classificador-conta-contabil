@@ -80,7 +80,8 @@ def _parse_razao_xlsx(path: str | Path, *, require_metadata: bool) -> RazaoParse
         bloco_numero = 0
         bloco_id: str | None = None
 
-        for row in sheet.iter_rows(values_only=True):
+        for cells in sheet.iter_rows():
+            row = tuple(cell.value for cell in cells)
             if _is_empty_row(row):
                 continue
 
@@ -114,13 +115,16 @@ def _parse_razao_xlsx(path: str | Path, *, require_metadata: bool) -> RazaoParse
                 continue
 
             if _is_balance_row(row):
-                saldo_anterior_atual = _extract_saldo_anterior(row, header_by_column)
+                saldo_anterior_atual = _extract_saldo_anterior(
+                    row, cells, header_by_column
+                )
                 continue
 
             lancamento = _parse_entry_row(
                 row,
                 conta_origem,
                 header_by_column,
+                cells,
                 saldo_anterior_atual,
                 bloco_id,
             )
@@ -289,6 +293,7 @@ def _parse_entry_row(
     row: tuple[Any, ...],
     conta_origem: str | None,
     header_by_column: dict[str, int | None],
+    cells,
     saldo_anterior_atual: dict[str, Any] | None = None,
     bloco_id: str | None = None,
 ) -> dict[str, Any] | None:
@@ -299,9 +304,13 @@ def _parse_entry_row(
     contrapartida = _cell(row, header_by_column["contrapartida"])
     debito = _cell(row, header_by_column["debito"])
     credito = _cell(row, header_by_column["credito"])
-    saldo_anterior = _parse_saldo(_cell(row, header_by_column["saldo_anterior"]))
-    saldo = _parse_saldo(_cell(row, header_by_column["saldo"]))
-    saldo_exercicio = _parse_saldo(_cell(row, header_by_column["saldo_exercicio"]))
+    saldo_anterior = _parse_saldo_cell(
+        row, cells, header_by_column["saldo_anterior"]
+    )
+    saldo = _parse_saldo_cell(row, cells, header_by_column["saldo"])
+    saldo_exercicio = _parse_saldo_cell(
+        row, cells, header_by_column["saldo_exercicio"]
+    )
     resolved_conta_origem = conta_origem or _clean_text(row_conta_origem)
 
     if (
@@ -333,21 +342,36 @@ def _parse_entry_row(
 
 def _extract_saldo_anterior(
     row: tuple[Any, ...],
+    cells,
     header_by_column: dict[str, int | None],
 ) -> dict[str, Any] | None:
     return (
-        _parse_saldo(_cell(row, header_by_column["saldo_anterior"]))
-        or _parse_saldo(_cell(row, header_by_column["saldo"]))
-        or _parse_saldo(_cell(row, header_by_column["saldo_exercicio"]))
+        _parse_saldo_cell(row, cells, header_by_column["saldo_anterior"])
+        or _parse_saldo_cell(row, cells, header_by_column["saldo"])
+        or _parse_saldo_cell(row, cells, header_by_column["saldo_exercicio"])
     )
 
 
-def _parse_saldo(value: Any) -> dict[str, Any] | None:
+def _parse_saldo_cell(
+    row: tuple[Any, ...], cells, index: int | None
+) -> dict[str, Any] | None:
+    value = _cell(row, index)
+    number_format = (
+        None
+        if index is None or index >= len(cells)
+        else cells[index].number_format
+    )
+    return _parse_saldo(value, number_format=number_format)
+
+
+def _parse_saldo(
+    value: Any, *, number_format: str | None = None
+) -> dict[str, Any] | None:
     original = _clean_text(value)
     if original is None:
         return None
 
-    natureza = None
+    natureza = _natureza_from_number_format(value, number_format)
     numeric_text = original
     match = re.search(r"([DC])$", original.strip(), flags=re.IGNORECASE)
     if match:
@@ -355,11 +379,51 @@ def _parse_saldo(value: Any) -> dict[str, Any] | None:
         numeric_text = original[: match.start()].strip()
 
     decimal_value = _parse_decimal_text(numeric_text)
+    if decimal_value is not None:
+        decimal_value = abs(decimal_value)
+    if isinstance(value, (Decimal, int, float)) and _is_supported_saldo_format(
+        number_format
+    ):
+        original = _format_saldo_original(decimal_value, natureza)
     return {
         "valor_original": original,
         "valor_decimal": decimal_value,
         "natureza": natureza,
     }
+
+
+def _natureza_from_number_format(
+    value: Any, number_format: str | None
+) -> str | None:
+    if not isinstance(value, (Decimal, int, float)) or not number_format:
+        return None
+
+    if not _is_supported_saldo_format(number_format):
+        return None
+    if value > 0:
+        return "D"
+    if value < 0:
+        return "C"
+    return None
+
+
+def _is_supported_saldo_format(number_format: str | None) -> bool:
+    if not number_format:
+        return False
+    sections = [
+        re.sub(r"[\s\"]", "", part).lower()
+        for part in number_format.split(";")
+    ]
+    return sections == ["#,##0.00d", "#,##0.00c", "#,##0.00"]
+
+
+def _format_saldo_original(value: Decimal, natureza: str | None) -> str:
+    formatted = (
+        f"{value:,.2f}".replace(",", "_")
+        .replace(".", ",")
+        .replace("_", ".")
+    )
+    return f"{formatted}{natureza or ""}"
 
 
 def _parse_decimal_text(value: Any) -> Decimal | None:

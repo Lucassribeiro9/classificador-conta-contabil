@@ -57,7 +57,8 @@ def import_razao(
     )
     warnings: list[dict[str, Any]] = []
     imported = 0
-    saldo_sequences: dict[str, Decimal] = {}
+    saldo_periodo_sequences: dict[str, Decimal] = {}
+    saldo_exercicio_sequences: dict[str, Decimal] = {}
     saldo_absent_warnings: set[str] = set()
     fechamentos: dict[tuple[int, int, int, int], FechamentoRazaoMensal] = {}
     fechamento_warnings: dict[tuple[int, int, int, int], list[dict[str, Any]]] = {}
@@ -107,7 +108,8 @@ def import_razao(
                 session,
                 fechamentos,
                 fechamento_warnings,
-                saldo_sequences,
+                saldo_periodo_sequences,
+                saldo_exercicio_sequences,
                 lote.id,
                 empresa_id,
                 normalized,
@@ -235,7 +237,8 @@ def _update_fechamento_mensal(
     session: Session,
     fechamentos: dict[tuple[int, int, int, int], FechamentoRazaoMensal],
     fechamento_warnings: dict[tuple[int, int, int, int], list[dict[str, Any]]],
-    saldo_sequences: dict[str, Decimal],
+    saldo_periodo_sequences: dict[str, Decimal],
+    saldo_exercicio_sequences: dict[str, Decimal],
     lote_id: int,
     empresa_id: int,
     lancamento: dict[str, Any],
@@ -248,8 +251,17 @@ def _update_fechamento_mensal(
     bloco_id = str(lancamento["bloco_id"])
     data_lancamento = _parse_date(lancamento["data"])
     key = (empresa_id, conta_codigo, data_lancamento.year, data_lancamento.month)
-    saldo_calculado = _calcula_saldo_lancamento(
-        saldo_sequences, bloco_id, lancamento
+    saldo_calculado_periodo = _calcula_saldo_lancamento(
+        saldo_periodo_sequences,
+        f"{bloco_id}:{data_lancamento.year}:{data_lancamento.month}",
+        lancamento,
+        incluir_saldo_anterior=False,
+    )
+    saldo_calculado_exercicio = _calcula_saldo_lancamento(
+        saldo_exercicio_sequences,
+        bloco_id,
+        lancamento,
+        incluir_saldo_anterior=True,
     )
     observed = _observed_sequence_balance(lancamento)
     structured_warning: dict[str, Any] | None = None
@@ -273,7 +285,9 @@ def _update_fechamento_mensal(
                 "warnings": [mensagem],
             }
             saldo_absent_warnings.add(bloco_id)
-    elif observed.get("decimal") is None or observed.get("natureza") not in {"D", "C"}:
+    elif observed.get("decimal") is None or (
+        observed["decimal"] != 0 and observed.get("natureza") not in {"D", "C"}
+    ):
         mensagem = (
             "Saldo informado invalido; conferencia por saldo limitada para esta linha."
         )
@@ -284,7 +298,7 @@ def _update_fechamento_mensal(
             "detalhes": {
                 "bloco_id": bloco_id,
                 "conta_codigo": conta_codigo,
-                "saldo_calculado": _balance_payload(saldo_calculado),
+                "saldo_calculado": _balance_payload(saldo_calculado_periodo),
                 "saldo_observado": {
                     "fonte": "saldo",
                     "valor_original": observed.get("original"),
@@ -298,7 +312,7 @@ def _update_fechamento_mensal(
             },
             "warnings": [mensagem],
         }
-    elif _signed_balance(observed["decimal"], observed["natureza"]) != saldo_calculado:
+    elif _signed_balance(observed["decimal"], observed["natureza"]) != saldo_calculado_periodo:
         mensagem = (
             "Saldo observado diverge do saldo calculado para a conta do razao."
         )
@@ -309,7 +323,7 @@ def _update_fechamento_mensal(
             "detalhes": {
                 "bloco_id": bloco_id,
                 "conta_codigo": conta_codigo,
-                "saldo_calculado": _balance_payload(saldo_calculado),
+                "saldo_calculado": _balance_payload(saldo_calculado_periodo),
                 "saldo_observado": {
                     "fonte": "saldo",
                     "valor_decimal": str(observed["decimal"]),
@@ -347,17 +361,27 @@ def _update_fechamento_mensal(
     fechamento.saldo_observado_decimal = closing_observed.get("decimal")
     fechamento.saldo_observado_natureza = closing_observed.get("natureza")
     fechamento.saldo_observado_fonte = observed_source
-    fechamento.saldo_calculado_decimal = abs(saldo_calculado)
+    fechamento.saldo_calculado_decimal = abs(
+        saldo_calculado_exercicio
+        if observed_source == "saldo_exercicio"
+        else saldo_calculado_periodo
+    )
 
 
 def _calcula_saldo_lancamento(
     saldo_sequences: dict[str, Decimal],
     bloco_id: str,
     lancamento: dict[str, Any],
+    *,
+    incluir_saldo_anterior: bool,
 ) -> Decimal:
     """Aplica o lancamento ao saldo assinado e isolado do bloco."""
     if bloco_id not in saldo_sequences:
-        saldo_sequences[bloco_id] = _saldo_inicial(lancamento)
+        saldo_sequences[bloco_id] = (
+            _saldo_inicial(lancamento)
+            if incluir_saldo_anterior
+            else Decimal("0")
+        )
 
     valor = Decimal(str(lancamento["valor"]))
     if lancamento["direcao"] == "debito":
@@ -416,7 +440,7 @@ def _balance_payload(valor: Decimal) -> dict[str, str]:
     }
 
 
-def _signed_balance(valor: Decimal, natureza: str) -> Decimal:
+def _signed_balance(valor: Decimal, natureza: str | None) -> Decimal:
     if natureza == "C":
         return -abs(valor)
     return abs(valor)
