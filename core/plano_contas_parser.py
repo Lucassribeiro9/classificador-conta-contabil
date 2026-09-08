@@ -18,11 +18,12 @@ _REQUIRED_COLUMNS = {
 
 
 def parse_plano_contas_xlsx(path: str | Path) -> list[dict[str, Any]]:
-    workbook = load_workbook(path, read_only=True, data_only=True)
+    workbook = load_workbook(path, read_only=False, data_only=True)
     try:
         sheet = workbook.active
 
         header_by_column = _find_header_by_column(sheet.iter_rows(values_only=True))
+        merged_values_by_cell = _merged_values_by_cell(sheet, header_by_column)
         contas: list[dict[str, Any]] = []
 
         for row_number, row in enumerate(
@@ -32,9 +33,15 @@ def parse_plano_contas_xlsx(path: str | Path) -> list[dict[str, Any]]:
             ),
             start=header_by_column["row_number"] + 1,
         ):
-            if _is_empty_row(row):
+            if _is_empty_row(row) or _is_system_footer_row(
+                row_number, row, sheet
+            ):
                 continue
-            contas.append(_parse_account_row(row_number, row, header_by_column))
+            contas.append(
+                _parse_account_row(
+                    row_number, row, header_by_column, merged_values_by_cell
+                )
+            )
 
         return contas
     finally:
@@ -48,6 +55,8 @@ def _find_header_by_column(rows) -> dict[str, int]:
             for index, value in enumerate(row)
             if _normalize_header(value)
         }
+        if "tipo" not in normalized_cells and "t" in normalized_cells:
+            normalized_cells["tipo"] = normalized_cells["t"]
         if all(column in normalized_cells for column in _REQUIRED_COLUMNS):
             return {
                 "row_number": row_number,
@@ -67,9 +76,10 @@ def _parse_account_row(
     row_number: int,
     row: tuple[Any, ...],
     header_by_column: dict[str, int],
+    merged_values_by_cell: dict[tuple[int, int], Any],
 ) -> dict[str, Any]:
     raw_account = {
-        field: _cell(row, column_index)
+        field: _cell(row, column_index, merged_values_by_cell, row_number)
         for field, column_index in header_by_column.items()
         if field != "row_number"
     }
@@ -105,10 +115,63 @@ def _parse_account_row(
     }
 
 
-def _cell(row: tuple[Any, ...], index: int) -> Any:
+def _merged_values_by_cell(
+    sheet, header_by_column: dict[str, int]
+) -> dict[tuple[int, int], Any]:
+    column_indexes = {
+        index for field, index in header_by_column.items() if field != "row_number"
+    }
+    values: dict[tuple[int, int], Any] = {}
+    first_data_row = header_by_column["row_number"] + 1
+
+    for merged_range in sheet.merged_cells.ranges:
+        anchor_value = sheet.cell(
+            row=merged_range.min_row, column=merged_range.min_col
+        ).value
+        for index in column_indexes:
+            column = index + 1
+            if merged_range.min_col <= column <= merged_range.max_col:
+                for row_number in range(
+                    max(first_data_row, merged_range.min_row),
+                    merged_range.max_row + 1,
+                ):
+                    values[(row_number, index)] = anchor_value
+
+    return values
+
+
+def _cell(
+    row: tuple[Any, ...],
+    index: int,
+    merged_values_by_cell: dict[tuple[int, int], Any],
+    row_number: int,
+) -> Any:
     if index >= len(row):
         return None
-    return row[index]
+
+    value = row[index]
+    if not _is_blank_value(value):
+        return value
+    return merged_values_by_cell.get((row_number, index))
+
+
+def _is_system_footer_row(row_number: int, row: tuple[Any, ...], sheet) -> bool:
+    populated_indexes = [
+        index for index, value in enumerate(row) if not _is_blank_value(value)
+    ]
+    if len(populated_indexes) != 1:
+        return False
+
+    index = populated_indexes[0]
+    value = row[index]
+    if not isinstance(value, str):
+        return False
+
+    coordinate = sheet.cell(row=row_number, column=index + 1).coordinate
+    return any(
+        coordinate in merged_range and merged_range.max_col > merged_range.min_col
+        for merged_range in sheet.merged_cells.ranges
+    )
 
 
 def _is_empty_row(row: tuple[Any, ...]) -> bool:
