@@ -174,7 +174,7 @@ def test_import_razao_persiste_saldos_normalizados_do_parser(session, tmp_path):
                 "20001",
                 250.75,
                 None,
-                "1.250,75D",
+                "250,75D",
                 "1.250,75D",
             ],
         ],
@@ -193,8 +193,8 @@ def test_import_razao_persiste_saldos_normalizados_do_parser(session, tmp_path):
     assert lancamento.saldo_anterior_original == "1.000,00D"
     assert lancamento.saldo_anterior_decimal == Decimal("1000.00")
     assert lancamento.saldo_anterior_natureza == "D"
-    assert lancamento.saldo_original == "1.250,75D"
-    assert lancamento.saldo_decimal == Decimal("1250.75")
+    assert lancamento.saldo_original == "250,75D"
+    assert lancamento.saldo_decimal == Decimal("250.75")
     assert lancamento.saldo_natureza == "D"
     assert lancamento.saldo_exercicio_original == "1.250,75D"
     assert lancamento.saldo_exercicio_decimal == Decimal("1250.75")
@@ -216,11 +216,11 @@ def test_import_razao_mantem_sequencias_independentes_em_blocos_da_mesma_conta(
             ["Conta:", "10046", "BCO. TESTE"],
             ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito", "Saldo"],
             [None, None, "Saldo anterior", None, None, None, "1.000,00D"],
-            ["2026-01-02", "41", "Pagamento A", "20001", None, 100.00, "900,00D"],
+            ["2026-01-02", "41", "Pagamento A", "20001", None, 100.00, "100,00C"],
             ["Conta:", "10046", "BCO. TESTE"],
             ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito", "Saldo"],
             [None, None, "Saldo anterior", None, None, None, "2.000,00D"],
-            ["2026-02-02", "42", "Pagamento B", "20001", None, 100.00, "1.900,00D"],
+            ["2026-02-02", "42", "Pagamento B", "20001", None, 100.00, "100,00C"],
         ],
     )
 
@@ -238,7 +238,7 @@ def test_import_razao_mantem_sequencias_independentes_em_blocos_da_mesma_conta(
     assert result.warnings == []
 
 
-def test_import_razao_compara_sequencia_com_saldo_e_nao_com_saldo_exercicio(
+def test_import_razao_valida_saldo_do_periodo_e_fecha_pelo_saldo_exercicio(
     session,
     tmp_path,
 ):
@@ -262,7 +262,7 @@ def test_import_razao_compara_sequencia_com_saldo_e_nao_com_saldo_exercicio(
                 "Saldo-Exercicio",
             ],
             [None, None, "Saldo anterior", None, None, None, "1.000,00D", None],
-            ["2026-01-31", "42", "Pagamento", "20001", None, 100.00, "900,00D", "1.900,00D"],
+            ["2026-01-31", "42", "Pagamento", "20001", None, 100.00, "100,00C", "900,00D"],
         ],
     )
 
@@ -278,7 +278,7 @@ def test_import_razao_compara_sequencia_com_saldo_e_nao_com_saldo_exercicio(
     assert result.status == "completed"
     assert result.warnings == []
     assert fechamento.saldo_observado_fonte == "saldo_exercicio"
-    assert fechamento.saldo_observado_decimal == Decimal("1900.00")
+    assert fechamento.saldo_observado_decimal == Decimal("900.00")
     assert fechamento.saldo_calculado_decimal == Decimal("900.00")
 
 
@@ -321,8 +321,8 @@ def test_import_razao_registra_divergencia_estruturada_sem_invalidar_lancamento(
                 "bloco_id": "bloco:1",
                 "conta_codigo": 10046,
                 "saldo_calculado": {
-                    "valor_decimal": "900.00",
-                    "natureza": "D",
+                    "valor_decimal": "100",
+                    "natureza": "C",
                 },
                 "saldo_observado": {
                     "fonte": "saldo",
@@ -395,7 +395,7 @@ def test_import_razao_saldo_invalido_mantem_sequencia_e_recupera_linha_seguinte(
             ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito", "Saldo"],
             [None, None, "Saldo anterior", None, None, None, "1.000,00D"],
             ["2026-01-02", "41", "Pagamento A", "20001", None, 100.00, "abcD"],
-            ["2026-01-03", "42", "Pagamento B", "20001", None, 50.00, "850,00D"],
+            ["2026-01-03", "42", "Pagamento B", "20001", None, 50.00, "150,00C"],
         ],
     )
 
@@ -416,8 +416,8 @@ def test_import_razao_saldo_invalido_mantem_sequencia_e_recupera_linha_seguinte(
         "bloco_id": "bloco:1",
         "conta_codigo": 10046,
         "saldo_calculado": {
-            "valor_decimal": "900.00",
-            "natureza": "D",
+            "valor_decimal": "100",
+            "natureza": "C",
         },
         "saldo_observado": {
             "fonte": "saldo",
@@ -445,7 +445,7 @@ def test_import_razao_continua_calculo_apos_lacuna_de_saldo(session, tmp_path):
             ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito", "Saldo"],
             [None, None, "Saldo anterior", None, None, None, "1.000,00D"],
             ["2026-01-02", "41", "Pagamento A", "20001", None, 100.00, None],
-            ["2026-01-03", "42", "Pagamento B", "20001", None, 50.00, "850,00D"],
+            ["2026-01-03", "42", "Pagamento B", "20001", None, 50.00, "150,00C"],
         ],
     )
 
@@ -461,7 +461,7 @@ def test_import_razao_continua_calculo_apos_lacuna_de_saldo(session, tmp_path):
     assert result.total_invalidas == 0
     assert [warning["codigo"] for warning in result.warnings] == ["saldo_ausente"]
     fechamento = session.query(FechamentoRazaoMensal).one()
-    assert fechamento.saldo_calculado_decimal == Decimal("850.00")
+    assert fechamento.saldo_calculado_decimal == Decimal("150.00")
     assert [warning["codigo"] for warning in fechamento.warnings_saldo] == [
         "saldo_ausente"
     ]
@@ -482,8 +482,8 @@ def test_import_razao_calcula_troca_entre_natureza_devedora_e_credora(
             ["Conta:", "10046", "BCO. TESTE"],
             ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito", "Saldo"],
             [None, None, "Saldo anterior", None, None, None, "50,00D"],
-            ["2026-01-02", "41", "Credito", "20001", None, 100.00, "50,00C"],
-            ["2026-01-03", "42", "Debito", "20001", 75.00, None, "25,00D"],
+            ["2026-01-02", "41", "Credito", "20001", None, 100.00, "100,00C"],
+            ["2026-01-03", "42", "Debito", "20001", 75.00, None, "25,00C"],
         ],
     )
 
@@ -500,7 +500,7 @@ def test_import_razao_calcula_troca_entre_natureza_devedora_e_credora(
     assert result.warnings == []
     fechamento = session.query(FechamentoRazaoMensal).one()
     assert fechamento.saldo_calculado_decimal == Decimal("25.00")
-    assert fechamento.saldo_observado_natureza == "D"
+    assert fechamento.saldo_observado_natureza == "C"
 
 
 def test_import_razao_deriva_fechamento_mensal_do_ultimo_saldo_observado(session, tmp_path):
@@ -528,8 +528,8 @@ def test_import_razao_deriva_fechamento_mensal_do_ultimo_saldo_observado(session
                 "Saldo-Exercicio",
             ],
             [None, None, "Saldo anterior", None, None, None, "1.000,00D", None],
-            ["2026-01-10", "41", "Pagamento A", "20001", None, 100.00, "900,00D", "900,00D"],
-            ["2026-01-31", "42", "Pagamento B", "20001", None, 50.00, "850,00D", "850,00D"],
+            ["2026-01-10", "41", "Pagamento A", "20001", None, 100.00, "100,00C", "900,00D"],
+            ["2026-01-31", "42", "Pagamento B", "20001", None, 50.00, "150,00C", "850,00D"],
         ],
     )
 
@@ -1318,3 +1318,49 @@ def test_import_razao_account_links_are_isolated_by_company(session, tmp_path):
     )
     assert vinculos_empresa_a == 2
     assert vinculos_empresa_b == 2
+
+
+def test_import_razao_aceita_saldo_zero_neutro_sem_warning(session, tmp_path):
+    empresa = _empresa()
+    usuario = _usuario()
+    session.add_all([empresa, usuario, _conta(10046), _conta(20001)])
+    session.flush()
+    xlsx_path = tmp_path / "razao-saldo-zero-neutro.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["Conta:", "10046", "BANCO TESTE"])
+    sheet.append(
+        [
+            "Data",
+            "Numero",
+            "Historico",
+            "Contrapartida",
+            "Debito",
+            "Credito",
+            "Saldo",
+            "Saldo-Exercicio",
+        ]
+    )
+    sheet.append([None, None, "Saldo anterior", None, None, None, "100,00D", None])
+    sheet.append(["2026-01-31", "42", "QUITACAO", "20001", None, 100, "100,00C", 0])
+    for cell in (sheet["G4"], sheet["H4"]):
+        cell.number_format = '#,##0.00"d";#,##0.00"c";#,##0.00'
+    workbook.save(xlsx_path)
+    workbook.close()
+
+    result = import_razao(
+        session,
+        xlsx_path,
+        empresa_id=empresa.id,
+        usuario_id=usuario.id,
+        original_filename="razao-saldo-zero-neutro.xlsx",
+    )
+
+    lancamento = session.query(LancamentoRazaoNormalizado).one()
+    fechamento = session.query(FechamentoRazaoMensal).one()
+    assert result.status == "completed"
+    assert result.warnings == []
+    assert lancamento.saldo_decimal == Decimal("100.00")
+    assert lancamento.saldo_natureza == "C"
+    assert fechamento.saldo_observado_decimal == Decimal("0")
+    assert fechamento.saldo_observado_natureza is None

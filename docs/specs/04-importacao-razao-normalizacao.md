@@ -106,6 +106,14 @@ Cada saldo preservado deve manter:
 - `valor_decimal`, como numero normalizado com precisao decimal;
 - `natureza`, com valor `D` ou `C`, quando informada.
 
+Quando o saldo vier como texto, o sufixo `D` ou `C` tem prioridade. Quando a
+celula contiver valor numerico, a natureza so pode ser derivada de um formato
+contabil explicitamente suportado, com secoes equivalentes a positivo `D`,
+negativo `C` e zero neutro. Para essas celulas, `valor_original` preserva a
+exibicao normalizada em formato brasileiro, `valor_decimal` armazena a
+magnitude positiva e `natureza` preserva o sinal contabil. Saldo numerico zero
+e valido com `natureza` ausente e nao gera `saldo_invalido`.
+
 A natureza `D` ou `C` pertence ao saldo e nao substitui a regra principal de
 debito/credito do lancamento. Saldos nao definem `valor`, `direcao`,
 `conta_debito` ou `conta_credito` do lancamento.
@@ -131,11 +139,14 @@ Cada bloco possui sua propria sequencia independente.
 
 Regras alvo:
 
-- `saldo_anterior` abre a sequencia do bloco de conta;
-- lancamentos validos atualizam o saldo calculado conforme debito/credito e
-  natureza do saldo observado;
-- `saldo` representa o saldo observado apos a linha ou ponto exibido pelo
-  relatorio;
+- `saldo_anterior` abre somente a sequencia acumulada do exercicio;
+- `saldo` representa a movimentacao acumulada da competencia mensal e sua
+  sequencia calculada inicia em zero a cada empresa, lote, bloco, ano e mes;
+- `saldo_exercicio` representa o acumulado do exercicio e sua sequencia
+  calculada inicia em `saldo_anterior`, sem reinicio mensal;
+- lancamentos validos atualizam as duas sequencias conforme debito/credito;
+- a validacao de `saldo` usa a sequencia mensal, enquanto o fechamento que
+  possui `saldo_exercicio` compara e preserva a sequencia do exercicio;
 - divergencia recuperavel entre saldo calculado e saldo observado gera warning
   e nao bloqueia linhas validas;
 - erro bloqueante de sequencia deve ficar restrito a casos em que a conta do
@@ -176,8 +187,15 @@ Eles servem para conferencia, fechamento mensal e diagnostico de divergencias.
 - Testar captura de `saldo_anterior`, `saldo` e `saldo_exercicio`.
 - Testar normalizacao de valor decimal, natureza `D`/`C` e valor original dos
   saldos.
+- Testar saldos numericos cujo `number_format` defina positivo `D`, negativo
+  `C` e zero neutro.
+- Testar que formato numerico nao suportado nao infere natureza contabil.
+- Testar saldo anterior deslocado no layout real sem depender da coluna
+  `Numero`.
 - Testar troca de natureza entre saldos devedores e credores.
-- Testar sequencia de saldo independente por bloco de conta.
+- Testar sequencia de saldo independente por bloco de conta e competencia mensal.
+- Testar que `saldo` reinicia em zero por competencia e que `saldo_exercicio`
+  inicia em `saldo_anterior` e permanece acumulado no bloco.
 - Testar divergencia recuperavel de saldo como warning.
 - Testar erro bloqueante apenas para sequencia sem conta, empresa ou estrutura
   minima confiavel.
@@ -211,7 +229,8 @@ Eles servem para conferencia, fechamento mensal e diagnostico de divergencias.
 - Sempre: manter saldos fora da chave de deduplicacao.
 - Sempre: manter saldos fora das features de ML.
 - Sempre: preservar `valor_original`, `valor_decimal` e `natureza` `D`/`C` dos saldos.
-- Sempre: tratar sequencia de saldo por bloco de conta.
+- Sempre: tratar `saldo` por bloco e competencia mensal, com inicio em zero.
+- Sempre: tratar `saldo_exercicio` por bloco, com inicio em `saldo_anterior`.
 - Sempre: permitir importacao parcial, persistindo linhas validas e registrando warnings para invalidas.
 - Sempre: importar arquivos antigos sem saldo, registrando aviso de conciliacao por saldo indisponivel.
 - Sempre: armazenar warnings de linhas invalidas e divergencias recuperaveis em metadata JSON do lote na primeira fase.
@@ -274,6 +293,10 @@ Eles servem para conferencia, fechamento mensal e diagnostico de divergencias.
   permanece como diagnostico secundario.
 - Cada saldo preserva `valor_original`, `valor_decimal` e `natureza` `D`/`C`,
   quando informada.
+- Saldos numericos derivam natureza apenas de formato contabil explicitamente
+  suportado e preservam o decimal como magnitude positiva.
+- Saldo numerico zero e valido e neutro, sem `saldo_invalido` por natureza
+  ausente.
 - Divergencia recuperavel de saldo gera warning e nao bloqueia a importacao das
   linhas validas.
 - Arquivos antigos sem colunas de saldo continuam importaveis com aviso

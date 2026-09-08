@@ -1,6 +1,8 @@
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
+import re
+from zipfile import ZIP_DEFLATED, ZipFile
 
 import pytest
 from openpyxl import Workbook
@@ -886,3 +888,188 @@ def test_build_razao_dedup_key_changes_for_composite_key_fields(changed_fields):
     assert build_razao_dedup_key(base_lancamento) != build_razao_dedup_key(
         changed_lancamento
     )
+
+
+def test_parse_razao_interpreta_saldo_numerico_formatado_como_devedor(tmp_path):
+    xlsx_path = tmp_path / "razao-saldo-numerico-devedor.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(
+        [
+            "Data",
+            "Numero",
+            "Conta_Origem",
+            "Historico",
+            "Contrapartida",
+            "Debito",
+            "Credito",
+            "Saldo",
+            "Saldo-Exercicio",
+        ]
+    )
+    sheet.append(
+        [
+            "31/01/2024",
+            "9001",
+            "10046",
+            "PAGAMENTO TESTE",
+            "20001",
+            49.92,
+            None,
+            1250.75,
+            1250.75,
+        ]
+    )
+    for cell in (sheet["H2"], sheet["I2"]):
+        cell.number_format = '#,##0.00"d";#,##0.00"c";#,##0.00'
+    workbook.save(xlsx_path)
+    workbook.close()
+
+    lancamento = parse_razao_xlsx(xlsx_path)[0]
+
+    assert lancamento["saldo"] == {
+        "valor_original": "1.250,75D",
+        "valor_decimal": Decimal("1250.75"),
+        "natureza": "D",
+    }
+    assert lancamento["saldo_exercicio"] == lancamento["saldo"]
+
+
+def test_parse_razao_interpreta_saldo_numerico_formatado_como_credor(tmp_path):
+    xlsx_path = tmp_path / "razao-saldo-numerico-credor.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(
+        [
+            "Data",
+            "Numero",
+            "Conta_Origem",
+            "Historico",
+            "Contrapartida",
+            "Debito",
+            "Credito",
+            "Saldo",
+        ]
+    )
+    sheet.append(
+        [
+            "31/01/2024",
+            "9001",
+            "10046",
+            "PAGAMENTO TESTE",
+            "20001",
+            49.92,
+            None,
+            -2596.63,
+        ]
+    )
+    sheet["H2"].number_format = '#,##0.00"D" ; #,##0.00"C" ; #,##0.00'
+    workbook.save(xlsx_path)
+    workbook.close()
+
+    saldo = parse_razao_xlsx(xlsx_path)[0]["saldo"]
+
+    assert saldo == {
+        "valor_original": "2.596,63C",
+        "valor_decimal": Decimal("2596.63"),
+        "natureza": "C",
+    }
+
+
+def test_parse_razao_preserva_saldo_zero_como_neutro(tmp_path):
+    xlsx_path = tmp_path / "razao-saldo-zero.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(
+        [
+            "Data",
+            "Numero",
+            "Conta_Origem",
+            "Historico",
+            "Contrapartida",
+            "Debito",
+            "Credito",
+            "Saldo",
+        ]
+    )
+    sheet.append(
+        ["31/01/2024", "9001", "10046", "SALDO ZERO", "20001", 49.92, None, 0]
+    )
+    sheet["H2"].number_format = '#,##0.00"d";#,##0.00"c";#,##0.00'
+    workbook.save(xlsx_path)
+    workbook.close()
+
+    saldo = parse_razao_xlsx(xlsx_path)[0]["saldo"]
+
+    assert saldo == {
+        "valor_original": "0,00",
+        "valor_decimal": Decimal("0"),
+        "natureza": None,
+    }
+
+
+def test_parse_razao_aceita_linha_curta_sem_celula_de_saldo(tmp_path):
+    xlsx_path = tmp_path / "razao-linha-curta.xlsx"
+    source_path = tmp_path / "razao-com-dimensao.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append([
+        "Data", "Numero", "Conta_Origem", "Historico", "Contrapartida",
+        "Debito", "Credito", "Saldo", "Saldo-Exercicio",
+    ])
+    sheet.append([
+        "31/01/2024", "9001", "10046", "PAGAMENTO SEM SALDO",
+        "20001", 49.92, None,
+    ])
+    workbook.save(source_path)
+    workbook.close()
+
+    with ZipFile(source_path) as source, ZipFile(
+        xlsx_path, "w", ZIP_DEFLATED
+    ) as target:
+        for item in source.infolist():
+            content = source.read(item.filename)
+            if item.filename == "xl/worksheets/sheet1.xml":
+                content = re.sub(br"<dimension[^>]*(?:/>|>.*?</dimension>)", b"", content)
+            target.writestr(item, content)
+
+    lancamento = parse_razao_xlsx(xlsx_path)[0]
+
+    assert "saldo" not in lancamento
+    assert "saldo_exercicio" not in lancamento
+
+
+def test_parse_razao_fixture_sintetica_preserva_saldos_do_layout_real():
+    result = parse_razao_xlsx_with_metadata(
+        FIXTURES_DIR / "razao_dominio_saldos_sintetico.xlsx"
+    )
+
+    assert len(result.lancamentos) == 3
+    assert all(lancamento["numero"] is None for lancamento in result.lancamentos)
+    assert result.lancamentos[0]["saldo_anterior"] == {
+        "valor_original": "100,00D",
+        "valor_decimal": Decimal("100"),
+        "natureza": "D",
+    }
+    assert [lancamento["saldo"] for lancamento in result.lancamentos] == [
+        {
+            "valor_original": "25,00C",
+            "valor_decimal": Decimal("25"),
+            "natureza": "C",
+        },
+        {
+            "valor_original": "100,00C",
+            "valor_decimal": Decimal("100"),
+            "natureza": "C",
+        },
+        {
+            "valor_original": "110,00C",
+            "valor_decimal": Decimal("110"),
+            "natureza": "C",
+        },
+    ]
+    assert result.lancamentos[-1]["saldo_exercicio"] == {
+        "valor_original": "10,00C",
+        "valor_decimal": Decimal("10"),
+        "natureza": "C",
+    }
