@@ -32,6 +32,10 @@ Sucesso significa que o sistema consegue importar o arquivo de plano de contas, 
 
 Parser deve retornar objetos normalizados antes de persistir. Persistencia deve ser separada da leitura do arquivo.
 
+O campo canonico `tipo` aceita os cabecalhos fisicos `Tipo` e `T`. Arquivos
+exportados pelo Dominio podem usar celulas mescladas; o parser deve resolver o valor
+pela celula inicial da regiao mesclada, sem alterar a planilha.
+
 Exemplo de shape esperado:
 
 ```python
@@ -49,6 +53,8 @@ Exemplo de shape esperado:
 
 - Testar parser ignorando cabecalho do relatorio.
 - Testar leitura de codigo, tipo, classificacao, nome e grau.
+- Testar os cabecalhos fisicos `Tipo` e `T` e a leitura de campos em celulas mescladas.
+- Testar que rodape do sistema sem estrutura de conta seja ignorado sem aceitar conta parcial.
 - Testar identificacao de contas sinteticas e analiticas.
 - Testar importacao idempotente.
 - Testar atualizacao de nome/classificacao quando a conta ja existe.

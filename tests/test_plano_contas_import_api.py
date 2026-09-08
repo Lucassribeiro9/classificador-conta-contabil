@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
+from pathlib import Path
 
 import jwt
 import pytest
@@ -11,6 +12,7 @@ from core.models import AuditEvent, Usuario
 
 
 password_hash = PasswordHash.recommended()
+FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
 
 @pytest.fixture(autouse=True)
@@ -84,6 +86,10 @@ def _plano_contas_xlsx() -> bytes:
     return buffer.read()
 
 
+def _dominio_plano_contas_xlsx() -> bytes:
+    return (FIXTURES_DIR / "plano_contas_dominio_sintetico.xlsx").read_bytes()
+
+
 def _invalid_plano_contas_xlsx() -> bytes:
     workbook = Workbook()
     sheet = workbook.active
@@ -123,6 +129,30 @@ def test_admin_imports_plano_contas_and_receives_summary(client):
     response = client.post(
         "/api/v1/admin/plano-contas/import",
         files=_upload_file(),
+        headers=_auth_headers(admin),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "criadas": 2,
+        "atualizadas": 0,
+        "ignoradas": 0,
+        "invalidas": 0,
+    }
+
+
+def test_admin_imports_dominio_plano_contas_layout(client):
+    admin = _seed_user(_usuario())
+
+    response = client.post(
+        "/api/v1/admin/plano-contas/import",
+        files={
+            "file": (
+                "plano-contas-dominio.xlsx",
+                _dominio_plano_contas_xlsx(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
         headers=_auth_headers(admin),
     )
 
