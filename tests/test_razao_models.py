@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -11,9 +11,12 @@ from core.database import Base
 from core.models import (
     Empresa,
     FechamentoRazaoMensal,
+    IdentidadeServico,
     LancamentoRazaoNormalizado,
     LoteImportacaoRazao,
+    TentativaImportacaoRazao,
     Usuario,
+    WarningImportacaoRazao,
 )
 
 
@@ -54,6 +57,15 @@ def _usuario() -> Usuario:
     )
 
 
+def _identidade_servico() -> IdentidadeServico:
+    return IdentidadeServico(
+        identifier="n8n-razao",
+        nome="Integracao Razao",
+        credential_hash="hash-seguro",
+        credential_fingerprint="fp_razao",
+    )
+
+
 def test_lote_importacao_razao_can_be_persisted_with_file_status_counters_and_metadata(
     session,
 ):
@@ -88,6 +100,118 @@ def test_lote_importacao_razao_can_be_persisted_with_file_status_counters_and_me
     assert saved.warnings_metadata["warnings"][0]["linha"] == 12
     assert isinstance(saved.created_at, datetime)
     assert isinstance(saved.updated_at, datetime)
+
+
+def test_lote_importacao_razao_starts_as_queued_with_unknown_total_and_zero_progress(
+    session,
+):
+    lote = LoteImportacaoRazao(
+        empresa=_empresa(),
+        usuario=_usuario(),
+        original_filename="razao-anual.xlsx",
+        file_hash="sha256:queued-defaults",
+    )
+
+    session.add(lote)
+    session.commit()
+
+    saved = session.query(LoteImportacaoRazao).one()
+    assert saved.status == "queued"
+    assert saved.total_linhas is None
+    assert saved.linhas_processadas == 0
+    assert saved.total_importadas == 0
+    assert saved.total_invalidas == 0
+    assert saved.warnings_total == 0
+    assert saved.warnings_metadata == {"totals_by_code": {}}
+    assert saved.attempt_count == 0
+
+
+def test_lote_importacao_razao_persists_lease_attempt_failure_and_normalized_warning(
+    session,
+):
+    now = datetime.now(timezone.utc)
+    lote = LoteImportacaoRazao(
+        empresa=_empresa(),
+        usuario=_usuario(),
+        original_filename="razao-anual.xlsx",
+        file_hash="sha256:async-roundtrip",
+        status="failed",
+        total_linhas=10,
+        linhas_processadas=10,
+        total_importadas=9,
+        total_invalidas=1,
+        warnings_total=1,
+        warnings_metadata={"totals_by_code": {"saldo_divergente": 1}},
+        attempt_count=1,
+        lease_token="23fe98b0-56d1-4a66-b456-620459f40b1c",
+        lease_owner="worker-1",
+        lease_expires_at=now,
+        heartbeat_at=now,
+        error_code="processing_failed",
+        error_message="Falha segura de processamento.",
+        error_request_id="request-123",
+        failed_at=now,
+    )
+    lote.tentativas.append(
+        TentativaImportacaoRazao(
+            numero=1,
+            started_at=now,
+            finished_at=now,
+            resultado="failed",
+            error_code="processing_failed",
+            error_message="Falha segura de processamento.",
+            error_request_id="request-123",
+        )
+    )
+    lote.warnings_normalizados.append(
+        WarningImportacaoRazao(
+            linha=None,
+            codigo="saldo_divergente",
+            mensagem="Saldo divergente no bloco.",
+            detalhes={"conta_codigo": 10046},
+        )
+    )
+
+    session.add(lote)
+    session.commit()
+
+    saved = session.query(LoteImportacaoRazao).one()
+    assert saved.lease_owner == "worker-1"
+    assert saved.error_request_id == "request-123"
+    assert saved.tentativas[0].resultado == "failed"
+    assert saved.warnings_normalizados[0].linha is None
+    assert saved.warnings_normalizados[0].detalhes == {"conta_codigo": 10046}
+
+
+def test_lote_importacao_razao_accepts_service_identity_as_the_only_requester(session):
+    lote = LoteImportacaoRazao(
+        empresa=_empresa(),
+        identidade_servico=_identidade_servico(),
+        original_filename="razao-integracao.xlsx",
+        file_hash="sha256:service-requester",
+    )
+
+    session.add(lote)
+    session.commit()
+
+    saved = session.query(LoteImportacaoRazao).one()
+    assert saved.usuario_id is None
+    assert saved.identidade_servico.identifier == "n8n-razao"
+
+
+def test_migration_defines_safe_async_job_and_warning_contract():
+    migration_files = list(
+        Path("alembic/versions").glob("*_add_razao_async_jobs_and_warnings.py")
+    )
+    assert len(migration_files) == 1
+    migration = migration_files[0].read_text()
+
+    assert "uq_lotes_importacao_razao_empresa_file_hash" in migration
+    assert "Migration bloqueada: lotes duplicados" in migration
+    assert '"tentativas_importacao_razao"' in migration
+    assert '"warnings_importacao_razao"' in migration
+    assert "Downgrade bloqueado" in migration
+    assert "def downgrade" in migration
 
 
 def test_lancamento_razao_normalizado_can_be_persisted_with_lote_and_company(session):
