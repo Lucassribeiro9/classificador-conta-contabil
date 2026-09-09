@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Optional
 from decimal import Decimal
 
@@ -447,8 +447,40 @@ class LoteImportacaoRazao(Base):
     __tablename__ = "lotes_importacao_razao"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('processing', 'completed', 'completed_with_warnings', 'failed')",
+            "status IN ('queued', 'processing', 'completed', 'completed_with_warnings', 'failed')",
             name="ck_lotes_importacao_razao_status",
+        ),
+        CheckConstraint(
+            "total_linhas IS NULL OR total_linhas >= 0",
+            name="ck_lotes_importacao_razao_total_linhas",
+        ),
+        CheckConstraint(
+            "linhas_processadas >= 0 AND total_importadas >= 0 "
+            "AND total_invalidas >= 0 AND warnings_total >= 0",
+            name="ck_lotes_importacao_razao_contadores_nao_negativos",
+        ),
+        CheckConstraint(
+            "total_linhas IS NULL OR linhas_processadas <= total_linhas",
+            name="ck_lotes_importacao_razao_processadas_ate_total",
+        ),
+        CheckConstraint(
+            "(status IN ('queued', 'processing') AND "
+            "total_importadas + total_invalidas <= linhas_processadas) OR "
+            "(status IN ('completed', 'completed_with_warnings', 'failed') AND "
+            "((total_linhas IS NULL AND total_importadas = 0 AND total_invalidas = 0) "
+            "OR (total_linhas IS NOT NULL "
+            "AND total_importadas + total_invalidas <= total_linhas)))",
+            name="ck_lotes_importacao_razao_resultados_ate_processadas",
+        ),
+        CheckConstraint(
+            "(usuario_id IS NOT NULL AND identidade_servico_id IS NULL) OR "
+            "(usuario_id IS NULL AND identidade_servico_id IS NOT NULL)",
+            name="ck_lotes_importacao_razao_solicitante",
+        ),
+        UniqueConstraint(
+            "empresa_id",
+            "file_hash",
+            name="uq_lotes_importacao_razao_empresa_file_hash",
         ),
     )
 
@@ -456,16 +488,43 @@ class LoteImportacaoRazao(Base):
     empresa_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("empresas.id"), nullable=False
     )
-    usuario_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("usuarios.id"), nullable=False
+    usuario_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("usuarios.id"), nullable=True
+    )
+    identidade_servico_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("identidades_servico.id"), nullable=True
     )
     original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
     file_hash: Mapped[str] = mapped_column(String(128), nullable=False)
-    status: Mapped[str] = mapped_column(String(40), nullable=False)
-    total_linhas: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(40), default="queued", nullable=False
+    )
+    total_linhas: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    linhas_processadas: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     total_importadas: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     total_invalidas: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    warnings_metadata: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    warnings_total: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    warnings_metadata: Mapped[dict] = mapped_column(
+        JSON,
+        default=lambda: {"totals_by_code": {}},
+        server_default='{"totals_by_code": {}}',
+        nullable=False,
+    )
+    attempt_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    lease_token: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    lease_owner: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    lease_expires_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    heartbeat_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    error_code: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    error_request_id: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    failed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.now, nullable=False
     )
@@ -479,6 +538,9 @@ class LoteImportacaoRazao(Base):
     usuario: Mapped["Usuario"] = relationship(
         "Usuario", back_populates="lotes_importacao_razao"
     )
+    identidade_servico: Mapped[Optional["IdentidadeServico"]] = relationship(
+        "IdentidadeServico"
+    )
     lancamentos: Mapped[list["LancamentoRazaoNormalizado"]] = relationship(
         "LancamentoRazaoNormalizado",
         back_populates="lote",
@@ -488,6 +550,91 @@ class LoteImportacaoRazao(Base):
         "FechamentoRazaoMensal",
         back_populates="lote",
         cascade="all, delete-orphan",
+    )
+    tentativas: Mapped[list["TentativaImportacaoRazao"]] = relationship(
+        "TentativaImportacaoRazao",
+        back_populates="lote",
+        cascade="all, delete-orphan",
+        order_by="TentativaImportacaoRazao.numero",
+    )
+    warnings_normalizados: Mapped[list["WarningImportacaoRazao"]] = relationship(
+        "WarningImportacaoRazao",
+        back_populates="lote",
+        cascade="all, delete-orphan",
+    )
+
+
+class TentativaImportacaoRazao(Base):
+    """Registra uma tentativa de processamento de um lote do Razao."""
+
+    __tablename__ = "tentativas_importacao_razao"
+    __table_args__ = (
+        CheckConstraint(
+            "resultado IS NULL OR resultado IN "
+            "('completed', 'completed_with_warnings', 'failed', 'interrupted')",
+            name="ck_tentativas_importacao_razao_resultado",
+        ),
+        UniqueConstraint(
+            "lote_id",
+            "numero",
+            name="uq_tentativas_importacao_razao_lote_numero",
+        ),
+        Index("ix_tentativas_importacao_razao_lote_id", "lote_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    lote_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("lotes_importacao_razao.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    numero: Mapped[int] = mapped_column(Integer, nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    resultado: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    error_code: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    error_request_id: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+
+    lote: Mapped["LoteImportacaoRazao"] = relationship(
+        "LoteImportacaoRazao", back_populates="tentativas"
+    )
+
+
+class WarningImportacaoRazao(Base):
+    """Persiste um aviso seguro e estruturado produzido na importacao do Razao."""
+
+    __tablename__ = "warnings_importacao_razao"
+    __table_args__ = (
+        Index("ix_warnings_importacao_razao_lote_id_id", "lote_id", "id"),
+        Index(
+            "ix_warnings_importacao_razao_lote_codigo_linha",
+            "lote_id",
+            "codigo",
+            "linha",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    lote_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("lotes_importacao_razao.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    linha: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    codigo: Mapped[str] = mapped_column(String(80), nullable=False)
+    mensagem: Mapped[str] = mapped_column(String(500), nullable=False)
+    detalhes: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    lote: Mapped["LoteImportacaoRazao"] = relationship(
+        "LoteImportacaoRazao", back_populates="warnings_normalizados"
     )
 
 
