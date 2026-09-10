@@ -268,11 +268,12 @@ class RazaoSaldoWarningResponse(BaseModel):
 class ImportacaoRazaoResponse(BaseModel):
     lote_id: int
     status: str
-    total_linhas: int
-    total_importadas: int
-    total_invalidas: int
-    warnings: list[dict]
-    warnings_saldo: list[RazaoSaldoWarningResponse] = Field(default_factory=list)
+    status_url: str
+    retry_url: Optional[str] = None
+
+    @model_serializer(mode="wrap")
+    def serialize_without_absent_retry(self, handler):
+        return {key: value for key, value in handler(self).items() if value is not None}
 
 
 class RazaoLoteResponse(BaseModel):

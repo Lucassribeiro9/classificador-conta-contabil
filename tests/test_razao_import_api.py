@@ -263,25 +263,18 @@ def _seed_razao_lote_with_lancamento(
         return usuario, empresa.id, lote.id, lancamento.id
 
 
-def test_user_with_operacao_permission_imports_razao_and_receives_summary(client):
+def test_user_with_operacao_permission_queues_razao(client):
     usuario, empresa_id = _seed_user_company_and_catalog("operacao")
 
     response = client.post(
         f"/api/v1/companies/{empresa_id}/razao/import",
-        files=_upload_file(),
+        files=_upload_file_with_metadata("22.333.444/0001-55"),
         headers=_auth_headers(usuario),
     )
 
-    assert response.status_code == 200
-    assert response.json() == {
-        "lote_id": 1,
-        "status": "completed_with_warnings",
-        "total_linhas": 1,
-        "total_importadas": 1,
-        "total_invalidas": 0,
-        "warnings": [LEGACY_BALANCE_WARNING],
-        "warnings_saldo": [LEGACY_BALANCE_WARNING],
-    }
+    assert response.status_code == 202
+    assert response.json()["status"] == "queued"
+    assert response.headers["Retry-After"] == "3"
 
 
 def test_user_with_leitura_permission_lists_own_razao_lotes_only(client):
@@ -655,12 +648,8 @@ def test_user_imports_valid_tabular_fixture_through_endpoint(client):
         headers=_auth_headers(usuario),
     )
 
-    assert response.status_code == 200
-    assert response.json()["status"] == "completed"
-    assert response.json()["total_linhas"] == 3
-    assert response.json()["total_importadas"] == 3
-    assert response.json()["total_invalidas"] == 0
-    assert response.json()["warnings"] == []
+    assert response.status_code == 202
+    assert response.json()["status"] == "queued"
 
 
 def test_user_imports_dominio_numeric_balances_through_endpoint(client):
@@ -675,12 +664,8 @@ def test_user_imports_dominio_numeric_balances_through_endpoint(client):
         headers=_auth_headers(usuario),
     )
 
-    assert response.status_code == 200
-    assert response.json()["status"] == "completed"
-    assert response.json()["total_linhas"] == 3
-    assert response.json()["total_importadas"] == 3
-    assert response.json()["total_invalidas"] == 0
-    assert response.json()["warnings"] == []
+    assert response.status_code == 202
+    assert response.json()["status"] == "queued"
 
 
 def test_razao_import_rejects_file_cnpj_from_another_company(client):
@@ -706,13 +691,12 @@ def test_razao_import_rejects_file_cnpj_from_another_company(client):
         assert event.user_id == usuario.id
         assert event.empresa_id == empresa_id
         assert event.metadata_json["reason"] == "company_mismatch"
-        assert event.metadata_json["file_hash"].startswith("sha256:")
         assert "11222333000144" not in str(event.metadata_json)
         assert session.query(LoteImportacaoRazao).count() == 0
         assert session.query(LancamentoRazaoNormalizado).count() == 0
 
 
-def test_user_imports_tabular_fixture_with_controlled_warnings_through_endpoint(
+def test_user_queues_tabular_fixture_without_processing_warnings_in_http(
     client,
 ):
     usuario, empresa_id = _seed_user_company_and_catalog(
@@ -726,58 +710,40 @@ def test_user_imports_tabular_fixture_with_controlled_warnings_through_endpoint(
         headers=_auth_headers(usuario),
     )
 
-    assert response.status_code == 200
-    assert response.json()["status"] == "completed_with_warnings"
-    assert response.json()["total_linhas"] == 3
-    assert response.json()["total_importadas"] == 1
-    assert response.json()["total_invalidas"] == 2
-    assert response.json()["warnings"] == [
-        {
-            "linha": 2,
-            "warnings": ["Linha do razao sem contrapartida valida."],
-        },
-        {
-            "linha": 3,
-            "warnings": [
-                "Conta de contrapartida 99999 nao encontrada no catalogo."
-            ],
-        },
-    ]
+    assert response.status_code == 202
+    assert response.json()["status"] == "queued"
 
 
-def test_successful_razao_import_creates_audit_event_with_counters(client):
+def test_received_razao_import_creates_safe_audit_event(client):
     from tests.conftest import TestingSessionLocal
 
     usuario, empresa_id = _seed_user_company_and_catalog("operacao")
 
     response = client.post(
         f"/api/v1/companies/{empresa_id}/razao/import",
-        files=_upload_file(),
+        files=_upload_file_with_metadata("22.333.444/0001-55"),
         headers=_auth_headers(usuario),
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 202
 
     with TestingSessionLocal() as session:
         event = session.query(AuditEvent).one()
-        assert event.event_type == "ledger.imported"
+        assert event.event_type == "ledger.import_received"
         assert event.user_id == usuario.id
         assert event.empresa_id == empresa_id
         assert event.resource_id == str(response.json()["lote_id"])
-        assert event.metadata_json["total_linhas"] == 1
-        assert event.metadata_json["total_importadas"] == 1
-        assert event.metadata_json["total_invalidas"] == 0
-        assert event.metadata_json["warnings"] == [LEGACY_BALANCE_WARNING]
-        assert event.metadata_json["file_hash"].startswith("sha256:")
+        assert event.metadata_json["status"] == "queued"
+        assert len(event.metadata_json["file_hash"]) == 64
         assert "Pagamento fornecedor" not in str(event.metadata_json)
 
 
-def test_duplicate_razao_file_hash_creates_failed_audit_event(client):
+def test_duplicate_razao_file_hash_reuses_queued_lote(client):
     from tests.conftest import TestingSessionLocal
 
     usuario, empresa_id = _seed_user_company_and_catalog("operacao")
     headers = _auth_headers(usuario)
-    file_content = _razao_xlsx()
+    file_content = _razao_xlsx_with_metadata("22.333.444/0001-55")
 
     first_response = client.post(
         f"/api/v1/companies/{empresa_id}/razao/import",
@@ -790,23 +756,16 @@ def test_duplicate_razao_file_hash_creates_failed_audit_event(client):
         headers=headers,
     )
 
-    assert first_response.status_code == 200
-    assert second_response.status_code == 400
-    assert second_response.json()["message"] == "Arquivo ja importado com sucesso para esta empresa."
+    assert first_response.status_code == 202
+    assert second_response.status_code == 202
+    assert second_response.json()["lote_id"] == first_response.json()["lote_id"]
 
     with TestingSessionLocal() as session:
         events = session.query(AuditEvent).order_by(AuditEvent.id).all()
         assert [event.event_type for event in events] == [
-            "ledger.imported",
-            "ledger.import_failed",
+            "ledger.import_received", "ledger.import_received"
         ]
-        failed_event = events[-1]
-        assert failed_event.user_id == usuario.id
-        assert failed_event.empresa_id == empresa_id
-        assert failed_event.metadata_json["file_hash"].startswith("sha256:")
-        assert failed_event.metadata_json["error_type"] == "RazaoImportError"
-        assert failed_event.metadata_json["reason"] == "duplicate_file_hash"
-        assert "Traceback" not in failed_event.metadata_json["error"]
+        assert session.query(LoteImportacaoRazao).count() == 1
 
 
 def test_user_with_admin_empresa_permission_imports_razao(client):
@@ -814,13 +773,12 @@ def test_user_with_admin_empresa_permission_imports_razao(client):
 
     response = client.post(
         f"/api/v1/companies/{empresa_id}/razao/import",
-        files=_upload_file(),
+        files=_upload_file_with_metadata("22.333.444/0001-55"),
         headers=_auth_headers(usuario),
     )
 
-    assert response.status_code == 200
-    assert response.json()["status"] == "completed_with_warnings"
-    assert response.json()["total_importadas"] == 1
+    assert response.status_code == 202
+    assert response.json()["status"] == "queued"
 
 
 def test_user_with_leitura_permission_cannot_import_razao(client):
@@ -842,7 +800,6 @@ def test_user_with_leitura_permission_cannot_import_razao(client):
         assert event.event_type == "ledger.import_denied"
         assert event.user_id == usuario.id
         assert event.empresa_id == empresa_id
-        assert event.metadata_json["file_hash"].startswith("sha256:")
         assert event.metadata_json["reason"] == "insufficient_permission"
 
 
@@ -873,7 +830,6 @@ def test_user_without_company_link_cannot_import_razao(client):
         assert event.event_type == "ledger.import_denied"
         assert event.user_id == usuario.id
         assert event.empresa_id == empresa_id
-        assert event.metadata_json["file_hash"].startswith("sha256:")
         assert event.metadata_json["reason"] == "access_denied"
         assert "Pagamento fornecedor" not in str(event.metadata_json)
 

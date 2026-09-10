@@ -74,6 +74,16 @@ class StoredUpload:
             raise ValueError("Informe tamanho de bloco não negativo.")
         return self._stream.read(size)
 
+    def seek(self, offset: int, whence: int = 0) -> int:
+        """Reposiciona a leitura sem revelar o arquivo privado."""
+        return self._stream.seek(offset, whence)
+
+    def tell(self) -> int:
+        return self._stream.tell()
+
+    def seekable(self) -> bool:
+        return True
+
 
 class RazaoStorage:
     """Recebe chunks sem materializar o upload em memória."""

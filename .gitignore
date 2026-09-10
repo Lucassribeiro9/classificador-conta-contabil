@@ -212,3 +212,5 @@ n8n_workflows
 data/models/
 *.joblib
 *.joblib.tmp
+
+data/razao-temporario/

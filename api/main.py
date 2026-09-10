@@ -143,7 +143,9 @@ def custom_openapi():
             if not isinstance(operation, dict):
                 continue
             responses = operation.setdefault("responses", {})
-            for status_code in ("400", "401", "403", "404", "409", "422", "500"):
+            for status_code in (
+                "400", "401", "403", "404", "409", "413", "422", "500", "507"
+            ):
                 responses.setdefault(status_code, error_response_schema)
 
     app.openapi_schema = schema
