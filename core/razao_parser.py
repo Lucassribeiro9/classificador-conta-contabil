@@ -3,7 +3,7 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 import re
-from typing import Any
+from typing import Any, BinaryIO
 
 from openpyxl import load_workbook
 
@@ -53,20 +53,26 @@ _COLUMN_ALIASES = {
 }
 
 
-def parse_razao_xlsx(path: str | Path) -> list[dict[str, Any]]:
+def parse_razao_xlsx(path: str | Path | BinaryIO) -> list[dict[str, Any]]:
     return _parse_razao_xlsx(path, require_metadata=False).lancamentos
 
 
-def parse_razao_xlsx_with_metadata(path: str | Path) -> RazaoParseResult:
+def parse_razao_xlsx_with_metadata(path: str | Path | BinaryIO) -> RazaoParseResult:
     return _parse_razao_xlsx(path, require_metadata=True)
 
 
-def _parse_razao_xlsx(path: str | Path, *, require_metadata: bool) -> RazaoParseResult:
-    file_path = Path(path)
-    if file_path.suffix.lower() != ".xlsx":
-        raise RazaoParseError("Arquivo do razao deve estar no formato .xlsx.")
+def _parse_razao_xlsx(
+    path: str | Path | BinaryIO, *, require_metadata: bool
+) -> RazaoParseResult:
+    source = path
+    if isinstance(path, (str, Path)):
+        source = Path(path)
+        if source.suffix.lower() != ".xlsx":
+            raise RazaoParseError("Arquivo do razao deve estar no formato .xlsx.")
+    else:
+        path.seek(0)
 
-    workbook = load_workbook(file_path, read_only=True, data_only=True)
+    workbook = load_workbook(source, read_only=True, data_only=True)
     try:
         sheet = workbook.active
         conta_origem: str | None = None
