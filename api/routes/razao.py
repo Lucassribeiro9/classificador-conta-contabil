@@ -1,10 +1,6 @@
-import hashlib
-import os
-import tempfile
-from pathlib import Path
-
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, UploadFile
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, sessionmaker
 
 from api.dependencies import (
     DB_DEPENDENCY,
@@ -28,8 +24,9 @@ from core.models import (
     LoteImportacaoRazao,
     Usuario,
 )
-from core.razao_importer import RazaoImportError, import_razao
-from core.razao_parser import RazaoParseError
+from core.config import settings
+from core.razao_parser import RazaoParseError, parse_razao_metadata
+from core.razao_storage import InsufficientCapacity, RazaoStorage, UploadTooLarge
 
 
 router = APIRouter(prefix="/companies/{company_id}/razao")
@@ -213,81 +210,103 @@ def _balance_warnings(source: dict | list | None) -> list[dict]:
     ]
 
 
-@router.post("/import", response_model=ImportacaoRazaoResponse)
+def get_razao_storage(db: Session = DB_DEPENDENCY) -> RazaoStorage:
+    return RazaoStorage.from_settings(
+        settings,
+        sessions=sessionmaker(
+            autocommit=False, autoflush=False, bind=db.get_bind()
+        ),
+    )
+
+
+@router.post(
+    "/import",
+    response_model=ImportacaoRazaoResponse,
+    status_code=202,
+    responses={
+        200: {"model": ImportacaoRazaoResponse},
+        409: {"model": ImportacaoRazaoResponse},
+    },
+)
 def import_company_razao(
     company_id: int,
     file: UploadFile,
+    response: Response,
     current_user: Usuario = Depends(get_current_user),
     db: Session = DB_DEPENDENCY,
+    storage: RazaoStorage = Depends(get_razao_storage),
 ) -> ImportacaoRazaoResponse:
-    temp_path = _save_upload_to_temp_xlsx(file)
-    file_hash = _file_hash(temp_path)
-    try:
-        empresa = db.get(Empresa, company_id)
-        if empresa is None:
-            raise HTTPException(status_code=404, detail="Empresa não encontrada")
-        denial_detail = _razao_permission_denial_detail(current_user, company_id)
-        if denial_detail is not None:
-            record_audit_event(
-                db,
-                event_type="ledger.import_denied",
-                user_id=current_user.id,
-                empresa_id=company_id,
-                metadata={
-                    "file_hash": file_hash,
-                    "reason": (
-                        "insufficient_permission"
-                        if denial_detail == "Permissão insuficiente"
-                        else "access_denied"
-                    ),
-                },
-            )
-            db.commit()
-            raise HTTPException(status_code=403, detail=denial_detail)
-
-        if not file.filename or not file.filename.lower().endswith(".xlsx"):
-            record_audit_event(
-                db,
-                event_type="ledger.import_failed",
-                user_id=current_user.id,
-                empresa_id=company_id,
-                metadata={
-                    "file_hash": file_hash,
-                    "total_linhas": 0,
-                    "total_importadas": 0,
-                    "total_invalidas": 0,
-                    "warnings": [],
-                    "error_type": "InvalidFileType",
-                    "error": "Arquivo deve ser .xlsx",
-                    "reason": "invalid_file_type",
-                },
-            )
-            db.commit()
-            raise HTTPException(status_code=400, detail="Arquivo deve ser .xlsx")
-
-        resumo = import_razao(
-            db,
-            temp_path,
-            empresa_id=company_id,
-            usuario_id=current_user.id,
-            original_filename=file.filename,
-        )
+    empresa = db.get(Empresa, company_id)
+    if empresa is None:
+        raise HTTPException(status_code=404, detail="Empresa não encontrada")
+    denial_detail = _razao_permission_denial_detail(current_user, company_id)
+    if denial_detail is not None:
         record_audit_event(
             db,
-            event_type="ledger.imported",
+            event_type="ledger.import_denied",
             user_id=current_user.id,
             empresa_id=company_id,
-            resource_id=str(resumo.lote_id),
             metadata={
-                "file_hash": file_hash,
-                "total_linhas": resumo.total_linhas,
-                "total_importadas": resumo.total_importadas,
-                "total_invalidas": resumo.total_invalidas,
-                "warnings": resumo.warnings,
+                "reason": (
+                    "insufficient_permission"
+                    if denial_detail == "Permissão insuficiente"
+                    else "access_denied"
+                )
             },
         )
         db.commit()
-    except (RazaoImportError, RazaoParseError) as exc:
+        raise HTTPException(status_code=403, detail=denial_detail)
+    if not empresa.is_active:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "empresa do razao esta inativa; reative a empresa antes de "
+                "importar."
+            ),
+        )
+    if not file.filename or not file.filename.lower().endswith(".xlsx"):
+        raise HTTPException(status_code=400, detail="Arquivo deve ser .xlsx")
+
+    try:
+        with storage.admit(iter(lambda: file.file.read(65536), b"")) as upload:
+            metadata = parse_razao_metadata(upload)
+            if metadata.cnpj_cpf != empresa.cnpj_cpf:
+                raise RazaoParseError("CNPJ do razao nao corresponde a empresa da importacao.")
+            lote = db.query(LoteImportacaoRazao).filter_by(
+                empresa_id=company_id, file_hash=upload.file_hash
+            ).first()
+            if lote is None:
+                lote = LoteImportacaoRazao(
+                    empresa_id=company_id, usuario_id=current_user.id,
+                    original_filename=file.filename, file_hash=upload.file_hash,
+                    status="queued",
+                )
+                db.add(lote)
+                try:
+                    db.flush()
+                except IntegrityError:
+                    db.rollback()
+                    lote = db.query(LoteImportacaoRazao).filter_by(
+                        empresa_id=company_id, file_hash=upload.file_hash
+                    ).one()
+                else:
+                    upload.bind(db, lote)
+            record_audit_event(
+                db,
+                event_type="ledger.import_received",
+                user_id=current_user.id,
+                empresa_id=company_id,
+                resource_id=str(lote.id),
+                metadata={"file_hash": upload.file_hash, "status": lote.status},
+            )
+            db.commit()
+    except UploadTooLarge as exc:
+        db.rollback()
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
+    except InsufficientCapacity as exc:
+        db.rollback()
+        raise HTTPException(status_code=507, detail=str(exc)) from exc
+    except RazaoParseError as exc:
         db.rollback()
         record_audit_event(
             db,
@@ -295,39 +314,30 @@ def import_company_razao(
             user_id=current_user.id,
             empresa_id=company_id,
             metadata={
-                "file_hash": file_hash,
-                "total_linhas": 0,
-                "total_importadas": 0,
-                "total_invalidas": 0,
-                "warnings": [],
                 "error_type": type(exc).__name__,
-                "error": str(exc),
-                "reason": _failure_reason(exc),
+                "reason": (
+                    "company_mismatch" if "CNPJ" in str(exc) else "invalid_file"
+                ),
             },
         )
         db.commit()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception:
-        db.rollback()
-        raise
-    finally:
-        os.unlink(temp_path)
 
+    status_url = f"/api/v1/companies/{company_id}/razao/lotes/{lote.id}"
+    retry_url = f"{status_url}/retry" if lote.status == "failed" else None
+    if lote.status in {"queued", "processing"}:
+        response.status_code = 202
+        response.headers["Retry-After"] = "3"
+    elif lote.status in {"completed", "completed_with_warnings"}:
+        response.status_code = 200
+    else:
+        response.status_code = 409
     return ImportacaoRazaoResponse(
-        **resumo.__dict__,
-        warnings_saldo=_balance_warnings(resumo.warnings),
+        lote_id=lote.id,
+        status=lote.status,
+        status_url=status_url,
+        retry_url=retry_url,
     )
-
-
-def _save_upload_to_temp_xlsx(file: UploadFile) -> str:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as temp_file:
-        temp_file.write(file.file.read())
-        return temp_file.name
-
-
-def _file_hash(path: str) -> str:
-    digest = hashlib.sha256(Path(path).read_bytes()).hexdigest()
-    return f"sha256:{digest}"
 
 
 def _razao_permission_denial_detail(user: Usuario, company_id: int) -> str | None:
@@ -347,17 +357,6 @@ def _razao_permission_denial_detail(user: Usuario, company_id: int) -> str | Non
     if permission_link.permissao not in {"operacao", "admin_empresa"}:
         return "Permissão insuficiente"
     return None
-
-
-def _failure_reason(exc: Exception) -> str:
-    if isinstance(exc, RazaoImportError) and "Arquivo ja importado" in str(exc):
-        return "duplicate_file_hash"
-    if (
-        isinstance(exc, RazaoImportError)
-        and "CNPJ do razao nao corresponde" in str(exc)
-    ):
-        return "company_mismatch"
-    return "invalid_file"
 
 
 @admin_router.delete("/lotes/{lote_id}", status_code=204)

@@ -61,6 +61,38 @@ def parse_razao_xlsx_with_metadata(path: str | Path | BinaryIO) -> RazaoParseRes
     return _parse_razao_xlsx(path, require_metadata=True)
 
 
+def parse_razao_metadata(path: str | Path | BinaryIO) -> RazaoMetadata:
+    """Lê somente a identificação do arquivo, sem processar lançamentos."""
+    source = path
+    if isinstance(path, (str, Path)):
+        source = Path(path)
+        if source.suffix.lower() != ".xlsx":
+            raise RazaoParseError("Arquivo do razao deve estar no formato .xlsx.")
+    else:
+        path.seek(0)
+
+    workbook = load_workbook(source, read_only=True, data_only=True)
+    try:
+        values = {
+            "empresa_nome": None,
+            "cnpj_cpf": None,
+            "periodo_inicio": None,
+            "periodo_fim": None,
+        }
+        for cells in workbook.active.iter_rows():
+            row = tuple(cell.value for cell in cells)
+            if _is_empty_row(row):
+                continue
+            for key, value in _extract_metadata(row).items():
+                if value is not None:
+                    values[key] = value
+            if all(values.values()):
+                break
+        return _build_metadata(**values, require_metadata=True)
+    finally:
+        workbook.close()
+
+
 def _parse_razao_xlsx(
     path: str | Path | BinaryIO, *, require_metadata: bool
 ) -> RazaoParseResult:

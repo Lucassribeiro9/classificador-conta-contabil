@@ -15,8 +15,10 @@ from sqlalchemy.pool import StaticPool
 
 from api.dependencies import get_db
 from api.main import app
+from api.routes.razao import get_razao_storage
 from core.database import Base
 from core.config import settings
+from core.razao_storage import RazaoStorage
 
 
 async def _run_sync_inline(func, *args, **kwargs):
@@ -84,7 +86,7 @@ def setup_db():
 
 
 @pytest.fixture(scope="function")
-def client(setup_db):
+def client(setup_db, tmp_path):
     """Cliente de teste FastAPI com banco de dados isolado."""
 
     async def override_get_db():
@@ -95,6 +97,10 @@ def client(setup_db):
             db.close()
 
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_razao_storage] = lambda: RazaoStorage(
+        tmp_path / "razao-uploads", max_bytes=50_000_000,
+        min_free_bytes=0, min_free_ratio=0, sessions=TestingSessionLocal,
+    )
     yield ASGITestClient(app)
     app.dependency_overrides.clear()
 
