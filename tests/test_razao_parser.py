@@ -1,5 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
+from io import BytesIO
 from pathlib import Path
 import re
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -153,6 +154,15 @@ def test_parse_razao_fixture_sanitizada_representa_layout_real_dominio():
         "valor_decimal": Decimal("1156.68"),
         "natureza": "C",
     }
+
+
+def test_parse_razao_accepts_private_binary_stream_from_worker():
+    fixture_path = FIXTURES_DIR / "razao_dominio_layout_sanitizado.xlsx"
+
+    result = parse_razao_xlsx_with_metadata(BytesIO(fixture_path.read_bytes()))
+
+    assert result.metadata.cnpj_cpf == "11222333000181"
+    assert len(result.lancamentos) == 2
 
 
 def test_parse_razao_fixture_tabular_modelo_com_conta_origem():

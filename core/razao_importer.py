@@ -3,7 +3,7 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 import hashlib
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO, Callable
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -36,6 +36,8 @@ class ImportacaoRazaoResumo:
     total_importadas: int
     total_invalidas: int
     warnings: list[dict[str, Any]]
+    warnings_total: int = 0
+    warnings_metadata: dict[str, Any] | None = None
 
 
 class RazaoImportError(ValueError):
@@ -44,23 +46,26 @@ class RazaoImportError(ValueError):
 
 def import_razao(
     session: Session,
-    path: str | Path,
+    path: str | Path | BinaryIO,
     *,
     empresa_id: int,
-    usuario_id: int,
+    usuario_id: int | None,
     original_filename: str,
     block_size: int | None = None,
+    existing_lote: LoteImportacaoRazao | None = None,
+    progress: Callable[..., None] | None = None,
 ) -> ImportacaoRazaoResumo:
     if block_size is None:
         block_size = settings.RAZAO_IMPORT_BLOCK_SIZE
     if block_size <= 0:
         raise ValueError("O tamanho do bloco deve ser maior que zero.")
-    file_path = Path(path)
-    file_hash = _file_hash(file_path)
-    _ensure_file_hash_not_successfully_imported(session, empresa_id, file_hash)
+    owns_lote = existing_lote is None
+    if owns_lote:
+        file_hash = _file_hash(path)
+        _ensure_file_hash_not_successfully_imported(session, empresa_id, file_hash)
     parsed_lancamentos = _parse_lancamentos_and_validate_company(
         session,
-        file_path,
+        path,
         empresa_id,
     )
     warning_preview: list[dict[str, Any]] = []
@@ -73,19 +78,24 @@ def import_razao(
     fechamentos: dict[tuple[int, int, int, int], FechamentoRazaoMensal] = {}
     fechamento_warnings: dict[tuple[int, int, int, int], list[dict[str, Any]]] = {}
 
-    lote = LoteImportacaoRazao(
-        empresa_id=empresa_id,
-        usuario_id=usuario_id,
-        original_filename=original_filename,
-        file_hash=file_hash,
-        status="processing",
-        total_linhas=len(parsed_lancamentos),
-        total_importadas=0,
-        total_invalidas=0,
-        warnings_metadata={"totals_by_code": {}},
-    )
-    session.add(lote)
-    session.flush()
+    if owns_lote:
+        lote = LoteImportacaoRazao(
+            empresa_id=empresa_id,
+            usuario_id=usuario_id,
+            original_filename=original_filename,
+            file_hash=file_hash,
+            status="processing",
+            total_linhas=len(parsed_lancamentos),
+            total_importadas=0,
+            total_invalidas=0,
+            warnings_metadata={"totals_by_code": {}},
+        )
+        session.add(lote)
+        session.flush()
+    else:
+        lote = existing_lote
+        if lote.empresa_id != empresa_id:
+            raise RazaoImportError("Lote não pertence à empresa da importação.")
 
     catalog_codes = _preload_catalog_codes(session, parsed_lancamentos)
     account_links = _preload_account_links(session, empresa_id, catalog_codes)
@@ -162,42 +172,58 @@ def import_razao(
             session.bulk_save_objects(models)
         if normalized_warnings:
             session.bulk_save_objects(normalized_warnings)
-        lote.linhas_processadas = min(block_start + len(block), len(parsed_lancamentos))
-        lote.total_importadas = imported
-        lote.total_invalidas = lote.linhas_processadas - imported
-        lote.warnings_total = sum(warning_totals.values())
-        lote.warnings_metadata = {"totals_by_code": dict(warning_totals)}
+        linhas_processadas = min(block_start + len(block), len(parsed_lancamentos))
+        if owns_lote:
+            lote.linhas_processadas = linhas_processadas
+            lote.total_importadas = imported
+            lote.total_invalidas = linhas_processadas - imported
+            lote.warnings_total = sum(warning_totals.values())
+            lote.warnings_metadata = {"totals_by_code": dict(warning_totals)}
         session.flush()
+        if progress is not None:
+            progress(
+                total_linhas=len(parsed_lancamentos),
+                linhas_processadas=linhas_processadas,
+                total_importadas=imported,
+                total_invalidas=linhas_processadas - imported,
+                warnings_total=sum(warning_totals.values()),
+            )
         preview_capacity = warning_preview_limit - len(warning_preview)
         if preview_capacity > 0:
             warning_preview.extend(block_warnings[:preview_capacity])
 
     invalid = len(parsed_lancamentos) - imported
-    lote.total_importadas = imported
-    lote.total_invalidas = invalid
-    lote.warnings_total = sum(warning_totals.values())
-    lote.warnings_metadata = {"totals_by_code": dict(warning_totals)}
-    if invalid == 0 and lote.warnings_total == 0:
-        lote.status = "completed"
+    warnings_total = sum(warning_totals.values())
+    if invalid == 0 and warnings_total == 0:
+        status = "completed"
     elif imported > 0:
-        lote.status = "completed_with_warnings"
+        status = "completed_with_warnings"
     else:
-        lote.status = "failed"
+        status = "failed"
+
+    if owns_lote:
+        lote.total_importadas = imported
+        lote.total_invalidas = invalid
+        lote.warnings_total = warnings_total
+        lote.warnings_metadata = {"totals_by_code": dict(warning_totals)}
+        lote.status = status
 
     session.flush()
     return ImportacaoRazaoResumo(
         lote_id=lote.id,
-        status=lote.status,
-        total_linhas=lote.total_linhas,
-        total_importadas=lote.total_importadas,
-        total_invalidas=lote.total_invalidas,
+        status=status,
+        total_linhas=len(parsed_lancamentos),
+        total_importadas=imported,
+        total_invalidas=invalid,
         warnings=warning_preview,
+        warnings_total=warnings_total,
+        warnings_metadata={"totals_by_code": dict(warning_totals)},
     )
 
 
 def _parse_lancamentos_and_validate_company(
     session: Session,
-    file_path: Path,
+    file_path: str | Path | BinaryIO,
     empresa_id: int,
 ) -> list[dict[str, Any]]:
     try:
@@ -625,8 +651,14 @@ def _line_error_message(exc: Exception) -> str:
     return "Linha do razao invalida."
 
 
-def _file_hash(path: Path) -> str:
-    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+def _file_hash(path: str | Path | BinaryIO) -> str:
+    if isinstance(path, (str, Path)):
+        content = Path(path).read_bytes()
+    else:
+        path.seek(0)
+        content = path.read()
+        path.seek(0)
+    digest = hashlib.sha256(content).hexdigest()
     return f"sha256:{digest}"
 
 
