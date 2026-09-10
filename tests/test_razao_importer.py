@@ -123,7 +123,7 @@ def test_import_razao_persists_valid_lines_and_completes_lote(session, tmp_path)
     assert lote.total_linhas == 1
     assert lote.total_importadas == 1
     assert lote.total_invalidas == 0
-    assert lote.warnings_metadata == {"warnings": [LEGACY_BALANCE_WARNING]}
+    assert lote.warnings_metadata == {"totals_by_code": {"saldo_ausente": 1}}
     assert lote.empresa_id == empresa.id
     assert lote.usuario_id == usuario.id
     assert lote.original_filename == "razao-valido.xlsx"
@@ -668,7 +668,7 @@ def test_import_razao_fixture_tabular_valida_completa_lote(session):
     assert result.total_importadas == 3
     assert result.total_invalidas == 0
     assert result.warnings == []
-    assert lote.warnings_metadata == {"warnings": []}
+    assert lote.warnings_metadata == {"totals_by_code": {}}
     assert [l.numero_lancamento for l in lancamentos] == ["9001", "9002", "9003"]
     assert [l.direcao for l in lancamentos] == ["credito", "debito", "credito"]
     assert session.query(EmpresaContaContabil).count() == 4
@@ -708,7 +708,12 @@ def test_import_razao_fixture_tabular_com_warnings_importa_parcialmente(session)
         },
     ]
     assert lote.status == "completed_with_warnings"
-    assert lote.warnings_metadata == {"warnings": result.warnings}
+    assert lote.warnings_metadata == {
+        "totals_by_code": {
+            "contrapartida_ausente": 1,
+            "conta_nao_encontrada": 1,
+        }
+    }
     assert lancamento.numero_lancamento == "9101"
     assert lancamento.conta_origem == 10046
     assert lancamento.conta_contrapartida == 20101
@@ -967,15 +972,7 @@ def test_import_razao_persists_valid_lines_and_records_warnings_for_invalid_ones
     assert lote.total_importadas == 1
     assert lote.total_invalidas == 1
     assert lote.warnings_metadata == {
-        "warnings": [
-            LEGACY_BALANCE_WARNING,
-            {
-                "linha": 2,
-                "warnings": [
-                    "Conta de contrapartida 99999 nao encontrada no catalogo."
-                ],
-            },
-        ]
+        "totals_by_code": {"saldo_ausente": 1, "conta_nao_encontrada": 1}
     }
     assert session.query(LancamentoRazaoNormalizado).count() == 1
 
@@ -1009,12 +1006,7 @@ def test_import_razao_records_warning_for_line_without_counterpart(session, tmp_
     assert lote.total_importadas == 0
     assert lote.total_invalidas == 1
     assert lote.warnings_metadata == {
-        "warnings": [
-            {
-                "linha": 1,
-                "warnings": ["Linha do razao sem contrapartida valida."],
-            }
-        ]
+        "totals_by_code": {"contrapartida_ausente": 1}
     }
     assert session.query(LancamentoRazaoNormalizado).count() == 0
 
@@ -1049,7 +1041,9 @@ def test_import_razao_marks_lote_as_failed_when_no_valid_lines(session, tmp_path
     assert lote.total_linhas == 2
     assert lote.total_importadas == 0
     assert lote.total_invalidas == 2
-    assert len(lote.warnings_metadata["warnings"]) == 2
+    assert lote.warnings_metadata == {
+        "totals_by_code": {"conta_nao_encontrada": 2}
+    }
     assert session.query(LancamentoRazaoNormalizado).count() == 0
 
 

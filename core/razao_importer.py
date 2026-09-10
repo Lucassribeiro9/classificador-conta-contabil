@@ -8,12 +8,15 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from core.config import settings
 from core.models import (
+    ContaContabil,
     Empresa,
     EmpresaContaContabil,
     FechamentoRazaoMensal,
     LancamentoRazaoNormalizado,
     LoteImportacaoRazao,
+    WarningImportacaoRazao,
 )
 from core.razao_catalog_validator import validate_lancamento_razao_contas
 from core.razao_parser import (
@@ -46,7 +49,12 @@ def import_razao(
     empresa_id: int,
     usuario_id: int,
     original_filename: str,
+    block_size: int | None = None,
 ) -> ImportacaoRazaoResumo:
+    if block_size is None:
+        block_size = settings.RAZAO_IMPORT_BLOCK_SIZE
+    if block_size <= 0:
+        raise ValueError("O tamanho do bloco deve ser maior que zero.")
     file_path = Path(path)
     file_hash = _file_hash(file_path)
     _ensure_file_hash_not_successfully_imported(session, empresa_id, file_hash)
@@ -55,7 +63,9 @@ def import_razao(
         file_path,
         empresa_id,
     )
-    warnings: list[dict[str, Any]] = []
+    warning_preview: list[dict[str, Any]] = []
+    warning_preview_limit = 100
+    warning_totals: dict[str, int] = {}
     imported = 0
     saldo_periodo_sequences: dict[str, Decimal] = {}
     saldo_exercicio_sequences: dict[str, Decimal] = {}
@@ -72,66 +82,102 @@ def import_razao(
         total_linhas=len(parsed_lancamentos),
         total_importadas=0,
         total_invalidas=0,
-        warnings_metadata={"warnings": []},
+        warnings_metadata={"totals_by_code": {}},
     )
     session.add(lote)
     session.flush()
 
-    for index, parsed in enumerate(parsed_lancamentos, start=1):
-        try:
-            normalized = normalize_lancamento_razao(parsed)
-            normalized.update(_saldo_fields_from_parsed(parsed))
-            normalized["bloco_id"] = parsed["bloco_id"]
-            normalized["empresa_id"] = empresa_id
-            normalized["numero_lancamento"] = normalized.pop("numero")
-            if _is_blank(normalized.get("conta_contrapartida")):
-                warnings.append(
+    catalog_codes = _preload_catalog_codes(session, parsed_lancamentos)
+    account_links = _preload_account_links(session, empresa_id, catalog_codes)
+
+    for block_start in range(0, len(parsed_lancamentos), block_size):
+        models: list[LancamentoRazaoNormalizado] = []
+        normalized_warnings: list[WarningImportacaoRazao] = []
+        block_warnings: list[dict[str, Any]] = []
+        block = parsed_lancamentos[block_start : block_start + block_size]
+        for offset, parsed in enumerate(block, start=1):
+            index = block_start + offset
+            warning_start = len(block_warnings)
+            try:
+                normalized = normalize_lancamento_razao(parsed)
+                normalized.update(_saldo_fields_from_parsed(parsed))
+                normalized["bloco_id"] = parsed["bloco_id"]
+                normalized["empresa_id"] = empresa_id
+                normalized["numero_lancamento"] = normalized.pop("numero")
+                if _is_blank(normalized.get("conta_contrapartida")):
+                    block_warnings.append(
+                        {
+                            "linha": index,
+                            "warnings": ["Linha do razao sem contrapartida valida."],
+                        }
+                    )
+                    continue
+
+                validation = validate_lancamento_razao_contas(
+                    session, normalized, existing_codes=catalog_codes
+                )
+                if not validation.is_valid:
+                    block_warnings.append(
+                        {
+                            "linha": index,
+                            "warnings": validation.warnings,
+                        }
+                    )
+                    continue
+
+                normalized["historico_normalizado"] = normalize_razao_historico(
+                    normalized["historico"]
+                )
+                models.append(_to_model(lote.id, empresa_id, normalized))
+                _update_account_links(account_links, session, empresa_id, normalized)
+                _update_fechamento_mensal(
+                    session,
+                    fechamentos,
+                    fechamento_warnings,
+                    saldo_periodo_sequences,
+                    saldo_exercicio_sequences,
+                    lote.id,
+                    empresa_id,
+                    normalized,
+                    block_warnings,
+                    saldo_absent_warnings,
+                    index,
+                )
+                imported += 1
+            except (RazaoParseError, ValueError, TypeError, InvalidOperation) as exc:
+                message = _line_error_message(exc)
+                block_warnings.append(
                     {
                         "linha": index,
-                        "warnings": ["Linha do razao sem contrapartida valida."],
+                        "warnings": [message],
                     }
                 )
-                continue
+            finally:
+                for warning in block_warnings[warning_start:]:
+                    normalized_warnings.extend(
+                        _to_warning_models(lote.id, warning, warning_totals)
+                    )
 
-            validation = validate_lancamento_razao_contas(session, normalized)
-            if not validation.is_valid:
-                warnings.append({"linha": index, "warnings": validation.warnings})
-                continue
-
-            normalized["historico_normalizado"] = normalize_razao_historico(
-                normalized["historico"]
-            )
-            model = _to_model(lote.id, empresa_id, normalized)
-            session.add(model)
-            _link_contas_to_empresa(session, empresa_id, normalized)
-            _update_fechamento_mensal(
-                session,
-                fechamentos,
-                fechamento_warnings,
-                saldo_periodo_sequences,
-                saldo_exercicio_sequences,
-                lote.id,
-                empresa_id,
-                normalized,
-                warnings,
-                saldo_absent_warnings,
-                index,
-            )
-            imported += 1
-        except (RazaoParseError, ValueError, TypeError, InvalidOperation) as exc:
-            warnings.append(
-                {
-                    "linha": index,
-                    "warnings": [_line_error_message(exc)],
-                }
-            )
-            continue
+        if models:
+            session.bulk_save_objects(models)
+        if normalized_warnings:
+            session.bulk_save_objects(normalized_warnings)
+        lote.linhas_processadas = min(block_start + len(block), len(parsed_lancamentos))
+        lote.total_importadas = imported
+        lote.total_invalidas = lote.linhas_processadas - imported
+        lote.warnings_total = sum(warning_totals.values())
+        lote.warnings_metadata = {"totals_by_code": dict(warning_totals)}
+        session.flush()
+        preview_capacity = warning_preview_limit - len(warning_preview)
+        if preview_capacity > 0:
+            warning_preview.extend(block_warnings[:preview_capacity])
 
     invalid = len(parsed_lancamentos) - imported
     lote.total_importadas = imported
     lote.total_invalidas = invalid
-    lote.warnings_metadata = {"warnings": warnings}
-    if invalid == 0 and not warnings:
+    lote.warnings_total = sum(warning_totals.values())
+    lote.warnings_metadata = {"totals_by_code": dict(warning_totals)}
+    if invalid == 0 and lote.warnings_total == 0:
         lote.status = "completed"
     elif imported > 0:
         lote.status = "completed_with_warnings"
@@ -145,7 +191,7 @@ def import_razao(
         total_linhas=lote.total_linhas,
         total_importadas=lote.total_importadas,
         total_invalidas=lote.total_invalidas,
-        warnings=warnings,
+        warnings=warning_preview,
     )
 
 
@@ -446,7 +492,48 @@ def _signed_balance(valor: Decimal, natureza: str | None) -> Decimal:
     return abs(valor)
 
 
-def _link_contas_to_empresa(
+def _preload_catalog_codes(
+    session: Session,
+    parsed_lancamentos: list[dict[str, Any]],
+) -> set[int]:
+    """Carrega em uma consulta todos os códigos potencialmente usados."""
+    requested: set[int] = set()
+    for parsed in parsed_lancamentos:
+        for field in ("conta_origem", "contrapartida", "conta_contrapartida"):
+            value = parsed.get(field)
+            if _is_blank(value):
+                continue
+            try:
+                requested.add(int(value))
+            except (TypeError, ValueError):
+                continue
+    if not requested:
+        return set()
+    return set(
+        session.execute(
+            select(ContaContabil.codigo).where(ContaContabil.codigo.in_(requested))
+        ).scalars()
+    )
+
+
+def _preload_account_links(
+    session: Session,
+    empresa_id: int,
+    catalog_codes: set[int],
+) -> dict[int, EmpresaContaContabil]:
+    if not catalog_codes:
+        return {}
+    links = session.execute(
+        select(EmpresaContaContabil).where(
+            EmpresaContaContabil.empresa_id == empresa_id,
+            EmpresaContaContabil.conta_codigo.in_(catalog_codes),
+        )
+    ).scalars()
+    return {link.conta_codigo: link for link in links}
+
+
+def _update_account_links(
+    account_links: dict[int, EmpresaContaContabil],
     session: Session,
     empresa_id: int,
     lancamento: dict[str, Any],
@@ -456,27 +543,65 @@ def _link_contas_to_empresa(
         int(lancamento["conta_origem"]),
         int(lancamento["conta_contrapartida"]),
     }:
-        vinculo = session.execute(
-            select(EmpresaContaContabil).where(
-                EmpresaContaContabil.empresa_id == empresa_id,
-                EmpresaContaContabil.conta_codigo == conta_codigo,
-            )
-        ).scalar_one_or_none()
+        vinculo = account_links.get(conta_codigo)
         if vinculo is None:
-            session.add(
-                EmpresaContaContabil(
-                    empresa_id=empresa_id,
-                    conta_codigo=conta_codigo,
-                    quantidade_lancamentos=1,
-                    ultima_utilizacao=data_lancamento,
-                )
+            vinculo = EmpresaContaContabil(
+                empresa_id=empresa_id,
+                conta_codigo=conta_codigo,
+                quantidade_lancamentos=1,
+                ultima_utilizacao=data_lancamento,
             )
-            session.flush()
+            account_links[conta_codigo] = vinculo
+            session.add(vinculo)
             continue
 
         vinculo.quantidade_lancamentos += 1
         if data_lancamento > vinculo.ultima_utilizacao:
             vinculo.ultima_utilizacao = data_lancamento
+
+
+def _to_warning_models(
+    lote_id: int,
+    warning: dict[str, Any],
+    totals: dict[str, int],
+) -> list[WarningImportacaoRazao]:
+    """Converte o aviso público em registro seguro e atualiza seu agregado."""
+    messages = warning.get("warnings") or []
+    explicit_message = warning.get("mensagem")
+    if explicit_message is not None:
+        messages = [explicit_message]
+    elif not messages:
+        messages = ["Aviso do razao."]
+    details = warning.get("detalhes")
+    if not isinstance(details, dict):
+        details = {}
+    models = []
+    for raw_message in messages:
+        message = str(raw_message)
+        code = str(warning.get("codigo") or _warning_code(message))
+        totals[code] = totals.get(code, 0) + 1
+        models.append(
+            WarningImportacaoRazao(
+                lote_id=lote_id,
+                linha=warning.get("linha"),
+                codigo=code,
+                mensagem=message,
+                detalhes=details,
+            )
+        )
+    return models
+
+
+def _warning_code(message: str) -> str:
+    if "sem contrapartida" in message:
+        return "contrapartida_ausente"
+    if "nao encontrada no catalogo" in message:
+        return "conta_nao_encontrada"
+    if message == "Data do lancamento invalida.":
+        return "data_invalida"
+    if message == "Valor do lancamento invalido.":
+        return "valor_invalido"
+    return "linha_invalida"
 
 
 def _parse_date(value: Any) -> date:
