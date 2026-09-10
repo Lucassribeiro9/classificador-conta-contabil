@@ -16,16 +16,19 @@ class RazaoAccountValidationResult:
 def validate_lancamento_razao_contas(
     session: Session,
     lancamento: dict[str, Any],
+    *,
+    existing_codes: set[int] | None = None,
 ) -> RazaoAccountValidationResult:
     codigos = {
         int(lancamento["conta_origem"]),
         int(lancamento["conta_contrapartida"]),
     }
-    existing_codes = set(
-        session.execute(
-            select(ContaContabil.codigo).where(ContaContabil.codigo.in_(codigos))
-        ).scalars()
-    )
+    if existing_codes is None:
+        existing_codes = set(
+            session.execute(
+                select(ContaContabil.codigo).where(ContaContabil.codigo.in_(codigos))
+            ).scalars()
+        )
 
     warnings = []
     if int(lancamento["conta_origem"]) not in existing_codes:

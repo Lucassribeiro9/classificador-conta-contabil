@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     RAZAO_STORAGE_MIN_FREE_BYTES: int = Field(default=5_000_000_000, ge=0)
     RAZAO_STORAGE_MIN_FREE_RATIO: float = Field(default=0.15, ge=0, lt=1)
     RAZAO_FAILED_RETENTION_SECONDS: int = Field(default=86400, gt=0)
+    RAZAO_IMPORT_BLOCK_SIZE: int = Field(default=1_000, gt=0)
 
     model_config = SettingsConfigDict(
         env_file=".env", extra="ignore"  # Ignora variáveis de ambiente extras
