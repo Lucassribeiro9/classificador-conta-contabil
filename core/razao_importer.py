@@ -604,7 +604,7 @@ def _to_warning_models(
     models = []
     for raw_message in messages:
         message = str(raw_message)
-        code = str(warning.get("codigo") or _warning_code(message))
+        code = str(warning.get("codigo") or warning_code_from_message(message))
         totals[code] = totals.get(code, 0) + 1
         models.append(
             WarningImportacaoRazao(
@@ -618,7 +618,8 @@ def _to_warning_models(
     return models
 
 
-def _warning_code(message: str) -> str:
+def warning_code_from_message(message: str) -> str:
+    """Mapeia uma mensagem pública para o código estável compartilhado pela API."""
     if "sem contrapartida" in message:
         return "contrapartida_ausente"
     if "nao encontrada no catalogo" in message:

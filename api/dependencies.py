@@ -17,6 +17,7 @@ from core.service_credentials import identificar_credencial_servico
 from core.database import SessionLocal
 
 bearer_scheme = HTTPBearer()
+optional_bearer_scheme = HTTPBearer(auto_error=False)
 PERMISSION_LEVELS = {
     "leitura": 1,
     "operacao": 2,
@@ -207,6 +208,43 @@ def require_company_access(required_permission: str) -> Callable:
             raise HTTPException(status_code=403, detail="Permissão insuficiente")
 
         return empresa
+
+    return dependency
+
+
+def require_company_or_service_access(
+    required_permission: str, service_scope: str
+) -> Callable:
+    """Autoriza exatamente um ator humano ou de serviço para uma empresa."""
+    human_access = require_company_access(required_permission)
+    service_access = require_service_company_scope(service_scope)
+
+    def dependency(
+        company_id: int,
+        credentials: HTTPAuthorizationCredentials | None = Depends(
+            optional_bearer_scheme
+        ),
+        x_service_credential: str | None = Header(
+            default=None, alias="X-Service-Credential"
+        ),
+        db: Session = DB_DEPENDENCY,
+    ) -> Empresa:
+        if credentials is not None and x_service_credential:
+            raise HTTPException(status_code=400, detail="Credenciais ambíguas")
+        if x_service_credential:
+            return service_access(
+                company_id=company_id,
+                x_service_credential=x_service_credential,
+                db=db,
+            ).empresa
+        if credentials is None:
+            raise HTTPException(status_code=401, detail="Token ausente")
+        current_user = get_current_user(credentials=credentials, db=db)
+        return human_access(
+            company_id=company_id,
+            current_user=current_user,
+            db=db,
+        )
 
     return dependency
 
