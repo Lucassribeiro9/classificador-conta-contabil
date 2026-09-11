@@ -243,9 +243,9 @@ class RazaoWorker:
                         and_(
                             LoteImportacaoRazao.status == "processing",
                             LoteImportacaoRazao.lease_expires_at <= now,
+                            LoteImportacaoRazao.attempt_count < 2,
                         ),
-                    ),
-                    LoteImportacaoRazao.attempt_count < 2,
+                    )
                 )
                 .order_by(LoteImportacaoRazao.created_at, LoteImportacaoRazao.id)
                 .with_for_update(skip_locked=True)

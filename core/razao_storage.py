@@ -36,12 +36,21 @@ class InsufficientCapacity(Exception):
 
 
 class TemporaryFileUnavailable(FileNotFoundError):
-    """Arquivo ausente, expirado ou ocupado; não contém caminhos internos."""
+    """Arquivo ausente ou expirado; não contém caminhos internos."""
 
     code = "temporary_file_unavailable"
 
     def __init__(self):
         super().__init__("Arquivo temporário indisponível.")
+
+
+class TemporaryFileBusy(TemporaryFileUnavailable):
+    """Arquivo temporário já está reservado por outro consumidor."""
+
+    code = "temporary_file_busy"
+
+    def __init__(self):
+        super().__init__()
 
 
 class StoredUpload:
@@ -255,6 +264,10 @@ class RazaoStorage:
                     try:
                         stream = self._open_file(directory / f"{directory.name}.xlsx")
                         fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    except BlockingIOError:
+                        if stream is not None:
+                            stream.close()
+                        raise TemporaryFileBusy() from None
                     except OSError:
                         if stream is not None:
                             stream.close()

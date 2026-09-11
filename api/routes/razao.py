@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, UploadFile
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -15,6 +16,7 @@ from api.schemas import (
     RazaoLancamentoListResponse,
     RazaoLoteListResponse,
     RazaoLoteResponse,
+    RazaoLoteStatusResponse,
 )
 from core.audit import record_audit_event
 from core.models import (
@@ -26,11 +28,26 @@ from core.models import (
 )
 from core.config import settings
 from core.razao_parser import RazaoParseError, parse_razao_metadata
-from core.razao_storage import InsufficientCapacity, RazaoStorage, UploadTooLarge
+from core.razao_storage import (
+    InsufficientCapacity,
+    RazaoStorage,
+    TemporaryFileBusy,
+    TemporaryFileUnavailable,
+    UploadTooLarge,
+)
 
 
 router = APIRouter(prefix="/companies/{company_id}/razao")
 admin_router = APIRouter(prefix="/admin/razao")
+
+
+def get_razao_storage(db: Session = DB_DEPENDENCY) -> RazaoStorage:
+    return RazaoStorage.from_settings(
+        settings,
+        sessions=sessionmaker(
+            autocommit=False, autoflush=False, bind=db.get_bind()
+        ),
+    )
 
 
 @router.get("/lotes", response_model=RazaoLoteListResponse)
@@ -71,6 +88,138 @@ def list_company_razao_lotes(
     )
 
 
+@router.get("/lotes/{lote_id}", response_model=RazaoLoteStatusResponse)
+def get_company_razao_lote_status(
+    company_id: int,
+    lote_id: int,
+    empresa: Empresa = Depends(require_company_access("leitura")),
+    db: Session = DB_DEPENDENCY,
+) -> RazaoLoteStatusResponse:
+    lote = (
+        db.query(LoteImportacaoRazao)
+        .filter(
+            LoteImportacaoRazao.id == lote_id,
+            LoteImportacaoRazao.empresa_id == empresa.id,
+        )
+        .first()
+    )
+    if lote is None:
+        raise HTTPException(status_code=404, detail="Lote de razão não encontrado")
+
+    warning_totals = (lote.warnings_metadata or {}).get("totals_by_code", {})
+    warning_summary = (
+        {
+            code: total
+            for code, total in warning_totals.items()
+            if isinstance(code, str) and type(total) is int and total >= 0
+        }
+        if isinstance(warning_totals, dict)
+        else {}
+    )
+    return RazaoLoteStatusResponse(
+        lote_id=lote.id,
+        empresa_id=lote.empresa_id,
+        status=lote.status,
+        total_linhas=lote.total_linhas,
+        linhas_processadas=lote.linhas_processadas,
+        total_importadas=lote.total_importadas,
+        total_invalidas=lote.total_invalidas,
+        warnings_total=lote.warnings_total,
+        warnings_summary=warning_summary,
+        attempt_count=lote.attempt_count,
+        tentativas=lote.tentativas,
+        created_at=lote.created_at,
+        updated_at=lote.updated_at,
+        heartbeat_at=lote.heartbeat_at,
+        failed_at=lote.failed_at,
+        error_code=lote.error_code,
+        error_message=lote.error_message,
+        error_request_id=lote.error_request_id,
+    )
+
+
+@router.post(
+    "/lotes/{lote_id}/retry",
+    response_model=ImportacaoRazaoResponse,
+    status_code=202,
+)
+def retry_company_razao_lote(
+    company_id: int,
+    lote_id: int,
+    response: Response,
+    empresa: Empresa = Depends(require_company_access("operacao")),
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = DB_DEPENDENCY,
+    storage: RazaoStorage = Depends(get_razao_storage),
+) -> ImportacaoRazaoResponse:
+    lote = (
+        db.query(LoteImportacaoRazao)
+        .filter(
+            LoteImportacaoRazao.id == lote_id,
+            LoteImportacaoRazao.empresa_id == empresa.id,
+        )
+        .first()
+    )
+    if lote is None:
+        raise HTTPException(status_code=404, detail="Lote de razão não encontrado")
+    if lote.status != "failed":
+        raise HTTPException(
+            status_code=409, detail="Lote não está disponível para repetição"
+        )
+
+    try:
+        with storage.retry_guard(lote_id) as (retry_db, retry_lote, _stream):
+            retry_lote.status = "queued"
+            retry_lote.total_linhas = None
+            retry_lote.linhas_processadas = 0
+            retry_lote.total_importadas = 0
+            retry_lote.total_invalidas = 0
+            retry_lote.warnings_total = 0
+            retry_lote.warnings_metadata = {"totals_by_code": {}}
+            retry_lote.lease_token = None
+            retry_lote.lease_owner = None
+            retry_lote.lease_expires_at = None
+            retry_lote.heartbeat_at = None
+            retry_lote.error_code = None
+            retry_lote.error_message = None
+            retry_lote.error_request_id = None
+            retry_lote.failed_at = None
+            record_audit_event(
+                retry_db,
+                event_type="razao.job.manual_retry",
+                user_id=current_user.id,
+                empresa_id=company_id,
+                resource_id=str(lote_id),
+                metadata={"attempt_count": retry_lote.attempt_count},
+            )
+    except TemporaryFileBusy as exc:
+        raise HTTPException(
+            status_code=409, detail="Lote não está disponível para repetição"
+        ) from exc
+    except TemporaryFileUnavailable as exc:
+        db.expire_all()
+        current_status = db.scalar(
+            select(LoteImportacaoRazao.status).where(
+                LoteImportacaoRazao.id == lote_id,
+                LoteImportacaoRazao.empresa_id == company_id,
+            )
+        )
+        if current_status is not None and current_status != "failed":
+            raise HTTPException(
+                status_code=409, detail="Lote não está disponível para repetição"
+            ) from exc
+        raise HTTPException(
+            status_code=410, detail="Arquivo temporário não está mais disponível"
+        ) from exc
+
+    response.headers["Retry-After"] = "3"
+    return ImportacaoRazaoResponse(
+        lote_id=lote_id,
+        status="queued",
+        status_url=f"/api/v1/companies/{company_id}/razao/lotes/{lote_id}",
+    )
+
+
 @router.get("/lotes/{lote_id}/lancamentos", response_model=RazaoLancamentoListResponse)
 def list_company_razao_lancamentos(
     company_id: int,
@@ -90,6 +239,7 @@ def list_company_razao_lancamentos(
     )
     if lote is None:
         raise HTTPException(status_code=404, detail="Lote de razão não encontrado")
+    _ensure_razao_results_available(lote)
 
     query = (
         db.query(LancamentoRazaoNormalizado)
@@ -136,6 +286,7 @@ def list_company_razao_fechamentos(
     )
     if lote is None:
         raise HTTPException(status_code=404, detail="Lote de razão não encontrado")
+    _ensure_razao_results_available(lote)
 
     query = db.query(FechamentoRazaoMensal).filter(
         FechamentoRazaoMensal.empresa_id == empresa.id,
@@ -210,13 +361,11 @@ def _balance_warnings(source: dict | list | None) -> list[dict]:
     ]
 
 
-def get_razao_storage(db: Session = DB_DEPENDENCY) -> RazaoStorage:
-    return RazaoStorage.from_settings(
-        settings,
-        sessions=sessionmaker(
-            autocommit=False, autoflush=False, bind=db.get_bind()
-        ),
-    )
+def _ensure_razao_results_available(lote: LoteImportacaoRazao) -> None:
+    if lote.status in {"queued", "processing"}:
+        raise HTTPException(
+            status_code=409, detail="Resultados ainda não estão disponíveis"
+        )
 
 
 @router.post(
