@@ -11,7 +11,11 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 
 from core.models import Empresa, LoteImportacaoRazao, Usuario
-from core.razao_storage import RazaoStorage, TemporaryFileUnavailable
+from core.razao_storage import (
+    RazaoStorage,
+    TemporaryFileBusy,
+    TemporaryFileUnavailable,
+)
 
 pytestmark = pytest.mark.integration_postgres
 
@@ -102,6 +106,27 @@ def test_retry_and_cleanup_cannot_remove_same_file_during_expiration(tmp_path, s
     with pytest.raises(TemporaryFileUnavailable):
         with storage.retry_guard(lote_id):
             pytest.fail("arquivo removido não permite retry")
+
+
+def test_concurrent_retry_reports_busy_file(tmp_path, storage_db):
+    sessions, ids = storage_db
+    now = datetime.now(timezone.utc)
+    storage = _storage(tmp_path, sessions, lambda: now)
+    with storage.admit([b"retry-concorrente"]) as upload:
+        with sessions.begin() as session:
+            lote_id = _bind(session, ids, upload, status="failed", failed_at=now)
+
+    other = _storage(tmp_path, sessions, lambda: now)
+    with storage.retry_guard(lote_id):
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_attempt_retry, other, lote_id)
+            with pytest.raises(TemporaryFileBusy):
+                future.result(timeout=5)
+
+
+def _attempt_retry(storage, lote_id):
+    with storage.retry_guard(lote_id):
+        pytest.fail("retry concorrente não deve adquirir o arquivo")
 
 
 def test_uncommitted_binding_is_protected_and_rollback_becomes_orphan(tmp_path, storage_db):

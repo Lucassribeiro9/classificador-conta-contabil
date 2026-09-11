@@ -276,6 +276,49 @@ class ImportacaoRazaoResponse(BaseModel):
         return {key: value for key, value in handler(self).items() if value is not None}
 
 
+class RazaoTentativaResponse(BaseModel):
+    numero: int
+    started_at: datetime
+    finished_at: Optional[datetime] = None
+    resultado: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RazaoLoteStatusResponse(BaseModel):
+    lote_id: int
+    empresa_id: int
+    status: str
+    total_linhas: Optional[int] = None
+    linhas_processadas: int
+    total_importadas: int
+    total_invalidas: int
+    warnings_total: int
+    warnings_summary: dict[str, int]
+    attempt_count: int
+    tentativas: list[RazaoTentativaResponse]
+    created_at: datetime
+    updated_at: datetime
+    heartbeat_at: Optional[datetime] = None
+    failed_at: Optional[datetime] = None
+    error_code: Optional[str] = None
+    error_message: Optional[str] = None
+    error_request_id: Optional[str] = None
+
+    @model_serializer(mode="wrap")
+    def serialize_without_absent_failure(self, handler):
+        optional_failure_fields = {
+            "failed_at",
+            "error_code",
+            "error_message",
+            "error_request_id",
+        }
+        return {
+            key: value
+            for key, value in handler(self).items()
+            if key not in optional_failure_fields or value is not None
+        }
+
+
 class RazaoLoteResponse(BaseModel):
     id: int
     empresa_id: int

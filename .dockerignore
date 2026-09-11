@@ -16,6 +16,7 @@ env/
 # Local/dev files
 .env
 .env.*
+data/
 *.log
 .DS_Store
 

@@ -149,6 +149,51 @@ def test_second_transient_failure_finishes_job(worker_context):
         assert [attempt.resultado for attempt in lote.tentativas] == ["interrupted", "failed"]
 
 
+def test_manual_retry_after_two_attempts_is_claimed_as_third_attempt(worker_context):
+    sessions, lote_id = worker_context
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    with sessions.begin() as session:
+        lote = session.get(LoteImportacaoRazao, lote_id)
+        lote.attempt_count = 2
+        session.add_all(
+            [
+                TentativaImportacaoRazao(
+                    lote_id=lote_id,
+                    numero=1,
+                    started_at=now,
+                    finished_at=now,
+                    resultado="interrupted",
+                ),
+                TentativaImportacaoRazao(
+                    lote_id=lote_id,
+                    numero=2,
+                    started_at=now,
+                    finished_at=now,
+                    resultado="failed",
+                ),
+            ]
+        )
+
+    worker = RazaoWorker(
+        sessions,
+        FakeStorage(),
+        lambda *_: JobResult(1, 1, 0, 0, {"totals_by_code": {}}),
+        worker_id="worker-manual-retry",
+        clock=lambda: now,
+    )
+
+    assert worker.run_once() is True
+    with sessions() as session:
+        lote = session.get(LoteImportacaoRazao, lote_id)
+        assert lote.status == "completed"
+        assert lote.attempt_count == 3
+        assert [attempt.resultado for attempt in lote.tentativas] == [
+            "interrupted",
+            "failed",
+            "completed",
+        ]
+
+
 def test_expired_lease_is_recovered_and_previous_attempt_interrupted(worker_context):
     sessions, lote_id = worker_context
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)

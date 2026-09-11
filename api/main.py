@@ -144,9 +144,26 @@ def custom_openapi():
                 continue
             responses = operation.setdefault("responses", {})
             for status_code in (
-                "400", "401", "403", "404", "409", "413", "422", "500", "507"
+                "400",
+                "401",
+                "403",
+                "404",
+                "409",
+                "413",
+                "422",
+                "500",
+                "507",
             ):
                 responses.setdefault(status_code, error_response_schema)
+
+    retry_path = schema.get("paths", {}).get(
+        "/api/v1/companies/{company_id}/razao/lotes/{lote_id}/retry", {}
+    )
+    retry_operation = retry_path.get("post")
+    if isinstance(retry_operation, dict):
+        retry_operation.setdefault("responses", {}).setdefault(
+            "410", error_response_schema
+        )
 
     app.openapi_schema = schema
     return app.openapi_schema
