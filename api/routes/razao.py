@@ -7,6 +7,7 @@ from api.dependencies import (
     DB_DEPENDENCY,
     get_current_user,
     require_company_access,
+    require_company_or_service_access,
     require_global_admin,
 )
 from api.schemas import (
@@ -17,6 +18,7 @@ from api.schemas import (
     RazaoLoteListResponse,
     RazaoLoteResponse,
     RazaoLoteStatusResponse,
+    RazaoWarningListResponse,
 )
 from core.audit import record_audit_event
 from core.models import (
@@ -25,8 +27,10 @@ from core.models import (
     LancamentoRazaoNormalizado,
     LoteImportacaoRazao,
     Usuario,
+    WarningImportacaoRazao,
 )
 from core.config import settings
+from core.razao_importer import warning_code_from_message
 from core.razao_parser import RazaoParseError, parse_razao_metadata
 from core.razao_storage import (
     InsufficientCapacity,
@@ -218,6 +222,135 @@ def retry_company_razao_lote(
         status="queued",
         status_url=f"/api/v1/companies/{company_id}/razao/lotes/{lote_id}",
     )
+
+
+@router.get(
+    "/lotes/{lote_id}/warnings",
+    response_model=RazaoWarningListResponse,
+)
+def list_company_razao_warnings(
+    company_id: int,
+    lote_id: int,
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    codigo: str | None = Query(None),
+    linha: int | None = Query(None, ge=1),
+    empresa: Empresa = Depends(
+        require_company_or_service_access("leitura", "empresas:read")
+    ),
+    db: Session = DB_DEPENDENCY,
+) -> RazaoWarningListResponse:
+    lote = (
+        db.query(LoteImportacaoRazao)
+        .filter(
+            LoteImportacaoRazao.id == lote_id,
+            LoteImportacaoRazao.empresa_id == empresa.id,
+        )
+        .first()
+    )
+    if lote is None:
+        raise HTTPException(status_code=404, detail="Lote de razão não encontrado")
+    _ensure_razao_results_available(lote)
+
+    legacy_warnings = (lote.warnings_metadata or {}).get("warnings")
+    if isinstance(legacy_warnings, list):
+        warnings = _adapt_legacy_warnings(legacy_warnings)
+        if codigo is not None:
+            warnings = [warning for warning in warnings if warning["codigo"] == codigo]
+        if linha is not None:
+            warnings = [warning for warning in warnings if warning["linha"] == linha]
+        offset = (page - 1) * limit
+        items = warnings[offset : offset + limit]
+        return RazaoWarningListResponse(
+            source="legacy",
+            items=items,
+            total=len(warnings),
+            page=page,
+            limit=limit,
+            has_next=offset + len(items) < len(warnings),
+        )
+
+    query = db.query(WarningImportacaoRazao).filter(
+        WarningImportacaoRazao.lote_id == lote.id
+    )
+    if codigo is not None:
+        query = query.filter(WarningImportacaoRazao.codigo == codigo)
+    if linha is not None:
+        query = query.filter(WarningImportacaoRazao.linha == linha)
+    query = query.order_by(WarningImportacaoRazao.id.asc())
+    offset = (page - 1) * limit
+    total = query.count()
+    warnings = query.offset(offset).limit(limit).all()
+    return RazaoWarningListResponse(
+        source="normalized",
+        items=[
+            {
+                "linha": warning.linha,
+                "codigo": warning.codigo,
+                "mensagem": warning.mensagem,
+                "detalhes": _safe_warning_details(warning.detalhes),
+            }
+            for warning in warnings
+        ],
+        total=total,
+        page=page,
+        limit=limit,
+        has_next=offset + len(warnings) < total,
+    )
+
+
+def _adapt_legacy_warnings(warnings: list) -> list[dict]:
+    adapted = []
+    for warning in warnings:
+        if not isinstance(warning, dict):
+            continue
+        explicit_message = warning.get("mensagem")
+        messages = (
+            [explicit_message]
+            if explicit_message is not None
+            else warning.get("warnings") or ["Aviso do razao."]
+        )
+        if not isinstance(messages, list):
+            messages = [messages]
+        linha = warning.get("linha")
+        if type(linha) is not int or linha < 1:
+            linha = None
+        for raw_message in messages:
+            message = str(raw_message)
+            adapted.append(
+                {
+                    "linha": linha,
+                    "codigo": str(
+                        warning.get("codigo") or warning_code_from_message(message)
+                    ),
+                    "mensagem": message,
+                    "detalhes": _safe_warning_details(warning.get("detalhes")),
+                }
+            )
+    return adapted
+
+
+def _safe_warning_details(details) -> dict:
+    if not isinstance(details, dict):
+        return {}
+    safe = {}
+    for key in ("bloco_id", "conta_codigo"):
+        if key in details:
+            safe[key] = details[key]
+    for key in ("saldo_calculado", "saldo_observado"):
+        value = details.get(key)
+        if isinstance(value, dict):
+            safe[key] = {
+                nested_key: value[nested_key]
+                for nested_key in (
+                    "fonte",
+                    "valor_original",
+                    "valor_decimal",
+                    "natureza",
+                )
+                if nested_key in value
+            }
+    return safe
 
 
 @router.get("/lotes/{lote_id}/lancamentos", response_model=RazaoLancamentoListResponse)

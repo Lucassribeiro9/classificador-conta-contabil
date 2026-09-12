@@ -319,12 +319,29 @@ class RazaoLoteStatusResponse(BaseModel):
         }
 
 
+class RazaoWarningResponse(BaseModel):
+    linha: Optional[int] = None
+    codigo: str
+    mensagem: str
+    detalhes: dict
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RazaoWarningListResponse(BaseModel):
+    source: Literal["normalized", "legacy"]
+    items: list[RazaoWarningResponse]
+    total: int
+    page: int
+    limit: int
+    has_next: bool
+
+
 class RazaoLoteResponse(BaseModel):
     id: int
     empresa_id: int
     original_filename: str
     status: str
-    total_linhas: int
+    total_linhas: Optional[int] = None
     total_importadas: int
     total_invalidas: int
     warnings_saldo_total: int = 0
