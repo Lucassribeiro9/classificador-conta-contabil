@@ -87,11 +87,44 @@ def test_user_with_read_access_gets_real_razao_lote_progress(client):
     assert "error_code" not in body
 
 
+def test_razao_lote_list_accepts_queued_lote_with_unknown_total(client):
+    usuario, empresa_id, lote_id, _ = _seed_razao_lote_with_lancamento(
+        permissao="leitura"
+    )
+    with TestingSessionLocal.begin() as session:
+        lote = session.get(LoteImportacaoRazao, lote_id)
+        lote.status = "queued"
+        lote.total_linhas = None
+        lote.linhas_processadas = 0
+        lote.total_importadas = 0
+        lote.total_invalidas = 0
+
+    response = client.get(
+        f"/api/v1/companies/{empresa_id}/razao/lotes",
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["items"] == [
+        {
+            "id": lote_id,
+            "empresa_id": empresa_id,
+            "original_filename": "razao-consulta.xlsx",
+            "status": "queued",
+            "total_linhas": None,
+            "total_importadas": 0,
+            "total_invalidas": 0,
+            "warnings_saldo_total": 0,
+            "created_at": response.json()["items"][0]["created_at"],
+        }
+    ]
+
+
 def test_operator_retries_failed_lote_and_preserves_attempt_history(
     client, private_upload_storage
 ):
     usuario, empresa_id = _seed_user_company_and_catalog("operacao")
-    failed_at = datetime(2026, 9, 11, 12, 30, tzinfo=timezone.utc)
+    failed_at = datetime.now(timezone.utc)
     with private_upload_storage.admit([b"synthetic-xlsx"]) as upload:
         with TestingSessionLocal.begin() as session:
             lote = LoteImportacaoRazao(

@@ -341,7 +341,7 @@ class RazaoLoteResponse(BaseModel):
     empresa_id: int
     original_filename: str
     status: str
-    total_linhas: int
+    total_linhas: Optional[int] = None
     total_importadas: int
     total_invalidas: int
     warnings_saldo_total: int = 0
