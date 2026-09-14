@@ -3,16 +3,28 @@ version: "2.4"
 services:
   api-contabil:
     build: .
+    image: classificador-contabil:${APP_IMAGE_TAG:-dev}
     ports:
       - "8000:8000"
     volumes:
       - ./data:/app/data
+      - razao-temp-dev:/app/data/razao-temporario
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - ADMIN_TOKEN=${ADMIN_TOKEN}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
       - SERVICE_CREDENTIAL_SECRET=${SERVICE_CREDENTIAL_SECRET}
+      - RAZAO_STORAGE_DIR=/app/data/razao-temporario
+      - RAZAO_UPLOAD_MAX_BYTES=${RAZAO_UPLOAD_MAX_BYTES:-50000000}
+      - RAZAO_STORAGE_MIN_FREE_BYTES=${RAZAO_STORAGE_MIN_FREE_BYTES:-5000000000}
+      - RAZAO_STORAGE_MIN_FREE_RATIO=${RAZAO_STORAGE_MIN_FREE_RATIO:-0.15}
+      - RAZAO_FAILED_RETENTION_SECONDS=${RAZAO_FAILED_RETENTION_SECONDS:-86400}
+      - RAZAO_IMPORT_BLOCK_SIZE=${RAZAO_IMPORT_BLOCK_SIZE:-1000}
+      - RAZAO_WORKER_CONCURRENCY=${RAZAO_WORKER_CONCURRENCY:-1}
+      - RAZAO_HEARTBEAT_SECONDS=${RAZAO_HEARTBEAT_SECONDS:-30}
+      - RAZAO_LEASE_SECONDS=${RAZAO_LEASE_SECONDS:-600}
+      - RAZAO_POLL_INTERVAL_SECONDS=${RAZAO_POLL_INTERVAL_SECONDS:-3}
     restart: unless-stopped
     command: sh -c "alembic upgrade head && uvicorn api.main:app --host 0.0.0.0 --port 8000"
     depends_on:
@@ -20,6 +32,31 @@ services:
         condition: service_healthy
     networks:
       - n8n-network-test
+
+  razao-worker:
+    build: .
+    image: classificador-contabil:${APP_IMAGE_TAG:-dev}
+    volumes:
+      - razao-temp-dev:/app/data/razao-temporario
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - RAZAO_STORAGE_DIR=/app/data/razao-temporario
+      - RAZAO_UPLOAD_MAX_BYTES=${RAZAO_UPLOAD_MAX_BYTES:-50000000}
+      - RAZAO_STORAGE_MIN_FREE_BYTES=${RAZAO_STORAGE_MIN_FREE_BYTES:-5000000000}
+      - RAZAO_STORAGE_MIN_FREE_RATIO=${RAZAO_STORAGE_MIN_FREE_RATIO:-0.15}
+      - RAZAO_FAILED_RETENTION_SECONDS=${RAZAO_FAILED_RETENTION_SECONDS:-86400}
+      - RAZAO_IMPORT_BLOCK_SIZE=${RAZAO_IMPORT_BLOCK_SIZE:-1000}
+      - RAZAO_WORKER_CONCURRENCY=${RAZAO_WORKER_CONCURRENCY:-1}
+      - RAZAO_HEARTBEAT_SECONDS=${RAZAO_HEARTBEAT_SECONDS:-30}
+      - RAZAO_LEASE_SECONDS=${RAZAO_LEASE_SECONDS:-600}
+      - RAZAO_POLL_INTERVAL_SECONDS=${RAZAO_POLL_INTERVAL_SECONDS:-3}
+    command: python -m scripts.razao_worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - n8n-network-test
+    restart: unless-stopped
 
   postgres:
     image: postgres:16-alpine
@@ -86,3 +123,5 @@ networks:
 
 volumes:
   postgres-data:
+  razao-temp-dev:
+    name: ${RAZAO_TEMP_VOLUME_NAME:-classificador-dev-razao-temp}

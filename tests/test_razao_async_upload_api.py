@@ -7,6 +7,7 @@ from api.routes.razao import get_razao_storage
 from core.models import AuditEvent, LoteImportacaoRazao
 from core.razao_storage import RazaoStorage
 from core.razao_storage import InsufficientCapacity, UploadTooLarge
+from core.razao_worker import RazaoWorker, process_razao_upload
 from tests.conftest import TestingSessionLocal
 from tests.test_razao_import_api import (
     _auth_headers,
@@ -52,6 +53,41 @@ def test_new_upload_is_queued_without_accounting_in_http(client, monkeypatch):
         lote = session.query(LoteImportacaoRazao).one()
         assert lote.total_linhas is None
         assert session.query(AuditEvent).one().event_type == "ledger.import_received"
+
+
+def test_environment_smoke_advances_upload_through_worker_and_query(
+    client, private_upload_storage
+):
+    usuario, empresa_id = _seed_user_company_and_catalog("operacao")
+    headers = _auth_headers(usuario)
+    accepted = client.post(
+        f"/api/v1/companies/{empresa_id}/razao/import",
+        files=_upload_file_with_metadata("22.333.444/0001-55"),
+        headers=headers,
+    )
+
+    assert accepted.status_code == 202
+    lote_id = accepted.json()["lote_id"]
+    worker = RazaoWorker(
+        TestingSessionLocal,
+        private_upload_storage,
+        process_razao_upload,
+        worker_id="environment-smoke",
+    )
+    assert worker.run_once() is True
+
+    status = client.get(
+        f"/api/v1/companies/{empresa_id}/razao/lotes/{lote_id}", headers=headers
+    )
+    lancamentos = client.get(
+        f"/api/v1/companies/{empresa_id}/razao/lotes/{lote_id}/lancamentos",
+        headers=headers,
+    )
+
+    assert status.status_code == 200
+    assert status.json()["status"] in {"completed", "completed_with_warnings"}
+    assert lancamentos.status_code == 200
+    assert lancamentos.json()["total"] > 0
 
 
 @pytest.mark.parametrize(

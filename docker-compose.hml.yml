@@ -23,8 +23,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: classificador-contabil:${APP_IMAGE_TAG_HML:-hml}
     volumes:
       - ./tests/fixtures/homologacao:/app/tests/fixtures/homologacao:ro
+      - razao-temp-hml:/app/data/razao-temporario
     environment:
       APP_ENV: hml
       DATABASE_URL: ${DATABASE_URL_HML:?Defina DATABASE_URL_HML no ambiente de homologacao}
@@ -33,6 +35,16 @@ services:
       JWT_ALGORITHM: ${JWT_ALGORITHM_HML:-HS256}
       SERVICE_CREDENTIAL_SECRET: ${SERVICE_CREDENTIAL_SECRET_HML:?Defina SERVICE_CREDENTIAL_SECRET_HML no ambiente de homologacao}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS_HML:-https://classificador-hml.interno}
+      RAZAO_STORAGE_DIR: /app/data/razao-temporario
+      RAZAO_UPLOAD_MAX_BYTES: ${RAZAO_UPLOAD_MAX_BYTES_HML:-50000000}
+      RAZAO_STORAGE_MIN_FREE_BYTES: ${RAZAO_STORAGE_MIN_FREE_BYTES_HML:-5000000000}
+      RAZAO_STORAGE_MIN_FREE_RATIO: ${RAZAO_STORAGE_MIN_FREE_RATIO_HML:-0.15}
+      RAZAO_FAILED_RETENTION_SECONDS: ${RAZAO_FAILED_RETENTION_SECONDS_HML:-86400}
+      RAZAO_IMPORT_BLOCK_SIZE: ${RAZAO_IMPORT_BLOCK_SIZE_HML:-1000}
+      RAZAO_WORKER_CONCURRENCY: ${RAZAO_WORKER_CONCURRENCY_HML:-1}
+      RAZAO_HEARTBEAT_SECONDS: ${RAZAO_HEARTBEAT_SECONDS_HML:-30}
+      RAZAO_LEASE_SECONDS: ${RAZAO_LEASE_SECONDS_HML:-600}
+      RAZAO_POLL_INTERVAL_SECONDS: ${RAZAO_POLL_INTERVAL_SECONDS_HML:-3}
     command: >-
       sh -c "alembic upgrade head &&
       uvicorn api.main:app --host 0.0.0.0 --port 8000"
@@ -53,6 +65,34 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+
+  razao-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: classificador-contabil:${APP_IMAGE_TAG_HML:-hml}
+    volumes:
+      - razao-temp-hml:/app/data/razao-temporario
+    environment:
+      APP_ENV: hml
+      DATABASE_URL: ${DATABASE_URL_HML:?Defina DATABASE_URL_HML no ambiente de homologacao}
+      RAZAO_STORAGE_DIR: /app/data/razao-temporario
+      RAZAO_UPLOAD_MAX_BYTES: ${RAZAO_UPLOAD_MAX_BYTES_HML:-50000000}
+      RAZAO_STORAGE_MIN_FREE_BYTES: ${RAZAO_STORAGE_MIN_FREE_BYTES_HML:-5000000000}
+      RAZAO_STORAGE_MIN_FREE_RATIO: ${RAZAO_STORAGE_MIN_FREE_RATIO_HML:-0.15}
+      RAZAO_FAILED_RETENTION_SECONDS: ${RAZAO_FAILED_RETENTION_SECONDS_HML:-86400}
+      RAZAO_IMPORT_BLOCK_SIZE: ${RAZAO_IMPORT_BLOCK_SIZE_HML:-1000}
+      RAZAO_WORKER_CONCURRENCY: ${RAZAO_WORKER_CONCURRENCY_HML:-1}
+      RAZAO_HEARTBEAT_SECONDS: ${RAZAO_HEARTBEAT_SECONDS_HML:-30}
+      RAZAO_LEASE_SECONDS: ${RAZAO_LEASE_SECONDS_HML:-600}
+      RAZAO_POLL_INTERVAL_SECONDS: ${RAZAO_POLL_INTERVAL_SECONDS_HML:-3}
+    command: python -m scripts.razao_worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - hml-db
+    restart: unless-stopped
 
   frontend:
     build:
@@ -83,3 +123,5 @@ networks:
 volumes:
   postgres-hml-data:
     name: classificador-hml-postgres-data
+  razao-temp-hml:
+    name: classificador-hml-razao-temp
