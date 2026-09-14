@@ -46,6 +46,23 @@ def test_prod_compose_is_private_and_has_no_hml_resource_references():
     )
 
 
+def test_prod_compose_runs_private_razao_worker_with_environment_storage():
+    compose = yaml.safe_load(COMPOSE_PATH.read_text(encoding="utf-8"))
+    api = compose["services"]["api"]
+    worker = compose["services"]["razao-worker"]
+
+    assert worker["build"] == api["build"]
+    assert worker["image"] == api["image"]
+    assert worker["networks"] == ["prod-db"]
+    assert "ports" not in worker
+    assert api["volumes"] == ["razao-temp-prod:/app/data/razao-temporario"]
+    assert worker["volumes"] == ["razao-temp-prod:/app/data/razao-temporario"]
+    assert worker["command"] == "python -m scripts.razao_worker"
+    assert compose["volumes"]["razao-temp-prod"]["name"] == (
+        "classificador-prod-razao-temp"
+    )
+
+
 def test_prod_example_and_runbook_require_release_gate_without_real_secrets():
     env_example = (PROJECT_ROOT / ".env.prod.example").read_text(encoding="utf-8")
     runbook = (PROJECT_ROOT / "docs/devops-prod.md").read_text(encoding="utf-8")
@@ -62,6 +79,15 @@ def test_prod_example_and_runbook_require_release_gate_without_real_secrets():
         "JWT_SECRET_KEY_PROD=CHANGE_ME",
         "SERVICE_CREDENTIAL_SECRET_PROD=CHANGE_ME",
         "CORS_ALLOWED_ORIGINS=https://classificador.interno",
+        "RAZAO_UPLOAD_MAX_BYTES_PROD=50000000",
+        "RAZAO_STORAGE_MIN_FREE_BYTES_PROD=5000000000",
+        "RAZAO_STORAGE_MIN_FREE_RATIO_PROD=0.15",
+        "RAZAO_FAILED_RETENTION_SECONDS_PROD=86400",
+        "RAZAO_IMPORT_BLOCK_SIZE_PROD=1000",
+        "RAZAO_WORKER_CONCURRENCY_PROD=1",
+        "RAZAO_HEARTBEAT_SECONDS_PROD=30",
+        "RAZAO_LEASE_SECONDS_PROD=600",
+        "RAZAO_POLL_INTERVAL_SECONDS_PROD=3",
     }
     assert all(variable in env_example for variable in expected_variables)
     assert "hml" not in env_example.lower()

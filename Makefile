@@ -1,8 +1,10 @@
 # Comandos facilitadores
 # Usa o plugin moderno do Docker Compose (`docker compose`)
 DOCKER_COMPOSE := docker compose
+# Volume temporário removido somente pelo alvo explícito clean-razao-temp.
+export RAZAO_TEMP_VOLUME_NAME ?= classificador-dev-razao-temp
 # Projeto Docker Compose isolado para testes de integracao PostgreSQL
-DOCKER_COMPOSE_TEST := docker compose -p classificador-conta-contabil-test
+DOCKER_COMPOSE_TEST := RAZAO_TEMP_VOLUME_NAME=classificador-conta-contabil-test-razao-temp docker compose -p classificador-conta-contabil-test
 # Nome do serviço principal da API no `docker-compose.yml`
 SERVICE_API := api-contabil
 # Serviços auxiliares de infraestrutura (orquestração e túnel)
@@ -12,7 +14,7 @@ SERVICES_ALL := $(SERVICE_API) $(SERVICES_INFRA)
 # Serviço do banco de dados PostgreSQL (usado para logs e testes)
 SERVICE_DB := postgres
 # Declara targets "falsos" para evitar conflito com arquivos de mesmo nome
-.PHONY: build rebuild build-all rebuild-all up up-with-test up-api up-infra up-build down logs shell clean-cache test test-postgres migrate-create migrate-up migrate-down migrate-current
+.PHONY: build rebuild build-all rebuild-all up up-with-test up-api up-infra up-build down logs shell clean-project clean-razao-temp test test-postgres migrate-create migrate-up migrate-down migrate-current
 
 # Build da imagem da API usando cache (mais rápido no dia a dia)
 build:
@@ -64,9 +66,15 @@ logs:
 shell:
 	$(DOCKER_COMPOSE) exec $(SERVICE_API) bash
 
-# Remove cache de build do Docker para liberar espaço e limpar estado
-clean-cache:
-	docker builder prune -f
+# Remove somente containers, rede e imagens locais deste Compose; preserva volumes.
+clean-project:
+	$(DOCKER_COMPOSE) down --rmi local
+
+# Remove explicitamente apenas o volume temporário do Razão em desenvolvimento.
+# O PostgreSQL permanece preservado; pare o projeto antes de remover o volume.
+clean-razao-temp:
+	$(DOCKER_COMPOSE) down
+	docker volume rm $(RAZAO_TEMP_VOLUME_NAME)
 
 # Executa os testes do projeto no ambiente virtual local
 test:
@@ -74,8 +82,8 @@ test:
 
 # Executa testes de integracao reais contra PostgreSQL na rede Docker
 test-postgres:
-	$(DOCKER_COMPOSE_TEST) up -d --build $(SERVICE_API) $(SERVICE_DB)
-	$(DOCKER_COMPOSE_TEST) run --rm $(SERVICE_API) sh -c "python -m alembic upgrade head && python -m pytest -q -m integration_postgres tests/integration"
+	$(DOCKER_COMPOSE_TEST) up -d --build $(SERVICE_DB)
+	$(DOCKER_COMPOSE_TEST) run --build --rm $(SERVICE_API) sh -c "python -m alembic upgrade head && python -m pytest -q -m integration_postgres tests/integration"
 	$(DOCKER_COMPOSE_TEST) down -v
 
 # Executa testes no ambiente Windows

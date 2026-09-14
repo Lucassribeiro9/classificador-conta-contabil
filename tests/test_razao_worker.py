@@ -325,11 +325,14 @@ def test_worker_configuration_defaults_and_environment(monkeypatch):
     assert defaults.RAZAO_WORKER_CONCURRENCY == 1
     assert defaults.RAZAO_HEARTBEAT_SECONDS == 30
     assert defaults.RAZAO_LEASE_SECONDS == 600
+    assert defaults.RAZAO_POLL_INTERVAL_SECONDS == 3
 
     monkeypatch.setenv("RAZAO_WORKER_CONCURRENCY", "2")
     monkeypatch.setenv("RAZAO_HEARTBEAT_SECONDS", "15")
     monkeypatch.setenv("RAZAO_LEASE_SECONDS", "300")
+    monkeypatch.setenv("RAZAO_POLL_INTERVAL_SECONDS", "2")
     configured = Settings(_env_file=None)
     assert configured.RAZAO_WORKER_CONCURRENCY == 2
     assert configured.RAZAO_HEARTBEAT_SECONDS == 15
     assert configured.RAZAO_LEASE_SECONDS == 300
+    assert configured.RAZAO_POLL_INTERVAL_SECONDS == 2

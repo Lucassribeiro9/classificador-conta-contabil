@@ -64,6 +64,16 @@ def test_hml_compose_uses_only_environment_scoped_runtime_variables():
         "CORS_ALLOWED_ORIGINS": (
             "${CORS_ALLOWED_ORIGINS_HML:-https://classificador-hml.interno}"
         ),
+        "RAZAO_STORAGE_DIR": "/app/data/razao-temporario",
+        "RAZAO_UPLOAD_MAX_BYTES": "${RAZAO_UPLOAD_MAX_BYTES_HML:-50000000}",
+        "RAZAO_STORAGE_MIN_FREE_BYTES": "${RAZAO_STORAGE_MIN_FREE_BYTES_HML:-5000000000}",
+        "RAZAO_STORAGE_MIN_FREE_RATIO": "${RAZAO_STORAGE_MIN_FREE_RATIO_HML:-0.15}",
+        "RAZAO_FAILED_RETENTION_SECONDS": "${RAZAO_FAILED_RETENTION_SECONDS_HML:-86400}",
+        "RAZAO_IMPORT_BLOCK_SIZE": "${RAZAO_IMPORT_BLOCK_SIZE_HML:-1000}",
+        "RAZAO_WORKER_CONCURRENCY": "${RAZAO_WORKER_CONCURRENCY_HML:-1}",
+        "RAZAO_HEARTBEAT_SECONDS": "${RAZAO_HEARTBEAT_SECONDS_HML:-30}",
+        "RAZAO_LEASE_SECONDS": "${RAZAO_LEASE_SECONDS_HML:-600}",
+        "RAZAO_POLL_INTERVAL_SECONDS": "${RAZAO_POLL_INTERVAL_SECONDS_HML:-3}",
     }
 
 
@@ -71,8 +81,25 @@ def test_hml_compose_mounts_only_sanitized_seed_fixtures_as_read_only():
     compose = yaml.safe_load(COMPOSE_PATH.read_text(encoding="utf-8"))
 
     assert compose["services"]["api"]["volumes"] == [
-        "./tests/fixtures/homologacao:/app/tests/fixtures/homologacao:ro"
+        "./tests/fixtures/homologacao:/app/tests/fixtures/homologacao:ro",
+        "razao-temp-hml:/app/data/razao-temporario",
     ]
+
+
+def test_hml_compose_runs_private_razao_worker_with_environment_storage():
+    compose = yaml.safe_load(COMPOSE_PATH.read_text(encoding="utf-8"))
+    api = compose["services"]["api"]
+    worker = compose["services"]["razao-worker"]
+
+    assert worker["build"] == api["build"]
+    assert worker["image"] == api["image"]
+    assert worker["networks"] == ["hml-db"]
+    assert "ports" not in worker
+    assert worker["volumes"] == ["razao-temp-hml:/app/data/razao-temporario"]
+    assert worker["command"] == "python -m scripts.razao_worker"
+    assert compose["volumes"]["razao-temp-hml"]["name"] == (
+        "classificador-hml-razao-temp"
+    )
 
 
 def test_hml_environment_example_and_validation_commands_are_sanitized():
@@ -93,6 +120,15 @@ def test_hml_environment_example_and_validation_commands_are_sanitized():
         "JWT_SECRET_KEY_HML=CHANGE_ME",
         "SERVICE_CREDENTIAL_SECRET_HML=CHANGE_ME",
         "CORS_ALLOWED_ORIGINS_HML=https://classificador-hml.interno",
+        "RAZAO_UPLOAD_MAX_BYTES_HML=50000000",
+        "RAZAO_STORAGE_MIN_FREE_BYTES_HML=5000000000",
+        "RAZAO_STORAGE_MIN_FREE_RATIO_HML=0.15",
+        "RAZAO_FAILED_RETENTION_SECONDS_HML=86400",
+        "RAZAO_IMPORT_BLOCK_SIZE_HML=1000",
+        "RAZAO_WORKER_CONCURRENCY_HML=1",
+        "RAZAO_HEARTBEAT_SECONDS_HML=30",
+        "RAZAO_LEASE_SECONDS_HML=600",
+        "RAZAO_POLL_INTERVAL_SECONDS_HML=3",
     }
     assert all(variable in env_example for variable in expected_variables)
     assert "!.env.hml.example" in gitignore
