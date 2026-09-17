@@ -132,3 +132,81 @@ As seguintes implementacoes devem ser tratadas separadamente:
 - O novo fluxo tem uma fonte canonica unica para ML.
 - O legado fica nomeado como legado/compatibilidade.
 - Implementacoes futuras ficam quebradas em issues pequenas.
+
+## Politica de ciclo de vida de `Transacao`
+
+`Transacao` permanece em suporte de compatibilidade, sem prazo de sunset e sem
+versionamento definido nesta decisao. Enquanto existir consumidor autorizado de
+um contrato legado, seus dados e endpoints devem preservar o comportamento
+vigente e permanecer identificados como legado.
+
+O fluxo novo nao deve introduzir novos consumidores, novos datasets ou novas
+sincronizacoes que dependam de `Transacao`. Novas capacidades de classificacao,
+feedback e consulta devem usar `LancamentoRazaoNormalizado` e os contratos de
+contrapartida descritos na Spec 06.
+
+O ciclo de vida tem tres estados documentais:
+
+| Estado | Significado | Regra |
+| --- | --- | --- |
+| Compatibilidade ativa | Consumidores legados ainda podem usar `Transacao` e seus endpoints. | Nenhuma remocao, migracao automatica ou mudanca de contrato. |
+| Elegivel para descontinuacao | Todos os gates abaixo possuem evidencia atual e aprovada. | Abrir issue funcional especifica; a elegibilidade nao remove nada. |
+| Descontinuada | Uma issue funcional aprovada executou a mudanca e a homologacao. | Preservar evidencias, plano de rollback e decisao sobre retencao. |
+
+## Gates objetivos para descontinuacao
+
+`Transacao` e seus endpoints legados somente podem ser considerados elegiveis
+quando todos os itens forem comprovados em uma revisao futura:
+
+1. O fluxo de contrapartida baseado em `LancamentoRazaoNormalizado` esta
+   disponivel para cada operacao que substitui o caso de uso legado.
+2. O dataset canonico, treino, classificacao e feedback novos possuem testes e
+   homologacao de acesso por empresa, sem depender de `Transacao`.
+3. Todos os consumidores internos identificados migraram, foram retirados por
+   decisao humana ou receberam adaptador explicitamente aprovado.
+4. Os endpoints `POST /companies/{company_id}/classification`,
+   `POST /companies/{company_id}/predict` e
+   `PATCH /transactions/{transaction_id}/feedback` possuem inventario de uso e
+   confirmacao de que nao ha consumidor autorizado remanescente.
+5. A retencao de dados historicos, a auditoria e a consulta necessaria para
+   suporte foram decididas sem copiar automaticamente Razao para `Transacao`.
+6. Existe issue funcional focada, com plano de rollout, rollback, testes de
+   contrato e homologacao manual aprovados.
+
+Esses gates nao criam data, versao de API, aviso de deprecation ou obrigacao de
+migracao. Qualquer um desses contratos exige nova decisao e issue propria.
+
+## Dados historicos e rollback
+
+Nenhuma transacao historica sera migrada, arquivada ou removida por esta
+politica. O historico de `Transacao` permanece no armazenamento atual para
+compatibilidade e consulta enquanto o legado estiver ativo. A ausencia de
+migracao automatica tambem impede que uma divergencia de semantica contabil
+seja ocultada por copia de dados.
+
+Uma futura entrega de descontinuacao deve decidir separadamente a retencao,
+consulta, exportacao e eventual arquivamento dos dados. Antes de qualquer
+mudanca mutavel, ela deve registrar inventario de consumidores, backup
+verificavel quando aplicavel, plano de retorno e criterio de reversao.
+
+Rollback de uma futura retirada significa restaurar a versao e o contrato
+legados aprovados, sem recriar dados a partir do Razao e sem descartar
+evidencias. Esta issue nao autoriza migration, delete, alteracao de tabela ou
+mudanca de endpoint.
+
+## Riscos e proximas issues funcionais
+
+Os riscos principais sao remocao prematura de consumidor legado, migracao sem
+equivalencia contabil demonstrada e manutencao indefinida sem revisar os gates.
+O acompanhamento deve ocorrer por issues funcionais pequenas, quando os gates
+forem observaveis:
+
+- inventariar consumidores e telemetria sanitizada dos endpoints legados;
+- migrar ou isolar um consumidor legado por vez;
+- definir retencao e consulta historica antes de qualquer remocao;
+- retirar um endpoint somente com testes de contrato, rollout, rollback e
+  homologacao aprovados.
+
+Nenhuma dessas entregas esta criada ou autorizada por este documento. Elas nao
+devem alterar a fonte canonica, os dados historicos ou os contratos legados sem
+uma nova Task Review e decisao humana.
