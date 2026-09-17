@@ -794,6 +794,37 @@ rodadas:
 Mesmo com os criterios atendidos, issues comportamentais somente podem ser
 liberadas por nova decisao e issue especifica.
 
+## Expansao Comportamental Restrita
+
+Depois das tres calibracoes documentais registradas na #381, a expansao para
+comportamento fica **restrita a um unico piloto controlado**. Esta decisao nao
+libera uma classe geral de issues comportamentais, nao seleciona uma issue nem
+inicia execucao automaticamente.
+
+O piloto futuro somente pode comecar quando uma issue comportamental de baixo
+risco tiver Task Review aprovada e registrar, no minimo:
+
+1. seam publico e criterios de aceite observaveis;
+2. TDD com evidencia real de RED, GREEN e refatoracao proporcional;
+3. branch e worktree exclusivos, a partir de base revalidada;
+4. isolamento de Compose, portas, banco, volumes e temporarios quando o escopo
+   executar servicos ou persistencia;
+5. limite de uma execucao ativa, uma correcao automatica e fallback manual;
+6. roteiro de homologacao, rollback e evidencias sanitizadas no draft PR;
+7. avaliacao privada de custo pelo mantenedor, sem publicar metricas,
+   telemetria ou limites internos no GitHub.
+
+O primeiro piloto nao pode alterar schema, migrations, permissoes,
+autenticacao, producao, dados reais, segredos, CI ou infraestrutura. Esses
+temas continuam exigindo issue propria, decisao humana explicita e gates
+adicionais.
+
+Ao termino do piloto, uma nova revisao deve comparar seguranca,
+confiabilidade, custo privado, gates e fallback antes de liberar, prolongar,
+restringir novamente ou rejeitar nova expansao. Falha, ausencia de evidencia ou
+divergencia de estado mantem a expansao bloqueada; a conclusao do piloto nunca
+autoriza automaticamente a proxima issue.
+
 ## Ordem Recomendada Das Futuras Issues
 
 1. Definir e criar protocolo GitHub, labels e comentarios estruturados.
