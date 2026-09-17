@@ -1,87 +1,133 @@
-# Classificador de Contas Contábeis com Machine Learning
+# Classificador de Conta Contabil
 
-## 📖 Visão Geral
+Aplicacao interna para importar dados contabilizados, consultar informacoes por empresa e apoiar a classificacao com revisao humana. A arquitetura atual e API-first: API FastAPI, SPA React, PostgreSQL e worker assincrono de Razao.
 
-Este projeto é uma ferramenta de automação contábil que utiliza Machine Learning para classificar lançamentos financeiros em suas respectivas contas contábeis. A solução consiste em uma aplicação web desenvolvida com Streamlit que permite ao usuário fazer o upload de uma planilha Excel, treinar um modelo de classificação de texto em tempo real e receber de volta a planilha com as contas em branco devidamente preenchidas.
+O produto e voltado a operacao interna. Nao envie planilhas reais, credenciais ou tokens para issues, pull requests, exemplos ou logs versionados.
 
-O núcleo da ferramenta é um modelo de Processamento de Linguagem Natural (PLN) que analisa a coluna "DESCRIÇÃO DO LANÇAMENTO" para prever a conta contábil correta.
+## Visao geral
 
-**Os arquivos contidos neste repositório podem ser usados para executar a ferramenta em um ambiente local.**
+Fontes de produto e contrato: [PRD](docs/prd/evolucao-plano-contas-importacao-ml.md), [specs](docs/specs/) e [OpenAPI](docs/api-openapi-consumo.md).
 
-O link da aplicação em uso estará [aqui](https://classificador-contabil.streamlit.app).
+## Requisitos locais
 
-## ✨ Funcionalidades Principais
+- Git;
+- Docker Engine com o plugin `docker compose`;
+- Python 3 e ambiente virtual para testes ou comandos locais;
+- Node.js e npm para executar a SPA fora dos containers.
 
--   **Treinamento Dinâmico:** O modelo é treinado na hora com os dados fornecidos pelo próprio usuário, garantindo que ele se adapte ao contexto específico de cada empresa.
--   **Classificação Inteligente:** Lançamentos com a conta contábil em branco são classificados automaticamente.
--   **Regra de Confiança:**
-    -   Se a probabilidade da previsão for **maior ou igual a 70%**, a conta é preenchida diretamente.
-    -   Se a probabilidade for **menor que 70%**, a ferramenta preenche com a conta mais provável, mas adiciona um aviso de **"Revisar"**, garantindo um controle de qualidade humano.
--   **Interface Web Simples:** Interface intuitiva criada com Streamlit para upload e download de arquivos.
--   **Download Fácil:** O resultado final é disponibilizado em um novo arquivo Excel, pronto para ser baixado.
+Comece a partir de um clone novo:
 
-## 🛠️ Tecnologias Utilizadas
-
--   **Linguagem:** Python 3
--   **Análise de Dados e ML:** Pandas, Scikit-learn, NLTK
--   **Interface Web:** Streamlit
--   **Análise Exploratória:** O repositório contém dois notebooks: `analise-contabil-modelo.ipynb` e `analise-contabil-real.ipynb`. Os notebooks contém uma visão geral da ferramenta e das ferramentas utilizadas, respectivamente. Porém, um mostra a execução a partir de um modelo salvo e o outro mostra a execução em tempo real.
-
-## 🚀 Como Executar o Projeto Localmente
-
-Siga os passos abaixo para executar a aplicação em sua máquina.
-
-**1. Clone o Repositório**
 ```bash
-git clone https://github.com/Lucassribeiro9/classificando-contas-contabeis.git
-cd classificando-contas-contabeis
+git clone https://github.com/Lucassribeiro9/classificador-conta-contabil.git
+cd classificador-conta-contabil
+cp .env.example .env
 ```
 
-**2. Crie e Ative um Ambiente Virtual**
+Edite `.env` antes de subir qualquer servico e substitua todos os valores `CHANGE_ME` por valores locais exclusivos. Arquivos `.env` reais nunca devem ser versionados; veja [variaveis de ambiente](docs/devops-env-variaveis.md).
+
+## Containers e stacks disponiveis
+
+O Compose de desenvolvimento (`docker-compose.yml`) define:
+
+| Servico | Finalidade |
+| --- | --- |
+| `postgres` | Banco PostgreSQL local. |
+| `api-contabil` | API FastAPI; aplica migrations ao iniciar. |
+| `razao-worker` | Worker da fila assincrona de importacao de Razao. |
+| `n8n-test` | Apoio a workflows locais, quando configurado. |
+| `cloudflared` | Tunel de borda, quando configurado. |
+
+Homologacao e producao usam stacks separadas em `docker-compose.hml.yml` e `docker-compose.prod.yml`, com proxy de borda e variaveis exclusivas. Nao use arquivos `.env` de homologacao ou producao para desenvolvimento local.
+
+## Matriz de ambientes
+
+| Ambiente | Uso | Fonte atual | Limite |
+| --- | --- | --- | --- |
+| `dev` | Desenvolvimento local | `docker-compose.yml` e `.env` | Pode recriar apenas recursos locais explicitamente identificados. |
+| `hml` | Homologacao interna | `docker-compose.hml.yml` e `.env.hml` no servidor | Preserva dados e evidencias; use somente massa sanitizada. |
+| `prod` | Producao interna | `docker-compose.prod.yml` e `.env.prod` no servidor | Requer homologacao aprovada e autorizacao operacional explicita. |
+| `all` | Orquestracao padronizada | Futuro — issue [#397](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/397) | Nao esta disponivel como comando unico. |
+
+Os comandos comuns preservam volumes por padrao. Nao remova volumes, banco ou evidencias de homologacao como tentativa de correcao ou rollback.
+
+## Comandos principais
+
+Para subir o nucleo local sem depender dos servicos auxiliares de workflow ou tunel:
+
 ```bash
-# Criar o ambiente
+docker compose up -d --build postgres api-contabil razao-worker
+docker compose ps
+```
+
+A API local fica em `http://localhost:8000`. Consulte logs com `docker compose logs -f api-contabil` e pare os containers com `docker compose down`; isso preserva volumes.
+
+Os alvos atuais do `Makefile` incluem `make build`, `make up-api`, `make test`, `make test-postgres` e `make logs`. Revise o alvo antes de executa-lo, em especial os que removem recursos. `make clean-razao-temp` remove explicitamente o volume temporario do Razao e nao e um comando rotineiro.
+
+`make check` e `make check-full` sao contratos planejados da [#398](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/398); eles ainda nao existem e nao devem ser apresentados como comandos executaveis.
+
+## Subir, testar, limpar cache e consultar logs
+
+Crie um ambiente virtual quando for executar testes locais:
+
+```bash
 python3 -m venv venv
-
-# Ativar no Linux/macOS
-source venv/bin/activate
-
-# Ativar no Windows
-.\venv\Scripts\activate
+./venv/bin/python -m pip install -r requirements.txt
+make test
 ```
 
-**3. Instale as Dependências**
-Caso não tenha o arquivo `requirements.txt`, crie um arquivo `requirements.txt` com o seguinte conteúdo:
-```
-# filepath: requirements.txt
-pandas
-numpy
-openpyxl
-scikit-learn
-nltk
-streamlit
-plotly
-seaborn
-matplotlib
-xlsxwriter
-joblib
-```
-E então instale as dependências:
+Para a matriz de integracao PostgreSQL isolada, use `make test-postgres`. Ela cria recursos de teste e faz limpeza ao final; nao a aponte para um ambiente de homologacao ou producao.
+
+O frontend pode ser executado separadamente:
+
 ```bash
-pip install -r requirements.txt
+cd frontend
+npm install
+npm run dev
 ```
 
-**4. Execute a Aplicação Streamlit**
-```bash
-streamlit run app.py
-```
-Abra o navegador no endereço local fornecido pelo Streamlit (geralmente `http://localhost:8501`).
-Caso tenha alguma dúvida, no [Streamlit](https://streamlit.io) possui o passo a passo para realizar o build do projeto.
+Os comandos de build, typecheck, lint, testes e Playwright da SPA estao em [frontend/README.md](frontend/README.md). Para limpar somente recursos locais, consulte os alvos `clean-project` e `clean-razao-temp` no `Makefile` e confirme o alvo antes da execucao.
 
-## 📋 Como Usar a Ferramenta
+## Notebooks e artefatos auxiliares
 
-1.  Na página da aplicação, baixe o **modelo de planilha** para garantir que seus dados estejam no formato correto.
-2.  Preencha a planilha com seus dados. As linhas que você deseja classificar devem ter a coluna `CONTA` vazia. As linhas já preenchidas serão usadas para treinar o modelo. Lembre-se de apagar os exemplos antes de enviar sua planilha. Esteja ciente também que as linhas preenchidas serão usadas para treinar o modelo e preencher as linhas vazias.
-3.  Faça o upload da sua planilha na área de "Envio da planilha para classificação".
-4.  Clique no botão **"Processar e classificar planilha"**.
-5.  Aguarde o processamento. Ao final, uma prévia dos resultados será exibida.
-6.  Clique no botão **"Baixar planilha classificada"** para obter o arquivo final.
+Notebooks e arquivos de apoio nao sao o caminho operacional principal. Use apenas artefatos ficticios ou sanitizados nos ambientes de desenvolvimento e homologacao. Planilhas, dumps, tokens, logs brutos e qualquer dado contabil real devem permanecer fora do repositorio.
+
+Os contratos de entrada e os exemplos sanitizados estao em documentos do dominio, como [modelo de Razao](docs/razao-planilha-modelo.md) e [movimentos operacionais](docs/movimentos-operacionais-planilha-modelo.md).
+
+O Streamlit permanece como apoio legado best-effort e nao e o caminho critico da Release 1. A arquitetura-alvo usa a API FastAPI e a SPA; o legado nao deve acessar o banco diretamente nem bloquear a homologacao do frontend interno.
+
+## Workflows operacionais e esteira supervisionada
+
+Os workflows n8n e os servicos de tunel exigem configuracao propria; nao os considere prontos apenas por executar `docker compose up`. Ha uma divergencia conhecida entre referencias legadas a `ngrok` no `Makefile` e o servico `cloudflared` definido no Compose. Ela esta fora deste README e deve ser resolvida em issue propria antes de ser documentada como fluxo confirmado.
+
+A esteira de agentes supervisionada tem estado oficial no GitHub e contrato em [Spec 14](docs/specs/14-esteira-agentes-supervisionada.md) e no [protocolo operacional](docs/agent-protocol.md). Cada issue requer Task Review, aprovacao humana e evidencias proprias; a esteira nao substitui o fluxo manual.
+
+## API, OpenAPI e autenticacao
+
+Com a API local em execucao, os pontos de consulta sao:
+
+- Swagger UI: `http://localhost:8000/docs`;
+- ReDoc: `http://localhost:8000/redoc`;
+- schema: `http://localhost:8000/openapi.json`;
+- health: `http://localhost:8000/health`.
+
+O OpenAPI e a fonte canonica de endpoints e payloads. O guia de consumo traz exemplos sanitizados e a estrategia de autenticacao: [docs/api-openapi-consumo.md](docs/api-openapi-consumo.md). Usuarios humanos usam login e JWT; nunca inclua tokens, senhas ou chaves de servico em comandos salvos, screenshots ou evidencias.
+
+## Homologacao manual e evidencias
+
+Homologacao ocorre em ambiente interno separado e com massa sanitizada. O roteiro formal do Ciclo 0 registra ambiente, commit, responsaveis, cenarios, evidencias tratadas, divergencias e decisao final: [docs/homologacao/roteiro-ciclo-0.md](docs/homologacao/roteiro-ciclo-0.md).
+
+Use tambem o [checklist tecnico](docs/homologacao-checklist-tecnico.md), o [roteiro de operador/contador](docs/homologacao-roteiro-operador-contador.md) e o [smoke da aplicacao](docs/homologacao-smoke-aplicacao.md). O deploy manual de HML e producao esta em [docs/deploy-interno-manual.md](docs/deploy-interno-manual.md).
+
+## Troubleshooting
+
+- Execute `docker compose ps` e `docker compose logs -f api-contabil` antes de reiniciar servicos locais.
+- Confirme que `.env` existe e que seus placeholders foram substituidos antes de diagnosticar falhas de configuracao.
+- Para contratos de API, consulte o OpenAPI em vez de inferir payloads por exemplos antigos.
+- Para HML ou producao, siga os runbooks correspondentes; nao reutilize Compose, volumes ou segredos locais.
+- Nao use `make up-infra` como caminho confirmado enquanto a divergencia `ngrok`/`cloudflared` permanecer aberta.
+
+## Seguranca, dados sensiveis e producao
+
+Nunca versione `.env` reais, senhas, tokens, chaves privadas, planilhas de clientes, dumps de banco, logs brutos ou telemetria privada. Mantenha bancos, volumes, hosts e segredos separados entre dev, HML e producao.
+
+Operacoes mutaveis em producao — inclusive subida de containers, migrations, carga de dados, limpeza e rollback — exigem autorizacao humana explicita e o procedimento documentado. A producao interna so pode avancar depois da homologacao aprovada; detalhes estao em [docs/devops-prod.md](docs/devops-prod.md).
