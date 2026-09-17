@@ -39,6 +39,10 @@ O Compose de desenvolvimento (`docker-compose.yml`) define:
 
 Homologacao e producao usam stacks separadas em `docker-compose.hml.yml` e `docker-compose.prod.yml`, com proxy de borda e variaveis exclusivas. Nao use arquivos `.env` de homologacao ou producao para desenvolvimento local.
 
+Para operar a fila assincrona de Razao, use o
+[guia operacional](docs/razao-fila-assincrona.md) e mantenha a Spec 04 como
+fonte canonica.
+
 ## Matriz de ambientes
 
 | Ambiente | Uso | Fonte atual | Limite |

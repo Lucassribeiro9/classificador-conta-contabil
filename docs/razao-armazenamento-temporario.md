@@ -6,6 +6,9 @@ Consome chunks, reserva disco, mantém associação privada entre arquivo e lote
 e oferece limpeza e acesso protegido. Não cria lotes, endpoints, worker ou
 agendamento. A integração desses consumidores pertence às próximas entregas.
 
+Para iniciar, parar, inspecionar e recuperar a fila que consome este
+armazenamento, consulte o [guia operacional](razao-fila-assincrona.md).
+
 ## Configuração
 
 | Variável | Padrão | Unidade/condição |
