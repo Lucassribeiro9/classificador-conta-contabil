@@ -6,12 +6,12 @@ specs especializadas.
 
 | Metadado | Valor |
 | --- | --- |
-| Versao do PRD | `3.0` |
-| Fase | `3` |
-| Release | `1` |
+| Versao do PRD | `4.0` |
+| Fase | `4` |
+| Release | `Pos-Release 1` |
 | Status | `Em especificacao` |
-| Data da versao | `2026-07-28` |
-| Vigencia | Merge do PR vinculado a [issue #359](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/359) |
+| Data da versao | `2026-09-17` |
+| Vigencia | Merge do PR vinculado a [issue #498](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/498) |
 
 ## Historico de Versoes
 
@@ -24,6 +24,7 @@ consolidaram cada marco documental.
 | `1.0` | Fase 1 | 2026-06-09 | Entregue e em manutencao | Fundacao API-first, PostgreSQL, seguranca, plano de contas, Razao e ML de contrapartida. | Commit `e81da7f` |
 | `2.0` | Fase 2 | 2026-07-02 | Implementada, em homologacao/estabilizacao | Interface grafica interna, ambientes e massa sanitizada de homologacao. | Commit `195d153` / PR `#270` |
 | `3.0` | Fase 3 / Release 1 | 2026-07-28 | Em especificacao | Fundacao tecnica, saldos, dois layouts operacionais, planilha classificada e integracao n8n. | [Issue #359](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/359) |
+| `4.0` | Fase 4 / Pos-Release 1 | 2026-09-17 | Em especificacao | Arquitetura contabil por empresa, temporalidade, revisao humana, ML versionado e operacao recuperavel. | [Issue #498](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/498) |
 
 ## Estado das Fases
 
@@ -57,6 +58,17 @@ A Release 1 inicia a nova etapa de confiabilidade operacional e conferencia
 contabil. Seu escopo e detalhado na secao
 [Fase 3 / Release 1](#fase-3--release-1).
 
+### Fase 4 / Pos-Release 1 - Em especificacao
+
+Esta fase sucede a Release 1 sem reescrever seu historico. Ela substitui
+gradualmente a premissa de catalogo contabil global por identidades, versoes e
+snapshots por empresa; organiza a revisao humana por ambiguidade; e estabelece
+as bases de dataset, modelo, jobs, observabilidade e recuperacao operacional.
+
+A [Spec 17](../specs/17-evolucao-arquitetura-operacao-e-governanca.md) e a
+fonte canonica dos contratos e da matriz de transicao. Cada mudanca executavel
+continua dependente de issue, Task Review, branch e validacao proprias.
+
 ## Problema
 
 O escritorio precisa evoluir o classificador contabil de um modelo que apenas aprende padroes de historico para um sistema interno capaz de usar contexto contabil estruturado. Hoje a conta contabil e tratada como um codigo isolado, sem catalogo de contas, sem descricao semantica, sem vinculo formal por cliente e sem normalizacao explicita de debito, credito e contrapartida.
@@ -69,7 +81,14 @@ O sistema sera usado apenas em ambiente interno do escritorio, por usuarios indi
 
 A solucao sera uma evolucao API-first do sistema atual, usando PostgreSQL como banco principal, autenticacao de usuarios internos, autorizacao por empresa e importadores de dados contabeis.
 
-O plano de contas do escritorio sera importado como catalogo unico. Cada empresa tera vinculos com as contas que utiliza, inicialmente descobertos a partir das importacoes do livro-razao. O livro-razao sera importado por empresa, interpretando blocos de conta, contrapartida e direcao do valor para normalizar cada lancamento em conta de debito, conta de credito, conta de origem do relatorio e conta de contrapartida.
+Nas Fases 1 a 3, o plano de contas e importado como catalogo unico e cada
+empresa possui vinculos com as contas que utiliza, inicialmente descobertos a
+partir das importacoes do livro-razao. A Fase 4 preserva essa leitura durante a
+transicao e a substitui gradualmente por identidades, versoes e snapshots por
+empresa, conforme a Spec 17. O livro-razao continua interpretando blocos de
+conta, contrapartida e direcao do valor para normalizar cada lancamento em
+conta de debito, conta de credito, conta de origem do relatorio e conta de
+contrapartida.
 
 Para a primeira versao do ML, o sistema usara como fonte principal de treino os lancamentos cujo bloco de origem seja banco, caixa ou aplicacao financeira. Nesses casos, o alvo do modelo sera a contrapartida contabil. Essa abordagem reduz ambiguidade, evita misturar o mesmo lancamento em diferentes blocos do razao e gera valor operacional mais rapidamente para classificacao de movimentos financeiros.
 
@@ -178,8 +197,11 @@ delimitam os resultados da Release 1.
 - A autorizacao tera permissoes por empresa, para que usuarios operem apenas empresas vinculadas.
 - API keys podem permanecer para integracoes futuras, mas acesso humano deve usar autenticacao de usuario interno.
 - O n8n permaneceu fora das Fases 1 e 2; na Release 1, o workflow existente sera adaptado com identidade de integracao, escopos proprios e artefato sanitizado.
-- O plano de contas sera modelado como catalogo unico do escritorio.
-- O uso de contas por empresa sera representado por um relacionamento entre empresa e conta.
+- Ate a conclusao da Release 1, o plano de contas e modelado como catalogo
+  unico do escritorio e o uso por empresa e um relacionamento com a conta.
+- A Fase 4 substituira esse contrato de forma incremental por identidade,
+  versao e snapshot por empresa, sem quebrar leitores legados durante a
+  transicao.
 - A importacao do plano de contas deve ser idempotente: contas existentes sao atualizadas e contas novas sao criadas.
 - Contas sinteticas e analiticas devem ser distinguiveis. Apenas contas analiticas/lancaveis devem ser candidatas a classificacao.
 - A importacao do razao deve interpretar planilhas de relatorio com cabecalhos, blocos de conta e linhas de lancamento.
@@ -222,7 +244,9 @@ delimitam os resultados da Release 1.
 - Aplicacao, banco e dados contabeis permanecem restritos aos ambientes internos autorizados.
 - Segredos, credenciais, IDs reais e dados de clientes nao sao versionados.
 - Previsao de ML nao substitui decisao contabil humana final.
-- O plano de contas permanece um catalogo unico do escritorio, com uso vinculado por empresa.
+- Razao e classificacao usam somente o contexto contabil aplicavel a empresa e
+  ao periodo; a transicao do catalogo global para identidades por empresa segue
+  a Spec 17 e nao invalida historico da Release 1.
 - Razao canonico e movimentos operacionais permanecem fontes separadas.
 - Movimento operacional nao se transforma automaticamente em Razao canonico nem em `Transacao` legada.
 
