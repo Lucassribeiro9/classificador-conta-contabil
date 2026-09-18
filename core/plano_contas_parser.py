@@ -25,6 +25,7 @@ def parse_plano_contas_xlsx(path: str | Path) -> list[dict[str, Any]]:
         header_by_column = _find_header_by_column(sheet.iter_rows(values_only=True))
         merged_values_by_cell = _merged_values_by_cell(sheet, header_by_column)
         contas: list[dict[str, Any]] = []
+        row_number_by_code: dict[int, int] = {}
 
         for row_number, row in enumerate(
             sheet.iter_rows(
@@ -37,11 +38,17 @@ def parse_plano_contas_xlsx(path: str | Path) -> list[dict[str, Any]]:
                 row_number, row, sheet
             ):
                 continue
-            contas.append(
-                _parse_account_row(
-                    row_number, row, header_by_column, merged_values_by_cell
-                )
+            conta = _parse_account_row(
+                row_number, row, header_by_column, merged_values_by_cell
             )
+            first_row_number = row_number_by_code.get(conta["codigo"])
+            if first_row_number is not None:
+                raise PlanoContasParseError(
+                    "Codigo duplicado "
+                    f"{conta['codigo']} nas linhas {first_row_number} e {row_number}."
+                )
+            row_number_by_code[conta["codigo"]] = row_number
+            contas.append(conta)
 
         return contas
     finally:

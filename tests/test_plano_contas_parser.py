@@ -69,6 +69,42 @@ def test_parse_plano_contas_reports_incomplete_rows_with_clear_message(tmp_path)
         parse_plano_contas_xlsx(xlsx_path)
 
 
+def test_parse_plano_contas_rejects_normalized_duplicate_codes(tmp_path):
+    xlsx_path = tmp_path / "plano-contas-codigo-duplicado.xlsx"
+    _write_workbook(
+        xlsx_path,
+        [
+            ["Codigo", "Tipo", "Classificacao", "Nome", "Grau"],
+            [10046, "A", "1.1.01.01.02.10046", "BANCO MODELO", 6],
+            ["10046", "A", "1.1.01.01.02.10046", "BANCO CONFLITANTE", 6],
+        ],
+    )
+
+    with pytest.raises(
+        PlanoContasParseError,
+        match="Codigo duplicado 10046 nas linhas 2 e 3",
+    ):
+        parse_plano_contas_xlsx(xlsx_path)
+
+
+def test_parse_plano_contas_rejects_identical_duplicate_codes(tmp_path):
+    xlsx_path = tmp_path / "plano-contas-codigo-duplicado-identico.xlsx"
+    _write_workbook(
+        xlsx_path,
+        [
+            ["Codigo", "Tipo", "Classificacao", "Nome", "Grau"],
+            [10046, "A", "1.1.01.01.02.10046", "BANCO MODELO", 6],
+            [10046, "A", "1.1.01.01.02.10046", "BANCO MODELO", 6],
+        ],
+    )
+
+    with pytest.raises(
+        PlanoContasParseError,
+        match="Codigo duplicado 10046 nas linhas 2 e 3",
+    ):
+        parse_plano_contas_xlsx(xlsx_path)
+
+
 def test_parse_plano_contas_ignores_system_footer_without_account_fields(tmp_path):
     xlsx_path = tmp_path / "plano-contas-com-rodape.xlsx"
     workbook = Workbook()
