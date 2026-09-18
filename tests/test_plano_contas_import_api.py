@@ -8,7 +8,7 @@ from openpyxl import Workbook
 from pwdlib import PasswordHash
 
 from core.config import settings
-from core.models import AuditEvent, Usuario
+from core.models import AuditEvent, ContaContabil, Usuario
 
 
 password_hash = PasswordHash.recommended()
@@ -103,6 +103,20 @@ def _invalid_plano_contas_xlsx() -> bytes:
     return buffer.read()
 
 
+def _duplicate_code_plano_contas_xlsx() -> bytes:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["Codigo", "Tipo", "Classificacao", "Nome", "Grau"])
+    sheet.append([10046, "A", "1.1.01.01.02.10046", "BANCO MODELO", 6])
+    sheet.append(["10046", "A", "1.1.01.01.02.10046", "BANCO CONFLITANTE", 6])
+
+    buffer = BytesIO()
+    workbook.save(buffer)
+    workbook.close()
+    buffer.seek(0)
+    return buffer.read()
+
+
 def _upload_file(filename: str = "plano-contas.xlsx") -> dict:
     return {
         "file": (
@@ -118,6 +132,16 @@ def _invalid_upload_file() -> dict:
         "file": (
             "plano-contas.xlsx",
             _invalid_plano_contas_xlsx(),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+    }
+
+
+def _duplicate_code_upload_file() -> dict:
+    return {
+        "file": (
+            "plano-contas-codigo-duplicado.xlsx",
+            _duplicate_code_plano_contas_xlsx(),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
     }
@@ -218,6 +242,32 @@ def test_failed_plano_contas_import_creates_safe_audit_event(client):
         assert "Traceback" not in event.metadata_json["error"]
         assert "senha" not in event.metadata_json
         assert "token" not in event.metadata_json
+
+
+def test_duplicate_code_import_rolls_back_and_audits_only_safe_error(client):
+    from tests.conftest import TestingSessionLocal
+
+    admin = _seed_user(_usuario())
+
+    response = client.post(
+        "/api/v1/admin/plano-contas/import",
+        files=_duplicate_code_upload_file(),
+        headers=_auth_headers(admin),
+    )
+
+    assert response.status_code == 400
+
+    with TestingSessionLocal() as session:
+        assert session.query(ContaContabil).count() == 0
+        event = session.query(AuditEvent).one()
+        assert event.event_type == "plan.import_failed"
+        assert event.metadata_json["error_type"] == "PlanoContasParseError"
+        assert event.metadata_json["error"] == (
+            "Codigo duplicado 10046 nas linhas 2 e 3."
+        )
+        assert "Traceback" not in event.metadata_json["error"]
+        assert "BANCO" not in event.metadata_json["error"]
+        assert "classificacao" not in event.metadata_json["error"].lower()
 
 
 def test_plano_contas_import_is_idempotent(client):
