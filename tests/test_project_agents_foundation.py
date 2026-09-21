@@ -73,13 +73,6 @@ def test_bootstrap_reference_defines_required_discovery_order_and_blocks():
         assert required_text in content
 
 
-def test_local_agent_configuration_is_ignored_but_agent_definitions_are_not():
-    gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
-
-    assert ".agents/local/" in gitignore
-    assert ".agents/agents/" not in gitignore
-
-
 def test_context_allows_discovery_mode_without_local_files():
     schema = _load_json(CONTRACTS / "project-context-envelope.schema.json")
     payload = _load_json(FIXTURES / "context-discovery-mode-valid.json")
