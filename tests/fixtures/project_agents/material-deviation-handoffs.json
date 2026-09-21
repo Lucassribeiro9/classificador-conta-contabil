@@ -1,0 +1,1 @@
+{"issue":519,"steps":[{"current_agent":"task-reviewer","revision":1,"status":"ready","next_agent":"issue-executor"},{"current_agent":"issue-executor","status":"needs_re_review","reason":"material_deviation","next_agent":"task-reviewer"},{"current_agent":"task-reviewer","revision":2,"status":"ready","next_agent":"issue-executor"}]}
