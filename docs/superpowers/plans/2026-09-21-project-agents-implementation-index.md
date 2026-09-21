@@ -17,7 +17,7 @@
 - Keep all four Agents thin and tool-agnostic.
 - Do not create runtime state directories or automatic Agent chaining.
 - Preserve the two human gates: approval before execution and review/merge before closure.
-- Keep project-local configuration under `.agents/local/` optional and ignored.
+- Keep project-local configuration under `.agents/local/` optional; defer its final versioning/ignore policy.
 - No new runtime dependency is required.
 
 ## Review Focus
@@ -65,7 +65,7 @@ The linear order is intentional for implementation review, even though the four 
 The layer is complete only when:
 
 - both shared schemas validate;
-- the bootstrap reference and local-ignore policy are covered by tests;
+- the bootstrap reference and optional local-source discovery behavior are covered by tests;
 - all four Agent definitions validate against the shared schema;
 - every Agent uses the exact Classificador repository binding;
 - normal handoffs preserve the two human gates;
