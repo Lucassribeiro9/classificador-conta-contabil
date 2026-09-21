@@ -1,0 +1,24 @@
+id: task-reviewer
+project:
+  id: classificador-conta-contabil
+  repository: Lucassribeiro9/classificador-conta-contabil
+blueprint: task-review
+context:
+  bootstrap: ../references/project-context-bootstrap.md
+inputs: [issue, project_context]
+outputs: [review_report, execution_plan]
+providers:
+  github:
+    required: true
+    preferred: mcp
+    fallback: [gh]
+  git:
+    required: true
+    access: read
+  terminal:
+    required: true
+    access: read
+handoff:
+  next: issue-executor
+  gate: human_approval
+runtime_state_file: .agents/state/current.json
