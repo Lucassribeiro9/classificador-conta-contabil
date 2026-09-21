@@ -33,3 +33,19 @@ def test_project_agent_schema_rejects_unknown_top_level_fields():
 
     with pytest.raises(ValidationError):
         Draft202012Validator(schema).validate(payload)
+
+
+def test_project_context_envelope_accepts_main_and_worktree():
+    schema = _load_json(CONTRACTS / "project-context-envelope.schema.json")
+    validator = Draft202012Validator(schema)
+
+    validator.validate(_load_json(FIXTURES / "context-main-valid.json"))
+    validator.validate(_load_json(FIXTURES / "context-worktree-valid.json"))
+
+
+def test_project_context_envelope_rejects_unverified_repository():
+    schema = _load_json(CONTRACTS / "project-context-envelope.schema.json")
+    payload = _load_json(FIXTURES / "context-invalid-unverified.json")
+
+    with pytest.raises(ValidationError):
+        Draft202012Validator(schema).validate(payload)
