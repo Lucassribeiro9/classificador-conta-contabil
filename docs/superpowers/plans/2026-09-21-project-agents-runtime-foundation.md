@@ -18,7 +18,7 @@
 - Runtime context is reconstructed for every invocation and is never persisted under `.agents/runs`, `.agents/state`, or `.agents/handoffs`.
 - Project identity must be verified before any blueprint runs.
 - Git/GitHub plus approved contracts remain the material source of truth; handoffs are transport, not state.
-- `.agents/local/` is optional runtime-local configuration and must not be required for discovery mode.
+- `.agents/local/` is optional runtime-local configuration and must not be required for discovery mode. Its versioning/ignore policy is deliberately deferred.
 - Do not add Cursor, Codex, or Trae adapters in this delivery.
 - Do not modify `.github/agent-protocol.json`, existing `.agents/skills/`, or current `agent:*` behavior.
 
@@ -576,7 +576,6 @@ git commit -m "feat(agents): add project context envelope contract"
 **Files:**
 - Create: `.agents/references/project-context-bootstrap.md`
 - Modify: `tests/test_project_agents_foundation.py`
-- Modify: `.gitignore`
 
 **Interfaces:**
 - Consumes: explicit repository/issue overrides plus observable Git/GitHub/workspace context.
@@ -608,13 +607,6 @@ def test_bootstrap_reference_defines_required_discovery_order_and_blocks():
     ):
         assert required_text in content
 
-
-def test_local_agent_configuration_is_ignored_but_agent_definitions_are_not():
-    gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
-
-    assert ".agents/local/" in gitignore
-    assert ".agents/agents/" not in gitignore
-```
 
 - [ ] **Step 2: Run the tests and verify failure**
 
@@ -688,15 +680,9 @@ Record unavailable providers in the envelope rather than inventing availability.
 Build the Project Context Envelope in memory for the current invocation. Never persist it under `.agents/runs`, `.agents/state`, `.agents/handoffs`, or another hidden runtime state path.
 ```
 
-- [ ] **Step 4: Ignore only local Agent configuration**
+- [ ] **Step 4: Preserve the deferred tracking policy**
 
-Add under the existing `# AI` section in `.gitignore`:
-
-```gitignore
-.agents/local/
-```
-
-Do not ignore `.agents/agents/`, `.agents/contracts/`, or `.agents/references/`.
+Do not modify `.gitignore` for `.agents/local/`, `.agents/agents/`, `.agents/contracts/`, or `.agents/references/` in this delivery. The tracking policy remains a separate future decision.
 
 - [ ] **Step 5: Run the focused and existing agentic tests**
 
@@ -711,7 +697,7 @@ Expected: PASS. Existing pipeline tests must remain unchanged.
 - [ ] **Step 6: Commit the bootstrap foundation**
 
 ```bash
-git add .agents/references/project-context-bootstrap.md .gitignore tests/test_project_agents_foundation.py
+git add .agents/references/project-context-bootstrap.md tests/test_project_agents_foundation.py
 git commit -m "feat(agents): add project context bootstrap"
 ```
 
