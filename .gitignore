@@ -207,6 +207,7 @@ n8n_workflows
 
 # AI
 .codex
+.agents/local/
 
 # Joblib
 data/models/
