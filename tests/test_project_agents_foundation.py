@@ -78,3 +78,24 @@ def test_local_agent_configuration_is_ignored_but_agent_definitions_are_not():
 
     assert ".agents/local/" in gitignore
     assert ".agents/agents/" not in gitignore
+
+
+def test_context_allows_discovery_mode_without_local_files():
+    schema = _load_json(CONTRACTS / "project-context-envelope.schema.json")
+    payload = _load_json(FIXTURES / "context-discovery-mode-valid.json")
+
+    Draft202012Validator(schema).validate(payload)
+    assert payload["project_context"]["manifest"]["status"] == "absent"
+    assert payload["project_context"]["capability_registry"]["status"] == "absent"
+
+
+def test_agent_schema_rejects_unknown_provider():
+    schema = _load_json(CONTRACTS / "project-agent.schema.json")
+    payload = _load_yaml(FIXTURES / "agent-frontmatter-valid.yaml")
+    payload["providers"]["browser"] = {
+        "required": False,
+        "access": "read",
+    }
+
+    with pytest.raises(ValidationError):
+        Draft202012Validator(schema).validate(payload)
