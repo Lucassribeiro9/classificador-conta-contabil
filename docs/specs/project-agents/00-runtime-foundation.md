@@ -264,7 +264,7 @@ Regra de versao:
 - 1.x: mudancas backward-compatible;
 - 2.0: mudancas incompatíveis.
 
-Exemplo:
+Exemplo ilustrativo de estrutura (os paths concretos devem vir da Task Review, nunca deste documento):
 
 ```yaml
 schema_version: "1.1"
@@ -317,11 +317,11 @@ Todos os Agents terminam com um estado estruturado.
 
 Estados canonicos:
 
-- `ready`;
-- `blocked`;
-- `needs_re_review`;
-- `failed`;
-- `completed`.
+- `ready`: a responsabilidade atual foi concluida e existe um proximo passo valido;
+- `blocked`: uma pre-condicao, gate ou regra de governanca impede continuar;
+- `needs_re_review`: o plano aprovado foi invalidado materialmente e exige nova Task Review;
+- `failed`: ocorreu falha operacional sem decisao de governanca implicita; o Agent nao deve reclassifica-la silenciosamente;
+- `completed`: a responsabilidade terminal daquele Agent foi concluida sem proximo Agent.
 
 Razoes comuns incluem:
 
