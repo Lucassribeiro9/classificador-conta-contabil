@@ -109,5 +109,6 @@ def test_agent_catalog_lists_project_agents_as_future_isolated_layer():
         "não fazem parte da operação atual",
         "issue-delivery-loop",
         "integração futura",
+        "Execution Plan 1.1",
     ):
         assert required_text in catalog
