@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "project-context-envelope.schema.json",
+  "title": "Project Context Envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "project_context"],
+  "properties": {
+    "schema_version": {"type": "string", "const": "1.0"},
+    "project_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "issue", "workspace", "manifest", "capability_registry", "providers"],
+      "properties": {
+        "repository": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["root", "identity", "verification"],
+          "properties": {
+            "root": {"type": "string", "minLength": 1},
+            "identity": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"},
+            "verification": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["status", "confidence", "sources"],
+              "properties": {
+                "status": {"const": "verified"},
+                "confidence": {"type": "string", "enum": ["high", "medium"]},
+                "sources": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": {"type": "string", "enum": ["git_remote", "github", "project_manifest", "repository_structure"]}
+                }
+              }
+            }
+          }
+        },
+        "issue": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "source", "verified"],
+          "properties": {
+            "id": {"type": "integer", "minimum": 1},
+            "source": {"type": "string", "enum": ["explicit", "inferred"]},
+            "verified": {"const": true}
+          }
+        },
+        "workspace": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "branch"],
+          "properties": {
+            "type": {"type": "string", "enum": ["main", "worktree"]},
+            "branch": {"type": "string", "minLength": 1}
+          }
+        },
+        "manifest": {"$ref": "#/$defs/localSource"},
+        "capability_registry": {"$ref": "#/$defs/localSource"},
+        "providers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["github", "git", "terminal"],
+          "properties": {
+            "github": {"type": "string", "enum": ["mcp", "gh", "unavailable"]},
+            "git": {"type": "string", "enum": ["available", "unavailable"]},
+            "terminal": {"type": "string", "enum": ["available", "unavailable"]}
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "localSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "status"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "status": {"type": "string", "enum": ["present", "absent", "invalid"]}
+      }
+    }
+  }
+}
