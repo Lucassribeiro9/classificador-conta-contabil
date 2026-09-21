@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "project-agent.schema.json",
+  "title": "Project Agent Definition",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id","project","blueprint","context","inputs","outputs","providers","handoff"],
+  "properties": {
+    "id": {"type":"string","enum":["task-reviewer","issue-executor","pr-reviewer","delivery-closer"]},
+    "project": {
+      "type":"object","additionalProperties":false,"required":["id","repository"],
+      "properties":{
+        "id":{"type":"string","minLength":1},
+        "repository":{"type":"string","pattern":"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"}
+      }
+    },
+    "blueprint":{"type":"string","enum":["task-review","execute-issue","draft-pr","close-delivery"]},
+    "context":{
+      "type":"object","additionalProperties":false,"required":["bootstrap"],
+      "properties":{"bootstrap":{"type":"string","const":"../references/project-context-bootstrap.md"}}
+    },
+    "inputs":{"type":"array","minItems":1,"uniqueItems":true,"items":{"type":"string","minLength":1}},
+    "outputs":{"type":"array","minItems":1,"uniqueItems":true,"items":{"type":"string","minLength":1}},
+    "providers":{
+      "type":"object","additionalProperties":false,"required":["github","git","terminal"],
+      "properties":{
+        "github":{
+          "type":"object","additionalProperties":false,"required":["required","preferred","fallback"],
+          "properties":{
+            "required":{"type":"boolean"},
+            "preferred":{"type":"string","enum":["mcp"]},
+            "fallback":{"type":"array","uniqueItems":true,"items":{"type":"string","enum":["gh"]}}
+          }
+        },
+        "git":{"$ref":"#/$defs/localProvider"},
+        "terminal":{"$ref":"#/$defs/localProvider"}
+      }
+    },
+    "handoff":{
+      "type":"object","additionalProperties":false,"required":["next","gate"],
+      "properties":{
+        "next":{"type":["string","null"],"enum":["issue-executor","pr-reviewer","human_review",null]},
+        "gate":{"type":"string","enum":["human_approval","human_review_merge","none"]}
+      }
+    }
+  },
+  "$defs":{
+    "localProvider":{
+      "type":"object","additionalProperties":false,"required":["required","access"],
+      "properties":{
+        "required":{"type":"boolean"},
+        "access":{"type":"string","enum":["read","write"]}
+      }
+    }
+  }
+}
