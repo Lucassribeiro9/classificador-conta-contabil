@@ -63,3 +63,6 @@ As definições ficam em `.agents/agents/`, usam
 Esses Project Agents não fazem parte da operação atual e não substituem o
 `issue-delivery-loop`, as Skills locais ou o protocolo GitHub vigente. A
 integração futura com a esteira supervisionada exige issue própria.
+
+
+Compatibilidade: os Project Agents esperam blueprints reutilizáveis com suporte ao contrato `Execution Plan 1.1`, incluindo `references` estruturadas quando aplicável; consumidores 1.0 permanecem válidos por compatibilidade.
