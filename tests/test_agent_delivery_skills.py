@@ -401,6 +401,40 @@ def test_prepare_draft_pr_requires_real_evidence_and_stops_at_draft():
         assert required_text in instructions
 
 
+def test_delivery_guidance_requires_a_human_structured_homologation_gate():
+    _, draft_instructions = _load_skill("prepare-draft-pr")
+    _, coordinator_instructions = _load_skill("issue-delivery-loop")
+    protocol = (ROOT / "docs/agent-protocol.md").read_text(encoding="utf-8")
+
+    for required_text in (
+        "Nunca invente, preencha ou publique o resultado da homologação",
+        "comentário novo e não editado",
+        "Commit testado",
+        "Divergencias",
+    ):
+        assert required_text in draft_instructions
+
+    for required_text in (
+        "comentário novo e não editado",
+        "agent:validated",
+        "agent:blocked",
+        "conteúdo relevante mudou",
+        "idempotência",
+    ):
+        assert required_text in coordinator_instructions
+
+    for required_text in (
+        "## Homologação manual estruturada",
+        "Lucassribeiro9",
+        "draft PR esperado",
+        "Resultado: APROVADO | REPROVADO | BLOQUEADO | NAO APLICAVEL",
+        "commit completo de 40 caracteres",
+        "conteúdo relevante mudou",
+        "nunca inventa nem publica o resultado",
+    ):
+        assert required_text in protocol
+
+
 def test_sanitized_fixtures_cover_all_issue_classifications():
     classifications = {
         fixture["classification"]

@@ -12,6 +12,7 @@
     "operational_labels",
     "transitions",
     "human_interventions",
+    "manual_homologation",
     "state_policies",
     "rejection_codes",
     "structured_confirmations",
@@ -305,6 +306,59 @@
               }
             }
           }
+        }
+      }
+    },
+    "manual_homologation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_ref",
+        "location",
+        "required_result",
+        "authorized_author",
+        "edited_comments_valid",
+        "required_fields",
+        "material_path_classes",
+        "invalidation_event"
+      ],
+      "properties": {
+        "schema_ref": {
+          "const": "#/$defs/manualHomologationContext"
+        },
+        "location": {
+          "const": "expected_draft_pr"
+        },
+        "required_result": {
+          "const": "APROVADO"
+        },
+        "authorized_author": {
+          "const": "Lucassribeiro9"
+        },
+        "edited_comments_valid": {
+          "const": false
+        },
+        "required_fields": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "material_path_classes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "code",
+              "tests",
+              "contracts",
+              "configuration"
+            ]
+          }
+        },
+        "invalidation_event": {
+          "const": "validated_content_changed"
         }
       }
     },
@@ -881,6 +935,100 @@
           }
         }
       ]
+    },
+    "manualHomologation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "result",
+        "commit_tested",
+        "environment",
+        "profile",
+        "runbook",
+        "evidence",
+        "divergences",
+        "author",
+        "location",
+        "edited",
+        "issue_number",
+        "pull_request_number"
+      ],
+      "properties": {
+        "result": {
+          "enum": ["APROVADO", "REPROVADO", "BLOQUEADO", "NAO APLICAVEL"]
+        },
+        "commit_tested": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "environment": {
+          "type": "string",
+          "minLength": 1
+        },
+        "profile": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runbook": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "divergences": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "author": {
+          "const": "Lucassribeiro9"
+        },
+        "location": {
+          "const": "expected_draft_pr"
+        },
+        "edited": {
+          "const": false
+        },
+        "issue_number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "pull_request_number": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "manualHomologationContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expected_issue_number",
+        "expected_pull_request_number",
+        "comment"
+      ],
+      "properties": {
+        "expected_issue_number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "expected_pull_request_number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "comment": {
+          "$ref": "#/$defs/manualHomologation"
+        }
+      }
     }
   }
 }

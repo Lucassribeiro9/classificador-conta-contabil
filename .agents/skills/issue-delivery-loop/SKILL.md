@@ -44,6 +44,15 @@ Leia `.agents/contracts/issue-delivery-loop-routing.json`, valide a saída com
 5. Em nova passagem, valide a saída especializada antes de avançar o
    checkpoint.
 
+Na rota de homologação manual, pare no gate humano. Só aceite a transição
+quando o gate executável confirmar comentário novo e não editado no draft PR
+esperado, de `Lucassribeiro9`, com todos os campos estruturados e o commit
+testado. `APROVADO` para o mesmo conteúdo relevante move para
+`agent:validated`; `REPROVADO` ou `BLOQUEADO` move para `agent:blocked`; se o
+conteúdo relevante mudou, retorne a `agent:awaiting-manual-test`. A
+idempotência reutiliza a mesma decisão para o mesmo comentário e digest da
+árvore relevante; nunca sintetize resultado humano.
+
 Para a rota de Task Review, carregue a skill selecionada em
 `.agents/skills/issue-task-review/SKILL.md`. Não copie suas instruções.
 
