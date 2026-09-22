@@ -1,5 +1,6 @@
 from configparser import ConfigParser
 from pathlib import Path
+import re
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -8,11 +9,19 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_makefile_exposes_dedicated_postgresql_integration_command():
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
 
-    assert "test-postgres:" in makefile
-    assert "classificador-conta-contabil-test" in makefile
-    assert "up -d --build $(SERVICE_API) $(SERVICE_DB)" in makefile
-    assert "pytest -q -m integration_postgres tests/integration" in makefile
-    assert "down -v" in makefile
+    assert (
+        "DOCKER_COMPOSE_TEST := RAZAO_TEMP_VOLUME_NAME=classificador-conta-contabil-test-razao-temp "
+        "docker compose -p classificador-conta-contabil-test"
+    ) in makefile
+
+    target = re.search(r"(?m)^test-postgres:\n((?:\t[^\n]*\n)+)", makefile)
+    assert target is not None
+    assert target.group(1).splitlines() == [
+        "\t$(DOCKER_COMPOSE_TEST) up -d --build $(SERVICE_DB)",
+        "\t$(DOCKER_COMPOSE_TEST) run --build --rm $(SERVICE_API) sh -c "
+        '"python -m alembic upgrade head && python -m pytest -q -m integration_postgres tests/integration"',
+        "\t$(DOCKER_COMPOSE_TEST) down -v",
+    ]
 
 
 def test_default_pytest_run_excludes_postgresql_integration_tests():

@@ -38,10 +38,10 @@ jobs:
           python -m pytest -q tests
           --ignore=tests/test_frontend_login_contract.py
           --ignore=tests/test_frontend_shell_routes.py
-          --deselect=tests/test_razao_import_api.py::test_duplicate_razao_file_hash_creates_failed_audit_event
+          --deselect=tests/test_razao_import_api.py::test_duplicate_razao_file_hash_reuses_queued_lote
 
       - name: Run order-sensitive duplicate-file audit test
-        run: python -m pytest -q tests/test_razao_import_api.py::test_duplicate_razao_file_hash_creates_failed_audit_event
+        run: python -m pytest -q tests/test_razao_import_api.py::test_duplicate_razao_file_hash_reuses_queued_lote
 
   frontend:
     name: Frontend validation
