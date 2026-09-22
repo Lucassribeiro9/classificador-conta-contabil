@@ -44,3 +44,25 @@ Nao implementar comportamento novo sem PRD/spec/issue correspondente, salvo ajus
 ```powershell
 .\venv\Scripts\python.exe -m pytest -q tests
 ```
+
+
+## Project Agents
+
+O projeto também possui uma camada canônica de Project Agents preparada para validação isolada e integração futura:
+
+- `task-reviewer` → blueprint `task-review`;
+- `issue-executor` → blueprint `execute-issue`;
+- `pr-reviewer` → blueprint `draft-pr`;
+- `delivery-closer` → blueprint `close-delivery`.
+
+As definições ficam em `.agents/agents/`, usam
+`.agents/contracts/project-agent.schema.json`,
+`.agents/contracts/project-context-envelope.schema.json` e
+`.agents/references/project-context-bootstrap.md`.
+
+Esses Project Agents não fazem parte da operação atual e não substituem o
+`issue-delivery-loop`, as Skills locais ou o protocolo GitHub vigente. A
+integração futura com a esteira supervisionada exige issue própria.
+
+
+Compatibilidade: os Project Agents esperam blueprints reutilizáveis com suporte ao contrato `Execution Plan 1.1`, incluindo `references` estruturadas quando aplicável; consumidores 1.0 permanecem válidos por compatibilidade.
