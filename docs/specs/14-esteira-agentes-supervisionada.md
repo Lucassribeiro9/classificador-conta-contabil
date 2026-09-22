@@ -825,6 +825,36 @@ restringir novamente ou rejeitar nova expansao. Falha, ausencia de evidencia ou
 divergencia de estado mantem a expansao bloqueada; a conclusao do piloto nunca
 autoriza automaticamente a proxima issue.
 
+## Decisao Pos-Piloto Da #518
+
+As calibracoes documentais da #382 e o piloto comportamental da #518 foram
+concluidos nos PRs #515 e #519. A evidencia publica e sanitizada do piloto
+registra escopo limitado, TDD com RED, GREEN e refatoracao proporcionais, 22
+testes focados aprovados, fixture sintetica e rollback sem migration. A
+avaliacao de custo permanece privada; esta spec nao registra metricas,
+telemetria, limites internos ou dados sensiveis.
+
+O check global de backend do PR #519 identificou uma divergencia preexistente
+entre o alvo `test-postgres` e seu teste estrutural. Ela nao foi introduzida
+pelo diff do piloto e nao invalida suas evidencias focadas, mas impede tratar a
+baseline global como integralmente verde.
+
+A conclusao da #518 **nao** libera uma classe geral de issues comportamentais.
+A decisao humana pos-piloto autoriza exclusivamente a futura #499, e somente
+depois de duas entregas focadas e independentes:
+
+1. #521 reforca o gate de homologacao para exigir comentario estruturado
+   vinculado ao commit final relevante e invalidacao apos mudanca material;
+2. #522 corrige a divergencia preexistente para restabelecer uma baseline
+   global confiavel para `test-postgres`.
+
+Depois de #521 e #522, a #499 ainda exige nova Task Review. Essa revisao deve
+confirmar gates especificos para schema e migrations, compatibilidade,
+PostgreSQL isolado, rollback e homologacao. A autorizacao permanece estreita,
+explicita e reversivel: nao inicia a #499 automaticamente e nao autoriza as
+#516 ou #517. Cada uma dessas issues conserva Task Review, branch, worktree,
+PR e homologacao proprios.
+
 ## Ordem Recomendada Das Futuras Issues
 
 1. Definir e criar protocolo GitHub, labels e comentarios estruturados.
