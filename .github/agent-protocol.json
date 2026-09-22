@@ -322,6 +322,29 @@
       }
     ]
   },
+  "manual_homologation": {
+    "schema_ref": "#/$defs/manualHomologationContext",
+    "location": "expected_draft_pr",
+    "required_result": "APROVADO",
+    "authorized_author": "Lucassribeiro9",
+    "edited_comments_valid": false,
+    "required_fields": [
+      "result",
+      "commit_tested",
+      "environment",
+      "profile",
+      "runbook",
+      "evidence",
+      "divergences"
+    ],
+    "material_path_classes": [
+      "code",
+      "tests",
+      "contracts",
+      "configuration"
+    ],
+    "invalidation_event": "validated_content_changed"
+  },
   "state_policies": {
     "operational_label_prefix": "agent:",
     "operational_state_is_exclusive": true,

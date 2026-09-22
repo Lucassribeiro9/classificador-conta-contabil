@@ -337,3 +337,72 @@ def test_task_review_approval_context_is_hash_bound_and_schema_validated():
 
     assert contract["context_change_invalidates_approval"] is True
     assert contract["cancelled_reapproval_reuses_context_only_when_unchanged"] is True
+
+
+def test_manual_homologation_contract_is_strict_and_schema_validated():
+    schema = _load_json(SCHEMA_PATH)
+    manifest = _load_json(MANIFEST_PATH)
+    contract = manifest["manual_homologation"]
+
+    assert contract == {
+        "schema_ref": "#/$defs/manualHomologationContext",
+        "location": "expected_draft_pr",
+        "required_result": "APROVADO",
+        "authorized_author": "Lucassribeiro9",
+        "edited_comments_valid": False,
+        "required_fields": [
+            "result",
+            "commit_tested",
+            "environment",
+            "profile",
+            "runbook",
+            "evidence",
+            "divergences",
+        ],
+        "material_path_classes": [
+            "code",
+            "tests",
+            "contracts",
+            "configuration",
+        ],
+        "invalidation_event": "validated_content_changed",
+    }
+
+    context_schema = {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$ref": contract["schema_ref"],
+        "$defs": schema["$defs"],
+    }
+    validator = Draft202012Validator(context_schema, format_checker=FormatChecker())
+    valid = {
+        "expected_issue_number": 521,
+        "expected_pull_request_number": 600,
+        "comment": {
+            "result": "APROVADO",
+            "commit_tested": "a" * 40,
+            "environment": "desenvolvimento-isolado",
+            "profile": "mantenedor",
+            "runbook": "docs/agent-protocol.md#homologacao",
+            "evidence": ["testes focados aprovados"],
+            "divergences": ["nenhuma"],
+            "author": "Lucassribeiro9",
+            "location": "expected_draft_pr",
+            "edited": False,
+            "issue_number": 521,
+            "pull_request_number": 600,
+        },
+    }
+
+    validator.validate(valid)
+
+    invalid_comments = [
+        {key: value for key, value in valid["comment"].items() if key != "profile"},
+        {**valid["comment"], "result": "INDEFINIDO"},
+        {**valid["comment"], "author": "other-user"},
+        {**valid["comment"], "edited": True},
+        {**valid["comment"], "location": "issue"},
+        {**valid["comment"], "commit_tested": "short-sha"},
+    ]
+    for comment in invalid_comments:
+        with pytest.raises(ValidationError):
+            validator.validate({**valid, "comment": comment})

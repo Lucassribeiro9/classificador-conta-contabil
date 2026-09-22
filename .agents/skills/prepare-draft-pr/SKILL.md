@@ -49,6 +49,10 @@ incorreta, diff misto ou PR conflitante. Não invente comandos ou resultados.
 4. Inclua `Closes #` seguido do número da issue e marque checkboxes apenas com evidência.
 5. Escreva roteiro manual reproduzível com ambiente, commit, perfil, serviços,
    fixtures, preparação, passos, resultado esperado, erros, evidências e limpeza.
+   Quando houver gate de homologação, inclua a instrução para o mantenedor
+   registrar, depois da criação do draft, um comentário novo e não editado no
+   draft PR esperado com `Resultado`, `Commit testado`, `Ambiente`, `Perfil`,
+   `Roteiro executado`, `Evidencias` e `Divergencias`.
 6. Confirme os arquivos que entrarão no commit focado e inclua somente eles.
 7. Faça commit e push exclusivamente na branch aprovada.
 8. Crie o PR obrigatoriamente como draft PR e confirme URL, número, base, head e
@@ -64,6 +68,9 @@ incorreta, diff misto ou PR conflitante. Não invente comandos ou resultados.
 - Nunca feche a issue manualmente; deixe `Closes` atuar após o merge.
 - Não exclua branch nem descarte alteração local.
 - Não avance para outra issue.
+- Nunca invente, preencha ou publique o resultado da homologação em nome do
+  mantenedor; o agente só publica evidências automatizadas sanitizadas e o
+  roteiro para a validação humana.
 
 Entregue resumo Markdown e um objeto JSON `prepare-draft-pr`. Use
 `outcome: draft_created` somente depois de verificar o draft e o commit remoto;

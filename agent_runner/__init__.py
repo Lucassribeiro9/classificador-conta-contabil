@@ -10,6 +10,12 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Protocol
 
+from agent_runner.homologacao import (
+    HomologationContext,
+    HomologationDecision,
+    ManualHomologationComment,
+    evaluate_homologation,
+)
 from agent_runner.telemetria import TelemetryRecorder
 
 
@@ -27,6 +33,7 @@ class ExecutionStatus(StrEnum):
     CANCELLED = "cancelled"
     COMPLETED = "completed"
     AWAITING_MANUAL_TEST = "awaiting_manual_test"
+    VALIDATED = "validated"
 
 
 class ContextValidation(StrEnum):
@@ -187,6 +194,16 @@ class RunnerStore:
                     timestamp TEXT NOT NULL,
                     PRIMARY KEY (key_id, nonce)
                 );
+                CREATE TABLE IF NOT EXISTS manual_homologation_events (
+                    execution_id TEXT NOT NULL,
+                    comment_id INTEGER NOT NULL,
+                    tree_digest TEXT NOT NULL,
+                    accepted INTEGER NOT NULL,
+                    target_state TEXT NOT NULL,
+                    code TEXT NOT NULL,
+                    sanitized_reason TEXT NOT NULL,
+                    PRIMARY KEY (execution_id, comment_id, tree_digest)
+                );
                 """
             )
 
@@ -230,6 +247,57 @@ class RunnerStore:
                 return True
             except sqlite3.IntegrityError:
                 return False
+
+    def get_manual_homologation_decision(
+        self,
+        execution_id: str,
+        comment_id: int,
+        tree_digest: str,
+    ) -> HomologationDecision | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT accepted, target_state, code, sanitized_reason
+                FROM manual_homologation_events
+                WHERE execution_id = ? AND comment_id = ? AND tree_digest = ?
+                """,
+                (execution_id, comment_id, tree_digest),
+            ).fetchone()
+        if row is None:
+            return None
+        return HomologationDecision(
+            accepted=bool(row["accepted"]),
+            target_state=row["target_state"],
+            code=row["code"],
+            sanitized_reason=row["sanitized_reason"],
+        )
+
+    def persist_manual_homologation_decision(
+        self,
+        execution_id: str,
+        comment_id: int,
+        tree_digest: str,
+        decision: HomologationDecision,
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO manual_homologation_events (
+                    execution_id, comment_id, tree_digest, accepted,
+                    target_state, code, sanitized_reason
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    execution_id,
+                    comment_id,
+                    tree_digest,
+                    int(decision.accepted),
+                    decision.target_state,
+                    decision.code,
+                    _sanitize_summary(decision.sanitized_reason),
+                ),
+            )
 
     def create_execution_with_locks(
         self,
@@ -490,6 +558,97 @@ class RunnerService:
 
         self.store.persist_event_response(request.event_id, payload_hash, response)
         return response
+
+    def reconcile_manual_homologation(
+        self,
+        *,
+        execution_id: str,
+        comment: ManualHomologationComment | None,
+        context: HomologationContext,
+    ) -> HomologationDecision:
+        execution = self.store.get_execution(execution_id)
+        if execution is None:
+            return HomologationDecision(
+                accepted=False,
+                target_state="agent:awaiting-manual-test",
+                code="EXECUTION_NOT_FOUND",
+                sanitized_reason="Execution was not found.",
+            )
+
+        tree_digest = context.current_tree.digest()
+        if comment is not None:
+            persisted = self.store.get_manual_homologation_decision(
+                execution_id,
+                comment.comment_id,
+                tree_digest,
+            )
+            if persisted is not None:
+                return persisted
+
+        decision = evaluate_homologation(comment, context)
+        if decision.accepted and execution.status != ExecutionStatus.VALIDATED:
+            updated = self.store.update_execution(
+                execution_id,
+                status=ExecutionStatus.VALIDATED,
+                now=self.clock.now(),
+            )
+            self.store.add_checkpoint(
+                updated,
+                stage="manual_homologation",
+                status="completed",
+                event_id=f"manual-homologation:{comment.comment_id}",
+                result_code=decision.code,
+                sanitized_summary=decision.sanitized_reason,
+                created_at=self.clock.now(),
+                head_sha=updated.head_sha,
+            )
+        elif (
+            decision.code == "RELEVANT_TREE_CHANGED"
+            and execution.status == ExecutionStatus.VALIDATED
+        ):
+            updated = self.store.update_execution(
+                execution_id,
+                status=ExecutionStatus.AWAITING_MANUAL_TEST,
+                now=self.clock.now(),
+            )
+            self.store.add_checkpoint(
+                updated,
+                stage="manual_homologation",
+                status="invalidated",
+                event_id=f"manual-homologation:{comment.comment_id}:{tree_digest[:12]}",
+                result_code=decision.code,
+                sanitized_summary=decision.sanitized_reason,
+                created_at=self.clock.now(),
+                head_sha=updated.head_sha,
+            )
+        elif (
+            decision.target_state == "agent:blocked"
+            and execution.status != ExecutionStatus.BLOCKED
+        ):
+            updated = self.store.update_execution(
+                execution_id,
+                status=ExecutionStatus.BLOCKED,
+                now=self.clock.now(),
+                release_locks=True,
+            )
+            self.store.add_checkpoint(
+                updated,
+                stage="manual_homologation",
+                status="blocked",
+                event_id=f"manual-homologation:{comment.comment_id}:{tree_digest[:12]}",
+                result_code=decision.code,
+                sanitized_summary=decision.sanitized_reason,
+                created_at=self.clock.now(),
+                head_sha=updated.head_sha,
+            )
+        if comment is not None:
+            self.store.persist_manual_homologation_decision(
+                execution_id,
+                comment.comment_id,
+                tree_digest,
+                decision,
+            )
+        return decision
 
     def _implement(self, request: RunnerRequest) -> RunnerResponse:
         validation = self.context_validator.validate(request)

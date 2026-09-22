@@ -96,6 +96,35 @@ Edição de comentário, reação, checkbox, Teams e e-mail não autorizam açõ
 Resultados de homologação são registrados no draft PR esperado, não por um
 comando `/agent` no PR.
 
+## Homologação manual estruturada
+
+O gate aceita somente um comentário novo e não editado, publicado por
+`Lucassribeiro9` no draft PR esperado da issue. O comentário precisa começar
+com este formato, usando o commit completo de 40 caracteres e valores reais:
+
+```text
+## Homologacao manual
+
+- Resultado: APROVADO | REPROVADO | BLOQUEADO | NAO APLICAVEL
+- Commit testado: <sha>
+- Ambiente: <ambiente>
+- Perfil: <perfil>
+- Roteiro executado: <roteiro>
+- Evidencias: <referencias sanitizadas>
+- Divergencias: <nenhuma ou descricao>
+```
+
+O resultado `APROVADO` valida somente o conteúdo relevante correspondente ao
+commit informado. `REPROVADO` ou `BLOQUEADO` levam a `agent:blocked`; comentário
+ausente, incompleto, editado, de outro autor ou em outro local não valida a
+entrega. Se o conteúdo relevante mudou depois da aprovação, a execução volta a
+`agent:awaiting-manual-test` e requer nova homologação. Repetir o mesmo
+comentário para o mesmo conteúdo conserva a decisão já registrada.
+
+O agente nunca inventa nem publica o resultado da homologação: ele fornece no
+draft apenas o roteiro e as evidências automatizadas sanitizadas para que o
+mantenedor realize o registro humano.
+
 ## Pedidos assíncronos
 
 `/agent retry` e `/agent cancel` registram inicialmente `accepted_pending`.

@@ -10,6 +10,11 @@ from agent_runner import (
     StageResult,
     StageResultStatus,
 )
+from agent_runner.homologacao import (
+    HomologationContext,
+    ManualHomologationComment,
+    RelevantTreeSnapshot,
+)
 
 
 class FakeClock:
@@ -444,3 +449,198 @@ def test_runner_store_persists_private_interface_nonce_replay(tmp_path: Path):
     assert first is True
     assert replay is False
     assert other_key is True
+
+
+def test_reconcile_manual_homologation_validates_execution_once(tmp_path: Path):
+    store = RunnerStore(tmp_path / "runner.sqlite3")
+    service = RunnerService(
+        store=store,
+        context_validator=FakeContextValidator(),
+        executor=FakeExecutor(
+            StageResult(
+                status=StageResultStatus.COMPLETED,
+                code="EXECUTION_COMPLETED",
+                sanitized_summary="Draft ready.",
+            )
+        ),
+        clock=FakeClock(),
+    )
+    execution = service.handle(_request())
+    assert execution.execution_id is not None
+
+    tree = RelevantTreeSnapshot(
+        commit_sha="a" * 40,
+        blobs_by_path=(("agent_runner/homologacao.py", "1" * 40),),
+    )
+    comment = ManualHomologationComment(
+        result="APROVADO",
+        commit_tested=tree.commit_sha,
+        environment="desenvolvimento-isolado",
+        profile="mantenedor",
+        runbook="docs/agent-protocol.md#homologacao",
+        evidence=("testes focados aprovados",),
+        divergences=("nenhuma",),
+        comment_id=10,
+        author="Lucassribeiro9",
+        location="expected_draft_pr",
+        edited=False,
+        issue_number=375,
+        pull_request_number=600,
+    )
+    context = HomologationContext(
+        expected_issue_number=375,
+        expected_pull_request_number=600,
+        expected_author="Lucassribeiro9",
+        expected_location="expected_draft_pr",
+        tested_tree=tree,
+        current_tree=tree,
+    )
+
+    decision = service.reconcile_manual_homologation(
+        execution_id=execution.execution_id,
+        comment=comment,
+        context=context,
+    )
+
+    assert decision.accepted is True
+    assert decision.target_state == "agent:validated"
+    assert store.get_execution(execution.execution_id).status == ExecutionStatus.VALIDATED
+    checkpoint = store.latest_checkpoint(execution.execution_id)
+    assert checkpoint is not None
+
+    repeated = service.reconcile_manual_homologation(
+        execution_id=execution.execution_id,
+        comment=comment,
+        context=context,
+    )
+
+    assert repeated == decision
+    assert store.latest_checkpoint(execution.execution_id).id == checkpoint.id
+
+
+def test_reconcile_manual_homologation_invalidates_changed_relevant_tree(tmp_path: Path):
+    store = RunnerStore(tmp_path / "runner.sqlite3")
+    service = RunnerService(
+        store=store,
+        context_validator=FakeContextValidator(),
+        executor=FakeExecutor(
+            StageResult(
+                status=StageResultStatus.COMPLETED,
+                code="EXECUTION_COMPLETED",
+                sanitized_summary="Draft ready.",
+            )
+        ),
+        clock=FakeClock(),
+    )
+    execution = service.handle(_request())
+    assert execution.execution_id is not None
+    tested_tree = RelevantTreeSnapshot(
+        commit_sha="a" * 40,
+        blobs_by_path=(("agent_runner/homologacao.py", "1" * 40),),
+    )
+    comment = ManualHomologationComment(
+        result="APROVADO",
+        commit_tested=tested_tree.commit_sha,
+        environment="desenvolvimento-isolado",
+        profile="mantenedor",
+        runbook="docs/agent-protocol.md#homologacao",
+        evidence=("testes focados aprovados",),
+        divergences=("nenhuma",),
+        comment_id=10,
+        author="Lucassribeiro9",
+        location="expected_draft_pr",
+        edited=False,
+        issue_number=375,
+        pull_request_number=600,
+    )
+    approved_context = HomologationContext(
+        expected_issue_number=375,
+        expected_pull_request_number=600,
+        expected_author="Lucassribeiro9",
+        expected_location="expected_draft_pr",
+        tested_tree=tested_tree,
+        current_tree=tested_tree,
+    )
+    service.reconcile_manual_homologation(
+        execution_id=execution.execution_id,
+        comment=comment,
+        context=approved_context,
+    )
+    changed_tree = RelevantTreeSnapshot(
+        commit_sha="b" * 40,
+        blobs_by_path=(("agent_runner/homologacao.py", "2" * 40),),
+    )
+
+    decision = service.reconcile_manual_homologation(
+        execution_id=execution.execution_id,
+        comment=comment,
+        context=HomologationContext(
+            expected_issue_number=375,
+            expected_pull_request_number=600,
+            expected_author="Lucassribeiro9",
+            expected_location="expected_draft_pr",
+            tested_tree=tested_tree,
+            current_tree=changed_tree,
+        ),
+    )
+
+    assert decision.code == "RELEVANT_TREE_CHANGED"
+    assert store.get_execution(execution.execution_id).status == ExecutionStatus.AWAITING_MANUAL_TEST
+    checkpoint = store.latest_checkpoint(execution.execution_id)
+    assert checkpoint is not None
+    assert checkpoint.stage == "manual_homologation"
+    assert checkpoint.status == "invalidated"
+
+
+def test_reconcile_manual_homologation_blocks_rejected_result(tmp_path: Path):
+    store = RunnerStore(tmp_path / "runner.sqlite3")
+    service = RunnerService(
+        store=store,
+        context_validator=FakeContextValidator(),
+        executor=FakeExecutor(
+            StageResult(
+                status=StageResultStatus.COMPLETED,
+                code="EXECUTION_COMPLETED",
+                sanitized_summary="Draft ready.",
+            )
+        ),
+        clock=FakeClock(),
+    )
+    execution = service.handle(_request())
+    assert execution.execution_id is not None
+    tree = RelevantTreeSnapshot(
+        commit_sha="a" * 40,
+        blobs_by_path=(("agent_runner/homologacao.py", "1" * 40),),
+    )
+    decision = service.reconcile_manual_homologation(
+        execution_id=execution.execution_id,
+        comment=ManualHomologationComment(
+            result="REPROVADO",
+            commit_tested=tree.commit_sha,
+            environment="desenvolvimento-isolado",
+            profile="mantenedor",
+            runbook="docs/agent-protocol.md#homologacao",
+            evidence=("cenario falhou",),
+            divergences=("comportamento incorreto",),
+            comment_id=11,
+            author="Lucassribeiro9",
+            location="expected_draft_pr",
+            edited=False,
+            issue_number=375,
+            pull_request_number=600,
+        ),
+        context=HomologationContext(
+            expected_issue_number=375,
+            expected_pull_request_number=600,
+            expected_author="Lucassribeiro9",
+            expected_location="expected_draft_pr",
+            tested_tree=tree,
+            current_tree=tree,
+        ),
+    )
+
+    assert decision.target_state == "agent:blocked"
+    assert store.get_execution(execution.execution_id).status == ExecutionStatus.BLOCKED
+    checkpoint = store.latest_checkpoint(execution.execution_id)
+    assert checkpoint is not None
+    assert checkpoint.status == "blocked"
