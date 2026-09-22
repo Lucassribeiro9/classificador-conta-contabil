@@ -32,10 +32,10 @@ def test_ci_validates_backend_frontend_and_compose_without_secrets():
     assert "python -m pytest -q tests" in backend_test_command
     assert "--ignore=tests/test_frontend_login_contract.py" in backend_test_command
     assert "--ignore=tests/test_frontend_shell_routes.py" in backend_test_command
-    assert "--deselect=tests/test_razao_import_api.py::test_duplicate_razao_file_hash_creates_failed_audit_event" in backend_test_command
+    assert "--deselect=tests/test_razao_import_api.py::test_duplicate_razao_file_hash_reuses_queued_lote" in backend_test_command
     assert _commands(backend)[-1] == (
         "python -m pytest -q "
-        "tests/test_razao_import_api.py::test_duplicate_razao_file_hash_creates_failed_audit_event"
+        "tests/test_razao_import_api.py::test_duplicate_razao_file_hash_reuses_queued_lote"
     )
 
     frontend = jobs["frontend"]
