@@ -11,7 +11,9 @@ from core.razao_worker import RazaoWorker, process_razao_upload
 from tests.conftest import TestingSessionLocal
 from tests.test_razao_import_api import (
     _auth_headers,
+    _razao_xlsx_with_metadata,
     _seed_user_company_and_catalog,
+    _upload_file,
     _upload_file_with_metadata,
 )
 
@@ -100,16 +102,20 @@ def test_duplicate_upload_reuses_lote_by_status(
 ):
     usuario, empresa_id = _seed_user_company_and_catalog("operacao")
     headers = _auth_headers(usuario)
+    url = f"/api/v1/companies/{empresa_id}/razao/import"
+    file_content = _razao_xlsx_with_metadata("22.333.444/0001-55")
     first = client.post(
-        f"/api/v1/companies/{empresa_id}/razao/import",
-        files=_upload_file_with_metadata("22.333.444/0001-55"), headers=headers,
+        url,
+        files=_upload_file(content=file_content),
+        headers=headers,
     )
     with TestingSessionLocal.begin() as session:
         session.get(LoteImportacaoRazao, first.json()["lote_id"]).status = status
 
     response = client.post(
-        f"/api/v1/companies/{empresa_id}/razao/import",
-        files=_upload_file_with_metadata("22.333.444/0001-55"), headers=headers,
+        url,
+        files=_upload_file(content=file_content),
+        headers=headers,
     )
 
     assert response.status_code == expected_status
