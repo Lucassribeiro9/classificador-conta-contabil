@@ -196,6 +196,11 @@ def test_smoke_guide_records_release_commands_and_evidence_contract():
     for content in required_content:
         assert content in guide
 
+    assert "--ignore" not in guide
+    assert "--deselect" not in guide
+    assert "test_duplicate_razao_file_hash_creates_failed_audit_event" not in guide
+    assert "test_duplicate_razao_file_hash_reuses_queued_lote" not in guide
+
 
 def test_hml_runbook_routes_release_validation_to_smoke_gate():
     guide = " ".join(HML_GUIDE.read_text(encoding="utf-8").lower().split())

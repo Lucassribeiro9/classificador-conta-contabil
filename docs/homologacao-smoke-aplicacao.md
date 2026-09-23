@@ -14,20 +14,13 @@ interno e a massa sanitizada. O checklist tecnico continua em
 
 ## 1. Backend
 
-Na raiz do repositorio, execute os mesmos recortes do CI:
+Na raiz do repositorio, execute o mesmo comando unico do CI:
 
 ```bash
-python -m pytest -q tests \
-  --ignore=tests/test_frontend_login_contract.py \
-  --ignore=tests/test_frontend_shell_routes.py \
-  --deselect=tests/test_razao_import_api.py::test_duplicate_razao_file_hash_creates_failed_audit_event
-
-python -m pytest -q \
-  tests/test_razao_import_api.py::test_duplicate_razao_file_hash_creates_failed_audit_event
+python -m pytest -q tests
 ```
 
-Falhas conhecidas devem permanecer justificadas no CI. Qualquer nova falha e
-bloqueante.
+Qualquer falha e bloqueante.
 
 ## 2. Frontend
 
