@@ -13,14 +13,19 @@ def _read(path: str) -> str:
 def test_frontend_package_declares_expected_stack_and_scripts():
     package = json.loads((FRONTEND / "package.json").read_text(encoding="utf-8"))
 
-    assert package["scripts"] == {
+    expected_scripts = {
         "dev": "vite",
         "build": "vite build",
+        "preview": "vite preview",
         "typecheck": "tsc --noEmit",
         "lint": "eslint .",
         "test": "vitest run",
         "test:e2e": "playwright test",
+        "format": "prettier --write .",
+        "format:check": "prettier --check .",
     }
+    for name, command in expected_scripts.items():
+        assert package["scripts"][name] == command
     dependencies = package["dependencies"]
     assert "react" in dependencies
     assert "react-dom" in dependencies
