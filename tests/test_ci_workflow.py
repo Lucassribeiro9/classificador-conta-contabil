@@ -28,14 +28,10 @@ def test_ci_validates_backend_frontend_and_compose_without_secrets():
     backend = jobs["backend"]
     assert any(step.get("uses") == "actions/setup-python@v6" for step in backend["steps"])
     assert "python -m pip install -r requirements.txt" in _commands(backend)
-    backend_test_command = _commands(backend)[-2]
-    assert "python -m pytest -q tests" in backend_test_command
-    assert "--ignore=tests/test_frontend_login_contract.py" in backend_test_command
-    assert "--ignore=tests/test_frontend_shell_routes.py" in backend_test_command
-    assert "--deselect=tests/test_razao_import_api.py::test_duplicate_razao_file_hash_reuses_queued_lote" in backend_test_command
-    assert _commands(backend)[-1] == (
-        "python -m pytest -q "
-        "tests/test_razao_import_api.py::test_duplicate_razao_file_hash_reuses_queued_lote"
+    assert _commands(backend)[-1] == "python -m pytest -q tests"
+    assert all(
+        step.get("name") != "Run order-sensitive duplicate-file audit test"
+        for step in backend["steps"]
     )
 
     frontend = jobs["frontend"]
@@ -54,5 +50,7 @@ def test_ci_validates_backend_frontend_and_compose_without_secrets():
     assert "docker compose --env-file .env.prod.example -f docker-compose.prod.yml config --quiet" in compose_commands
 
     workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
-    assert "Known failures:" in workflow_text
+    assert "Known failures:" not in workflow_text
+    assert "--ignore" not in workflow_text
+    assert "--deselect" not in workflow_text
     assert "secrets." not in workflow_text
