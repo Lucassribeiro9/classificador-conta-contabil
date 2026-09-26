@@ -1,6 +1,14 @@
 # Comandos facilitadores
 # Usa o plugin moderno do Docker Compose (`docker compose`)
 DOCKER_COMPOSE := docker compose
+DEV_ENV_FILE := .env
+HML_ENV_FILE := .env.hml
+PROD_ENV_FILE := .env.prod
+LOG_TAIL := 200
+DEV_COMPOSE := $(DOCKER_COMPOSE) --env-file $(DEV_ENV_FILE) -f docker-compose.yml
+HML_COMPOSE := $(DOCKER_COMPOSE) --env-file $(HML_ENV_FILE) -f docker-compose.hml.yml
+HML_EDGE_COMPOSE := $(DOCKER_COMPOSE) --env-file $(HML_ENV_FILE) -f docker-compose.edge.yml
+PROD_COMPOSE := $(DOCKER_COMPOSE) --env-file $(PROD_ENV_FILE) -f docker-compose.prod.yml
 # Volume temporário removido somente pelo alvo explícito clean-razao-temp.
 export RAZAO_TEMP_VOLUME_NAME ?= classificador-dev-razao-temp
 # Projeto Docker Compose isolado para testes de integracao PostgreSQL
@@ -14,7 +22,60 @@ SERVICES_ALL := $(SERVICE_API) $(SERVICES_INFRA)
 # Serviço do banco de dados PostgreSQL (usado para logs e testes)
 SERVICE_DB := postgres
 # Declara targets "falsos" para evitar conflito com arquivos de mesmo nome
-.PHONY: build rebuild build-all rebuild-all up up-with-test up-api up-infra up-build down logs shell clean-project clean-razao-temp test test-postgres migrate-create migrate-up migrate-down migrate-current
+.PHONY: build rebuild build-all rebuild-all up up-with-test up-api up-infra up-build down logs shell clean-project clean-razao-temp test test-postgres migrate-create migrate-up migrate-down migrate-current dev-build dev-test dev-clean-cache dev-logs hml-build hml-test hml-clean-cache hml-logs prod-test prod-logs prod-build prod-clean-cache all-build all-test all-clean-cache all-logs
+
+# Constroi somente a stack local de desenvolvimento.
+dev-build:
+	$(DEV_COMPOSE) build
+
+# Executa os testes dentro da stack local.
+dev-test:
+	$(DEV_COMPOSE) run --rm $(SERVICE_API) python -m pytest -q tests
+
+# Limpeza escopada da stack local; volumes nao sao removidos.
+dev-clean-cache:
+	$(DEV_COMPOSE) down --rmi local
+
+dev-logs:
+	$(DEV_COMPOSE) logs -f --tail $(LOG_TAIL)
+
+# HML inclui o proxy de borda, que usa a mesma rede externa da stack principal.
+hml-build:
+	$(HML_COMPOSE) build
+	$(HML_EDGE_COMPOSE) pull
+
+hml-test:
+	$(HML_COMPOSE) run --rm api python -m pytest -q tests
+
+hml-clean-cache:
+	$(HML_COMPOSE) down --rmi local
+	$(HML_EDGE_COMPOSE) down --rmi local
+
+hml-logs:
+	$(HML_COMPOSE) logs -f --tail $(LOG_TAIL)
+	$(HML_EDGE_COMPOSE) logs -f --tail $(LOG_TAIL)
+
+# Testes locais sao a validacao segura para producao: nao iniciam recursos da stack.
+prod-test: test
+
+prod-logs:
+	$(PROD_COMPOSE) logs -f --tail $(LOG_TAIL)
+
+
+# Acoes que modificam recursos de producao exigem a confirmacao do alvo exato.
+prod-build:
+	@if [ "$(CONFIRM_PROD)" != "prod-build" ]; then echo "Defina CONFIRM_PROD=prod-build para continuar." >&2; exit 2; fi
+	$(PROD_COMPOSE) build
+
+prod-clean-cache:
+	@if [ "$(CONFIRM_PROD)" != "prod-clean-cache" ]; then echo "Defina CONFIRM_PROD=prod-clean-cache para continuar." >&2; exit 2; fi
+	$(PROD_COMPOSE) down --rmi local
+
+# Agregadores seguros: operacoes mutaveis em producao nunca sao encadeadas.
+all-build: dev-build hml-build
+all-test: dev-test hml-test prod-test
+all-clean-cache: dev-clean-cache hml-clean-cache
+all-logs: dev-logs hml-logs prod-logs
 
 # Build da imagem da API usando cache (mais rápido no dia a dia)
 build:
