@@ -31,8 +31,8 @@ git rev-parse HEAD
 Siga tambem `docs/devops-hml.md`.
 
 ```bash
-docker compose --env-file .env.hml -f docker-compose.hml.yml config
-docker compose --env-file .env.hml -f docker-compose.hml.yml up -d --build
+make hml-up
+make edge-up
 docker compose --env-file .env.hml -f docker-compose.hml.yml ps
 ```
 
@@ -45,10 +45,14 @@ Siga tambem `docs/devops-prod.md`. Execute esta etapa somente depois da
 aprovacao formal da homologacao.
 
 ```bash
-docker compose --env-file .env.prod -f docker-compose.prod.yml config
-docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+make CONFIRM_PROD=prod-up prod-up
 docker compose --env-file .env.prod -f docker-compose.prod.yml ps
 ```
+
+Quando a imagem for privada, autentique antes do `up` em um terminal seguro:
+forneca `REGISTRY_HOST`, `REGISTRY_USERNAME` e `REGISTRY_TOKEN` no ambiente e
+execute `make registry-login`. O token e recebido por `--password-stdin` e nao
+deve ser salvo no repositorio ou nas evidencias.
 
 ## Validacao Pos-deploy
 
@@ -99,8 +103,9 @@ afetado e retorne ao commit anterior registrado:
 git switch --detach <commit-anterior>
 ```
 
-Reconstrua somente a stack afetada usando o mesmo arquivo `.env` e o mesmo
-comando `up -d --build` documentado acima. Depois, repita toda a validacao
+Reconstrua somente a stack afetada usando o mesmo arquivo `.env` e o comando
+guardado documentado acima. Para parar uma stack, use `make hml-down` em HML ou
+`make CONFIRM_PROD=prod-down prod-down` em producao. Depois, repita toda a validacao
 pos-deploy e registre o resultado do rollback.
 
 Nunca remova volumes como tentativa de rollback. Migrations podem nao ser

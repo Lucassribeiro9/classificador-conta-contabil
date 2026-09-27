@@ -73,16 +73,30 @@ Os alvos atuais do `Makefile` incluem `make build`, `make up-api`, `make test`, 
 
 Os targets da matriz usam os arquivos `.env`, `.env.hml` e `.env.prod` e preservam volumes. Os comandos de limpeza removem apenas containers, redes e imagens locais do Compose, sem `-v`, `--volumes` ou qualquer prune global.
 
-| Ambiente | Build | Test | Clean-cache | Logs |
+| Ambiente | Build | Test | Clean-cache | Logs | Subir | Parar |
 | --- | --- | --- | --- | --- |
-| Dev | `make dev-build` | `make dev-test` | `make dev-clean-cache` | `make dev-logs` |
-| HML | `make hml-build` | `make hml-test` | `make hml-clean-cache` | `make hml-logs` |
-| Producao | `make prod-build` | `make prod-test` | `make prod-clean-cache` | `make prod-logs` |
-| Agregado | `make all-build` | `make all-test` | `make all-clean-cache` | `make all-logs` |
+| Dev | `make dev-build` | `make dev-test` | `make dev-clean-cache` | `make dev-logs` | `make dev-up` | `make dev-down` |
+| HML | `make hml-build` | `make hml-test` | `make hml-clean-cache` | `make hml-logs` | `make hml-up`, depois `make edge-up` | `make hml-down` |
+| Producao | `make prod-build` | `make prod-test` | `make prod-clean-cache` | `make prod-logs` | `make CONFIRM_PROD=prod-up prod-up` | `make CONFIRM_PROD=prod-down prod-down` |
+| Agregado | `make all-build` | `make all-test` | `make all-clean-cache` | `make all-logs` | — | — |
 
 `hml-build`, `hml-clean-cache` e `hml-logs` incluem a stack edge. `all-build` e `all-clean-cache` excluem producao; `all-test` e `all-logs` incluem as operacoes seguras de producao.
 
 Producao nao executa build ou limpeza sem confirmacao exata: use `make CONFIRM_PROD=prod-build prod-build` ou `make CONFIRM_PROD=prod-clean-cache prod-clean-cache`. Os targets legados, inclusive `build-all`, `logs`, `clean-project` e `clean-razao-temp`, permanecem disponiveis com suas semanticas atuais.
+
+`make hml-up` valida a configuracao e a rede externa, e aguarda a stack HML ficar saudavel. Execute `make edge-up` somente em seguida; ele reaplica esse gate antes de iniciar a borda. Para parar apenas a borda, use `make edge-down`; `make hml-down` a desliga antes da stack principal. Os comandos preservam volumes.
+
+Antes de imagens privadas, forneca credenciais somente no ambiente seguro do terminal e execute:
+
+```bash
+export REGISTRY_HOST REGISTRY_USERNAME REGISTRY_TOKEN
+make registry-login
+unset REGISTRY_HOST REGISTRY_USERNAME REGISTRY_TOKEN
+```
+
+O alvo usa `docker login --password-stdin`; nao salve valores de registry, usuarios ou tokens no repositorio, em comandos copiados ou em evidencias.
+
+`prod-up` e `prod-down` validam o Compose e a rede externa antes da operacao e exigem a confirmacao exata mostrada na tabela. Eles nao participam de nenhum alvo `all-*`; execute-os apenas seguindo os gates de producao do runbook.
 
 ## Subir, testar, limpar cache e consultar logs
 

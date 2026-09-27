@@ -34,7 +34,9 @@ Crie `.env.prod` a partir de `.env.prod.example` e substitua todos os valores
 `CHANGE_ME` por segredos de producao. Nao reutilize valores de desenvolvimento
 ou homologacao.
 
-Revise a configuracao resolvida antes de qualquer alteracao nos containers:
+Revise a configuracao resolvida e confirme que a rede externa existe antes de
+qualquer alteracao nos containers. `make prod-up` executa essas duas validacoes
+antes da subida.
 
 ```bash
 docker compose --env-file .env.prod -f docker-compose.prod.yml config
@@ -45,12 +47,17 @@ PostgreSQL e que nenhum host, volume ou rede pertence a outro ambiente.
 
 ## Subida manual
 
-Depois da aprovacao do gate:
+Depois da aprovacao do gate, use a confirmacao exata:
 
 ```bash
-docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+make CONFIRM_PROD=prod-up prod-up
 docker compose --env-file .env.prod -f docker-compose.prod.yml ps
 ```
+
+Para imagens privadas, execute `make registry-login` antes da subida com
+`REGISTRY_HOST`, `REGISTRY_USERNAME` e `REGISTRY_TOKEN` fornecidos somente no
+ambiente seguro do terminal. O target usa `docker login --password-stdin`; nao
+registre esses valores em arquivos, comandos salvos ou evidencias.
 
 ## Validacao
 
@@ -73,7 +80,7 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml logs api frontend
 Interrompa a stack se a validacao falhar:
 
 ```bash
-docker compose --env-file .env.prod -f docker-compose.prod.yml down
+make CONFIRM_PROD=prod-down prod-down
 ```
 
 O volume `classificador-prod-postgres-data` e preservado por padrao. Restaure a
