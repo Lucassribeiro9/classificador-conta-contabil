@@ -69,6 +69,21 @@ Os alvos atuais do `Makefile` incluem `make build`, `make up-api`, `make test`, 
 
 `make check` e `make check-full` sao contratos planejados da [#398](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/398); eles ainda nao existem e nao devem ser apresentados como comandos executaveis.
 
+### Matriz de ambientes
+
+Os targets da matriz usam os arquivos `.env`, `.env.hml` e `.env.prod` e preservam volumes. Os comandos de limpeza removem apenas containers, redes e imagens locais do Compose, sem `-v`, `--volumes` ou qualquer prune global.
+
+| Ambiente | Build | Test | Clean-cache | Logs |
+| --- | --- | --- | --- | --- |
+| Dev | `make dev-build` | `make dev-test` | `make dev-clean-cache` | `make dev-logs` |
+| HML | `make hml-build` | `make hml-test` | `make hml-clean-cache` | `make hml-logs` |
+| Producao | `make prod-build` | `make prod-test` | `make prod-clean-cache` | `make prod-logs` |
+| Agregado | `make all-build` | `make all-test` | `make all-clean-cache` | `make all-logs` |
+
+`hml-build`, `hml-clean-cache` e `hml-logs` incluem a stack edge. `all-build` e `all-clean-cache` excluem producao; `all-test` e `all-logs` incluem as operacoes seguras de producao.
+
+Producao nao executa build ou limpeza sem confirmacao exata: use `make CONFIRM_PROD=prod-build prod-build` ou `make CONFIRM_PROD=prod-clean-cache prod-clean-cache`. Os targets legados, inclusive `build-all`, `logs`, `clean-project` e `clean-razao-temp`, permanecem disponiveis com suas semanticas atuais.
+
 ## Subir, testar, limpar cache e consultar logs
 
 Crie um ambiente virtual quando for executar testes locais:
