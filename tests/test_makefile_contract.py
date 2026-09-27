@@ -72,10 +72,26 @@ def test_production_up_and_down_require_exact_confirmation_and_preflight():
     assert "CONFIRM_PROD=prod-down" in denied_down.stderr
     assert confirmed_up.returncode == 0, confirmed_up.stderr
     assert confirmed_down.returncode == 0, confirmed_down.stderr
-    assert "docker compose --env-file .env.prod -f docker-compose.prod.yml config" in dry_run.stdout
+    assert "docker compose --env-file .env.prod -f docker-compose.prod.yml config --quiet" in dry_run.stdout
     assert "docker network inspect classificador-prod-edge" in dry_run.stdout
+    assert "docker network create classificador-prod-edge" in dry_run.stdout
     assert "down -v" not in dry_run.stdout
     assert "--volumes" not in dry_run.stdout
+
+    makefile = (PROJECT_ROOT / "Makefile").read_text(encoding="utf-8")
+    prod_down = makefile.split("prod-down:", maxsplit=1)[1].split(
+        "# Credenciais", maxsplit=1
+    )[0]
+    assert "network inspect" not in prod_down
+    assert "network create" not in prod_down
+
+
+def test_up_targets_validate_compose_without_printing_resolved_environment():
+    result = run_make("-n", "hml-up", "edge-up", "prod-up")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.count("config --quiet") == 3
+    assert " config\n" not in result.stdout
 
 
 def test_registry_login_requires_external_credentials_without_echoing_token():

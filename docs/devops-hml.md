@@ -29,9 +29,10 @@ incluidos em imagens. Configure o DNS interno para apontar
 `classificador-hml.interno` para o host; para um teste local temporario, use
 uma entrada equivalente em `/etc/hosts`.
 
-Valide a configuracao resolvida, a rede externa e a saude da stack antes de iniciar a borda:
+Valide o Compose sem exibir os valores resolvidos do ambiente, a rede externa e a saude da stack antes de iniciar a borda:
 
 ```bash
+docker compose --env-file .env.hml -f docker-compose.hml.yml config --quiet
 make hml-up
 ```
 

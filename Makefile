@@ -65,12 +65,12 @@ hml-logs:
 
 # HML deve estar saudavel antes de iniciar a borda; a rede externa e gerida fora do Compose.
 hml-up:
-	$(HML_COMPOSE) config
+	$(HML_COMPOSE) config --quiet
 	$(DOCKER) network inspect classificador-hml-edge
 	$(HML_COMPOSE) up -d --wait
 
 edge-up: hml-up
-	$(HML_EDGE_COMPOSE) config
+	$(HML_EDGE_COMPOSE) config --quiet
 	$(HML_EDGE_COMPOSE) up -d --wait
 
 # Pare a borda antes da stack HML para interromper novas requisicoes com seguranca.
@@ -99,14 +99,13 @@ prod-clean-cache:
 # Acoes de producao validam configuracao e rede externa antes de alterar containers.
 prod-up:
 	@if [ "$(CONFIRM_PROD)" != "prod-up" ]; then echo "Defina CONFIRM_PROD=prod-up para continuar." >&2; exit 2; fi
-	$(PROD_COMPOSE) config
-	$(DOCKER) network inspect classificador-prod-edge
+	$(PROD_COMPOSE) config --quiet
+	@if ! $(DOCKER) network inspect classificador-prod-edge >/dev/null 2>&1; then echo "Criando rede externa classificador-prod-edge."; $(DOCKER) network create classificador-prod-edge >/dev/null; fi
 	$(PROD_COMPOSE) up -d --wait
 
 prod-down:
 	@if [ "$(CONFIRM_PROD)" != "prod-down" ]; then echo "Defina CONFIRM_PROD=prod-down para continuar." >&2; exit 2; fi
-	$(PROD_COMPOSE) config
-	$(DOCKER) network inspect classificador-prod-edge
+	$(PROD_COMPOSE) config --quiet
 	$(PROD_COMPOSE) down
 
 # Credenciais devem ser fornecidas pelo ambiente ou secret manager e nunca persistidas.

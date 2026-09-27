@@ -134,12 +134,10 @@ def test_hml_environment_example_and_validation_commands_are_sanitized():
     assert "!.env.hml.example" in gitignore
 
     assert "docker network create classificador-hml-edge" in deployment_guide
-    assert "docker compose --env-file .env.hml -f docker-compose.hml.yml config" in (
+    assert "docker compose --env-file .env.hml -f docker-compose.hml.yml config --quiet" in (
         deployment_guide
     )
-    assert "docker compose --env-file .env.hml -f docker-compose.hml.yml up -d --build" in (
-        deployment_guide
-    )
+    assert "make hml-up" in deployment_guide
     assert "https://classificador-hml.interno/api/health" in deployment_guide
     assert "https://classificador-hml.interno/login" in deployment_guide
 

@@ -24,26 +24,22 @@ Nao execute a subida enquanto todos os itens abaixo nao estiverem confirmados:
 
 ## Preparacao
 
-Crie a rede exclusiva que conecta a stack ao proxy compartilhado:
-
-```bash
-docker network create classificador-prod-edge
-```
-
 Crie `.env.prod` a partir de `.env.prod.example` e substitua todos os valores
 `CHANGE_ME` por segredos de producao. Nao reutilize valores de desenvolvimento
 ou homologacao.
 
-Revise a configuracao resolvida e confirme que a rede externa existe antes de
-qualquer alteracao nos containers. `make prod-up` executa essas duas validacoes
-antes da subida.
+Valide o Compose sem exibir os valores resolvidos do ambiente. O `make prod-up`
+cria `classificador-prod-edge` quando ela ainda nao existir, preserva a rede em
+paradas posteriores e entao inicia a stack. Se o proxy compartilhado ja estiver
+em execucao, confirme que ele esta conectado a essa rede antes de liberar o
+trafego.
 
 ```bash
-docker compose --env-file .env.prod -f docker-compose.prod.yml config
+docker compose --env-file .env.prod -f docker-compose.prod.yml config --quiet
 ```
 
-Confirme na saida que nao existem portas publicadas para frontend, API ou
-PostgreSQL e que nenhum host, volume ou rede pertence a outro ambiente.
+Use `docker compose ... ps` apos a subida para conferir os servicos sem expor
+a configuracao resolvida.
 
 ## Subida manual
 
