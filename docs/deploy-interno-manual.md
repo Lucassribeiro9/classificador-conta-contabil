@@ -7,6 +7,10 @@ Ubuntu interno. Os detalhes de cada stack permanecem em `docs/devops-hml.md` e
 Automacao completa de CD fica fora do MVP. Execute um ambiente por vez e nao
 avance enquanto a validacao do ambiente atual estiver incompleta.
 
+Execute `make test` localmente antes do deploy. Healthchecks, Compose e smoke
+registrados neste runbook sao validacoes operacionais separadas; HML e producao
+nao executam `pytest`.
+
 ## Pre-deploy
 
 - Confirme a branch e o commit aprovado para a liberacao.

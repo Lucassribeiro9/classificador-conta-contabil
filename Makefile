@@ -29,9 +29,8 @@ SERVICE_DB := postgres
 dev-build:
 	$(DEV_COMPOSE) build
 
-# Executa os testes dentro da stack local.
-dev-test:
-	$(DEV_COMPOSE) run --rm $(SERVICE_API) python -m pytest -q tests
+# A suite local canonica nao depende de nenhuma stack Compose.
+dev-test: test
 
 # Limpeza escopada da stack local; volumes nao sao removidos.
 dev-clean-cache:
@@ -52,8 +51,7 @@ hml-build:
 	$(HML_COMPOSE) build
 	$(HML_EDGE_COMPOSE) pull
 
-hml-test:
-	$(HML_COMPOSE) run --rm api python -m pytest -q tests
+hml-test: test
 
 hml-clean-cache:
 	$(HML_COMPOSE) down --rmi local
@@ -115,7 +113,7 @@ registry-login:
 
 # Agregadores seguros: operacoes mutaveis em producao nunca sao encadeadas.
 all-build: dev-build hml-build
-all-test: dev-test hml-test prod-test
+all-test: test
 all-clean-cache: dev-clean-cache hml-clean-cache
 all-logs: dev-logs hml-logs prod-logs
 

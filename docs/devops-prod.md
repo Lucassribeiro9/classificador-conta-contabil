@@ -9,6 +9,10 @@ O arquivo `.env.prod` e os dados reais devem permanecer fora do repositorio.
 DNS interno, certificados da CA interna e firewall restrito as sub-redes
 autorizadas sao pre-requisitos operacionais.
 
+Execute a suite de regressao local com `make test` antes da liberacao.
+`make prod-test` apenas delega a essa suite; healthchecks e validacoes deste
+runbook sao operacionais e nunca executam `pytest` em producao.
+
 ## Gate de liberacao
 
 Nao execute a subida enquanto todos os itens abaixo nao estiverem confirmados:

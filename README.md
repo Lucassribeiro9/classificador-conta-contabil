@@ -82,6 +82,11 @@ Os targets da matriz usam os arquivos `.env`, `.env.hml` e `.env.prod` e preserv
 
 `hml-build`, `hml-clean-cache` e `hml-logs` incluem a stack edge. `all-build` e `all-clean-cache` excluem producao; `all-test` e `all-logs` incluem as operacoes seguras de producao.
 
+`make test` e a suite local canonica: `dev-test`, `hml-test` e `prod-test`
+apenas delegam para ela, e `all-test` a executa uma unica vez. Compose,
+healthchecks e smoke em HML ou producao sao validacoes operacionais separadas;
+nenhum target de teste executa `pytest` nesses ambientes.
+
 Producao nao executa build ou limpeza sem confirmacao exata: use `make CONFIRM_PROD=prod-build prod-build` ou `make CONFIRM_PROD=prod-clean-cache prod-clean-cache`. Os targets legados, inclusive `build-all`, `logs`, `clean-project` e `clean-razao-temp`, permanecem disponiveis com suas semanticas atuais.
 
 `make hml-up` valida a configuracao e a rede externa, e aguarda a stack HML ficar saudavel. Execute `make edge-up` somente em seguida; ele reaplica esse gate antes de iniciar a borda. Para parar apenas a borda, use `make edge-down`; `make hml-down` a desliga antes da stack principal. Os comandos preservam volumes.

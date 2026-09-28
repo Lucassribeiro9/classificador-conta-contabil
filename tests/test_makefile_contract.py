@@ -38,6 +38,18 @@ def test_environment_matrix_selects_the_approved_compose_stacks_and_log_tail():
     assert "down --rmi local" in result.stdout
 
 
+def test_environment_test_targets_delegate_once_to_the_canonical_local_suite():
+    result = run_make("-n", "dev-test", "hml-test", "prod-test", "all-test")
+    makefile = (PROJECT_ROOT / "Makefile").read_text(encoding="utf-8")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.count("./venv/bin/python -m pytest -q tests") == 1
+    assert "docker compose --env-file .env -f docker-compose.yml run" not in result.stdout
+    assert "docker compose --env-file .env.hml -f docker-compose.hml.yml run" not in result.stdout
+    for target in ("dev-test", "hml-test", "prod-test", "all-test"):
+        assert f"{target}: test" in makefile
+
+
 def test_up_and_down_targets_preserve_volumes_and_order_hml_before_edge():
     result = run_make("-n", "dev-up", "dev-down", "hml-up", "edge-up", "edge-down", "hml-down")
 

@@ -9,6 +9,10 @@ as portas 80 e 443, termina o TLS, serve o frontend em `/` e encaminha
 Use somente dados ficticios ou sanitizados. O arquivo `.env.hml` deve existir
 apenas no servidor e nunca ser versionado.
 
+Execute a suite de regressao local com `make test` antes do deploy. `make hml-test`
+apenas delega a essa suite; healthchecks, `ps` e smoke abaixo sao a validacao
+operacional da HML e nao executam `pytest` no ambiente.
+
 ## Preparacao
 
 Crie a rede exclusiva que conecta a stack ao proxy compartilhado:
