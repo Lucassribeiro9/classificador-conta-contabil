@@ -101,12 +101,10 @@ def test_prod_example_and_runbook_require_release_gate_without_real_secrets():
         "rollback",
     }
     assert all(check in runbook for check in required_release_checks)
-    assert "docker network create classificador-prod-edge" in runbook
-    assert "docker compose --env-file .env.prod -f docker-compose.prod.yml config" in (
+    assert "make prod-up" in runbook
+    assert "docker compose --env-file .env.prod -f docker-compose.prod.yml config --quiet" in (
         runbook
     )
-    assert "docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build" in (
-        runbook
-    )
+    assert "make CONFIRM_PROD=prod-up prod-up" in runbook
     assert "https://classificador.interno/api/health" in runbook
     assert "https://classificador.interno/login" in runbook

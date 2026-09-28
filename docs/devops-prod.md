@@ -9,6 +9,10 @@ O arquivo `.env.prod` e os dados reais devem permanecer fora do repositorio.
 DNS interno, certificados da CA interna e firewall restrito as sub-redes
 autorizadas sao pre-requisitos operacionais.
 
+Execute a suite de regressao local com `make test` antes da liberacao.
+`make prod-test` apenas delega a essa suite; healthchecks e validacoes deste
+runbook sao operacionais e nunca executam `pytest` em producao.
+
 ## Gate de liberacao
 
 Nao execute a subida enquanto todos os itens abaixo nao estiverem confirmados:
@@ -24,33 +28,36 @@ Nao execute a subida enquanto todos os itens abaixo nao estiverem confirmados:
 
 ## Preparacao
 
-Crie a rede exclusiva que conecta a stack ao proxy compartilhado:
-
-```bash
-docker network create classificador-prod-edge
-```
-
 Crie `.env.prod` a partir de `.env.prod.example` e substitua todos os valores
 `CHANGE_ME` por segredos de producao. Nao reutilize valores de desenvolvimento
 ou homologacao.
 
-Revise a configuracao resolvida antes de qualquer alteracao nos containers:
+Valide o Compose sem exibir os valores resolvidos do ambiente. O `make prod-up`
+cria `classificador-prod-edge` quando ela ainda nao existir, preserva a rede em
+paradas posteriores e entao inicia a stack. Se o proxy compartilhado ja estiver
+em execucao, confirme que ele esta conectado a essa rede antes de liberar o
+trafego.
 
 ```bash
-docker compose --env-file .env.prod -f docker-compose.prod.yml config
+docker compose --env-file .env.prod -f docker-compose.prod.yml config --quiet
 ```
 
-Confirme na saida que nao existem portas publicadas para frontend, API ou
-PostgreSQL e que nenhum host, volume ou rede pertence a outro ambiente.
+Use `docker compose ... ps` apos a subida para conferir os servicos sem expor
+a configuracao resolvida.
 
 ## Subida manual
 
-Depois da aprovacao do gate:
+Depois da aprovacao do gate, use a confirmacao exata:
 
 ```bash
-docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+make CONFIRM_PROD=prod-up prod-up
 docker compose --env-file .env.prod -f docker-compose.prod.yml ps
 ```
+
+Para imagens privadas, execute `make registry-login` antes da subida com
+`REGISTRY_HOST`, `REGISTRY_USERNAME` e `REGISTRY_TOKEN` fornecidos somente no
+ambiente seguro do terminal. O target usa `docker login --password-stdin`; nao
+registre esses valores em arquivos, comandos salvos ou evidencias.
 
 ## Validacao
 
@@ -73,7 +80,7 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml logs api frontend
 Interrompa a stack se a validacao falhar:
 
 ```bash
-docker compose --env-file .env.prod -f docker-compose.prod.yml down
+make CONFIRM_PROD=prod-down prod-down
 ```
 
 O volume `classificador-prod-postgres-data` e preservado por padrao. Restaure a

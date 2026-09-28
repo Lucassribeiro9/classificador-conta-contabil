@@ -9,6 +9,10 @@ as portas 80 e 443, termina o TLS, serve o frontend em `/` e encaminha
 Use somente dados ficticios ou sanitizados. O arquivo `.env.hml` deve existir
 apenas no servidor e nunca ser versionado.
 
+Execute a suite de regressao local com `make test` antes do deploy. `make hml-test`
+apenas delega a essa suite; healthchecks, `ps` e smoke abaixo sao a validacao
+operacional da HML e nao executam `pytest` no ambiente.
+
 ## Preparacao
 
 Crie a rede exclusiva que conecta a stack ao proxy compartilhado:
@@ -29,17 +33,16 @@ incluidos em imagens. Configure o DNS interno para apontar
 `classificador-hml.interno` para o host; para um teste local temporario, use
 uma entrada equivalente em `/etc/hosts`.
 
-Valide a configuracao resolvida antes de subir os servicos:
+Valide o Compose sem exibir os valores resolvidos do ambiente, a rede externa e a saude da stack antes de iniciar a borda:
 
 ```bash
-docker compose --env-file .env.hml -f docker-compose.hml.yml config
-docker compose --env-file .env.hml -f docker-compose.edge.yml config
+docker compose --env-file .env.hml -f docker-compose.hml.yml config --quiet
+make hml-up
 ```
 
 ## Subida
 
 ```bash
-docker compose --env-file .env.hml -f docker-compose.hml.yml up -d --build
 docker compose --env-file .env.hml -f docker-compose.hml.yml ps
 ```
 
@@ -48,9 +51,14 @@ portas publicadas e recebem trafego apenas pela rede do proxy. Suba a borda
 somente depois que `api` e `frontend` estiverem `healthy`:
 
 ```bash
-docker compose --env-file .env.hml -f docker-compose.edge.yml up -d
+make edge-up
 docker compose --env-file .env.hml -f docker-compose.edge.yml ps
 ```
+
+Se imagens privadas forem necessarias, execute `make registry-login` antes de
+`make hml-up`, com `REGISTRY_HOST`, `REGISTRY_USERNAME` e `REGISTRY_TOKEN`
+fornecidos apenas pelo ambiente seguro do terminal. O comando nao recebe nem
+registra valores no repositorio.
 
 ## Gate e Seed Sanitizado
 
@@ -116,10 +124,9 @@ docker compose --env-file .env.hml -f docker-compose.hml.yml logs api frontend p
 ## Rollback operacional
 
 ```bash
-docker compose --env-file .env.hml -f docker-compose.edge.yml down
-docker compose --env-file .env.hml -f docker-compose.hml.yml down
+make hml-down
 ```
 
-Desligue primeiro a borda para interromper novas requisicoes. O segundo comando
-preserva o volume `classificador-hml-postgres-data`. Remova ou
+O target desliga primeiro a borda para interromper novas requisicoes e preserva
+o volume `classificador-hml-postgres-data`. Remova ou
 restaure esse volume somente por procedimento operacional aprovado.

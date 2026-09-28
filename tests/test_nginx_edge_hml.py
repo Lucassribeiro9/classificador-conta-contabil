@@ -85,13 +85,13 @@ def test_hml_edge_environment_ci_and_runbook_cover_safe_operation():
         "docker network create classificador-hml-edge",
         "classificador-hml.interno",
         "certificado emitido pela CA interna",
-        "docker-compose.hml.yml up -d --build",
+        "make hml-up",
         "somente depois que `api` e `frontend` estiverem `healthy`",
-        "docker-compose.edge.yml up -d",
+        "make edge-up",
         "docker-compose.edge.yml exec nginx nginx -t",
         "docker network inspect classificador-hml-edge",
         "python -m scripts.smoke_homologacao",
-        "docker-compose.edge.yml down",
+        "make hml-down",
     )
     for operation in required_operations:
         assert operation in runbook

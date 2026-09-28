@@ -1,6 +1,7 @@
 # Comandos facilitadores
 # Usa o plugin moderno do Docker Compose (`docker compose`)
 DOCKER_COMPOSE := docker compose
+DOCKER ?= docker
 DEV_ENV_FILE := .env
 HML_ENV_FILE := .env.hml
 PROD_ENV_FILE := .env.prod
@@ -22,15 +23,14 @@ SERVICES_ALL := $(SERVICE_API) $(SERVICES_INFRA)
 # Serviço do banco de dados PostgreSQL (usado para logs e testes)
 SERVICE_DB := postgres
 # Declara targets "falsos" para evitar conflito com arquivos de mesmo nome
-.PHONY: build rebuild build-all rebuild-all up up-with-test up-api up-infra up-build down logs shell clean-project clean-razao-temp test test-postgres migrate-create migrate-up migrate-down migrate-current dev-build dev-test dev-clean-cache dev-logs hml-build hml-test hml-clean-cache hml-logs prod-test prod-logs prod-build prod-clean-cache all-build all-test all-clean-cache all-logs
+.PHONY: build rebuild build-all rebuild-all up up-with-test up-api up-infra up-build down logs shell clean-project clean-razao-temp test test-postgres migrate-create migrate-up migrate-down migrate-current dev-build dev-test dev-clean-cache dev-logs dev-up dev-down hml-build hml-test hml-clean-cache hml-logs hml-up hml-down edge-up edge-down prod-test prod-logs prod-build prod-clean-cache prod-up prod-down registry-login all-build all-test all-clean-cache all-logs
 
 # Constroi somente a stack local de desenvolvimento.
 dev-build:
 	$(DEV_COMPOSE) build
 
-# Executa os testes dentro da stack local.
-dev-test:
-	$(DEV_COMPOSE) run --rm $(SERVICE_API) python -m pytest -q tests
+# A suite local canonica nao depende de nenhuma stack Compose.
+dev-test: test
 
 # Limpeza escopada da stack local; volumes nao sao removidos.
 dev-clean-cache:
@@ -39,13 +39,19 @@ dev-clean-cache:
 dev-logs:
 	$(DEV_COMPOSE) logs -f --tail $(LOG_TAIL)
 
+# Sobe e para a stack local, preservando os volumes por padrao.
+dev-up:
+	$(DEV_COMPOSE) up -d --wait
+
+dev-down:
+	$(DEV_COMPOSE) down
+
 # HML inclui o proxy de borda, que usa a mesma rede externa da stack principal.
 hml-build:
 	$(HML_COMPOSE) build
 	$(HML_EDGE_COMPOSE) pull
 
-hml-test:
-	$(HML_COMPOSE) run --rm api python -m pytest -q tests
+hml-test: test
 
 hml-clean-cache:
 	$(HML_COMPOSE) down --rmi local
@@ -54,6 +60,23 @@ hml-clean-cache:
 hml-logs:
 	$(HML_COMPOSE) logs -f --tail $(LOG_TAIL)
 	$(HML_EDGE_COMPOSE) logs -f --tail $(LOG_TAIL)
+
+# HML deve estar saudavel antes de iniciar a borda; a rede externa e gerida fora do Compose.
+hml-up:
+	$(HML_COMPOSE) config --quiet
+	$(DOCKER) network inspect classificador-hml-edge
+	$(HML_COMPOSE) up -d --wait
+
+edge-up: hml-up
+	$(HML_EDGE_COMPOSE) config --quiet
+	$(HML_EDGE_COMPOSE) up -d --wait
+
+# Pare a borda antes da stack HML para interromper novas requisicoes com seguranca.
+edge-down:
+	$(HML_EDGE_COMPOSE) down
+
+hml-down: edge-down
+	$(HML_COMPOSE) down
 
 # Testes locais sao a validacao segura para producao: nao iniciam recursos da stack.
 prod-test: test
@@ -71,9 +94,26 @@ prod-clean-cache:
 	@if [ "$(CONFIRM_PROD)" != "prod-clean-cache" ]; then echo "Defina CONFIRM_PROD=prod-clean-cache para continuar." >&2; exit 2; fi
 	$(PROD_COMPOSE) down --rmi local
 
+# Acoes de producao validam configuracao e rede externa antes de alterar containers.
+prod-up:
+	@if [ "$(CONFIRM_PROD)" != "prod-up" ]; then echo "Defina CONFIRM_PROD=prod-up para continuar." >&2; exit 2; fi
+	$(PROD_COMPOSE) config --quiet
+	@if ! $(DOCKER) network inspect classificador-prod-edge >/dev/null 2>&1; then echo "Criando rede externa classificador-prod-edge."; $(DOCKER) network create classificador-prod-edge >/dev/null; fi
+	$(PROD_COMPOSE) up -d --wait
+
+prod-down:
+	@if [ "$(CONFIRM_PROD)" != "prod-down" ]; then echo "Defina CONFIRM_PROD=prod-down para continuar." >&2; exit 2; fi
+	$(PROD_COMPOSE) config --quiet
+	$(PROD_COMPOSE) down
+
+# Credenciais devem ser fornecidas pelo ambiente ou secret manager e nunca persistidas.
+registry-login:
+	@if [ -z "$$REGISTRY_HOST" ] || [ -z "$$REGISTRY_USERNAME" ] || [ -z "$$REGISTRY_TOKEN" ]; then echo "Defina REGISTRY_HOST, REGISTRY_USERNAME e REGISTRY_TOKEN no ambiente." >&2; exit 2; fi
+	@printf '%s' "$$REGISTRY_TOKEN" | $(DOCKER) login "$$REGISTRY_HOST" --username "$$REGISTRY_USERNAME" --password-stdin
+
 # Agregadores seguros: operacoes mutaveis em producao nunca sao encadeadas.
 all-build: dev-build hml-build
-all-test: dev-test hml-test prod-test
+all-test: test
 all-clean-cache: dev-clean-cache hml-clean-cache
 all-logs: dev-logs hml-logs prod-logs
 
