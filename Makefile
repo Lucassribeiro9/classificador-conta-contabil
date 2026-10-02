@@ -1,6 +1,10 @@
 # Comandos facilitadores
 # Usa o plugin moderno do Docker Compose (`docker compose`)
 DOCKER_COMPOSE := docker compose
+PYTHON ?= ./venv/bin/python
+CHECK_PYTHON ?= $(PYTHON)
+CHECK_BASE_REF ?= origin/main
+CHECK_FULL_GATES := security backend postgres frontend playwright compose docs
 DOCKER ?= docker
 DEV_ENV_FILE := .env
 HML_ENV_FILE := .env.hml
@@ -23,7 +27,16 @@ SERVICES_ALL := $(SERVICE_API) $(SERVICES_INFRA)
 # Serviço do banco de dados PostgreSQL (usado para logs e testes)
 SERVICE_DB := postgres
 # Declara targets "falsos" para evitar conflito com arquivos de mesmo nome
-.PHONY: build rebuild build-all rebuild-all up up-with-test up-api up-infra up-build down logs shell clean-project clean-razao-temp test test-postgres migrate-create migrate-up migrate-down migrate-current dev-build dev-test dev-clean-cache dev-logs dev-up dev-down hml-build hml-test hml-clean-cache hml-logs hml-up hml-down edge-up edge-down prod-test prod-logs prod-build prod-clean-cache prod-up prod-down registry-login all-build all-test all-clean-cache all-logs
+.PHONY: build rebuild build-all rebuild-all up up-with-test up-api up-infra up-build down logs shell clean-project clean-razao-temp test test-postgres migrate-create migrate-up migrate-down migrate-current dev-build dev-test dev-clean-cache dev-logs dev-up dev-down hml-build hml-test hml-clean-cache hml-logs hml-up hml-down edge-up edge-down prod-test prod-logs prod-build prod-clean-cache prod-up prod-down registry-login all-build all-test all-clean-cache all-logs check check-full check-security check-backend check-postgres check-frontend check-playwright check-compose check-docs
+
+.NOTPARALLEL: check check-full
+
+ifneq ($(filter check,$(MAKECMDGOALS)),)
+CHECK_GATES := $(shell $(CHECK_PYTHON) scripts/check_scope.py --base-ref "$(CHECK_BASE_REF)")
+ifneq ($(.SHELLSTATUS),0)
+$(error make check nao conseguiu determinar o escopo; consulte a mensagem check-scope acima)
+endif
+endif
 
 # Constroi somente a stack local de desenvolvimento.
 dev-build:
@@ -179,13 +192,61 @@ clean-razao-temp:
 
 # Executa os testes do projeto no ambiente virtual local
 test:
-	./venv/bin/python -m pytest -q tests
+	$(PYTHON) -m pytest -q tests
 
 # Executa testes de integracao reais contra PostgreSQL na rede Docker
 test-postgres:
 	$(DOCKER_COMPOSE_TEST) up -d --build $(SERVICE_DB)
 	$(DOCKER_COMPOSE_TEST) run --build --rm $(SERVICE_API) sh -c "python -m alembic upgrade head && python -m pytest -q -m integration_postgres tests/integration"
 	$(DOCKER_COMPOSE_TEST) down -v
+
+# Gate proporcional ao diff. A classificacao e avaliada antes de qualquer gate.
+check: check-security $(addprefix check-,$(CHECK_GATES))
+	@echo "[check] escopo detectado por scripts/check_scope.py: $(CHECK_GATES)"
+	@echo "[check] validacao proporcional concluida"
+
+# Gate ampliado e deterministico para pre-merge, release e homologacao tecnica.
+check-full: $(addprefix check-,$(CHECK_FULL_GATES))
+	@echo "[check-full] matriz completa concluida"
+
+check-security:
+	@echo "[check] security"
+	$(CHECK_PYTHON) scripts/check_diff_security.py --base-ref "$(CHECK_BASE_REF)"
+
+check-backend:
+	@echo "[check] backend"
+	$(PYTHON) -m pytest -q tests
+
+check-postgres:
+	@echo "[check] postgres"
+	@set -eu; \
+		cleanup() { $(DOCKER_COMPOSE_TEST) down -v; }; \
+		trap cleanup EXIT INT TERM; \
+		$(DOCKER_COMPOSE_TEST) up -d --build $(SERVICE_DB); \
+		$(DOCKER_COMPOSE_TEST) run --build --rm $(SERVICE_API) sh -c \
+			"python -m alembic upgrade head && python -m pytest -q -m integration_postgres tests/integration"
+
+check-frontend:
+	@echo "[check] frontend"
+	cd frontend && npm run lint
+	cd frontend && npm run typecheck
+	cd frontend && npm test
+	cd frontend && npm run build
+
+check-playwright:
+	@echo "[check] playwright"
+	cd frontend && npm run test:e2e
+
+check-compose:
+	@echo "[check] compose"
+	$(DOCKER_COMPOSE) --env-file .env.example -f docker-compose.yml config --quiet
+	$(DOCKER_COMPOSE) --env-file .env.hml.example -f docker-compose.hml.yml config --quiet
+	$(DOCKER_COMPOSE) --env-file .env.hml.example -f docker-compose.edge.yml config --quiet
+	$(DOCKER_COMPOSE) --env-file .env.prod.example -f docker-compose.prod.yml config --quiet
+
+check-docs:
+	@echo "[check] docs"
+	$(PYTHON) -m pytest -q tests/test_*docs.py
 
 # Executa testes no ambiente Windows
 test-win:
