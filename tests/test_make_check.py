@@ -33,6 +33,15 @@ def init_repository(path: Path) -> None:
     assert result.returncode == 0, result.stderr
 
 
+def init_make_contract_repository(path: Path) -> None:
+    """Prepara um checkout minimo com um diff que aciona todos os gates."""
+    init_repository(path)
+    (path / "scripts").symlink_to(PROJECT_ROOT / "scripts", target_is_directory=True)
+    tests = path / "tests"
+    tests.mkdir()
+    (tests / "test_make_check.py").write_text("# diff controlado\n", encoding="utf-8")
+
+
 def test_scope_classifier_selects_docs_for_an_untracked_document(tmp_path: Path):
     init_repository(tmp_path)
     docs = tmp_path / "docs"
@@ -150,23 +159,29 @@ def test_security_check_reports_path_without_echoing_the_secret(tmp_path: Path):
     assert exposed not in result.stderr
 
 
-def test_make_exposes_proportional_and_full_check_targets():
+def test_make_exposes_proportional_and_full_check_targets(tmp_path: Path):
+    init_make_contract_repository(tmp_path)
+
     proportional = run(
         "make",
         "-n",
+        "-f",
+        str(PROJECT_ROOT / "Makefile"),
         f"PYTHON={sys.executable}",
         f"CHECK_PYTHON={sys.executable}",
         "CHECK_BASE_REF=HEAD",
         "check",
-        cwd=PROJECT_ROOT,
+        cwd=tmp_path,
     )
     full = run(
         "make",
         "-n",
+        "-f",
+        str(PROJECT_ROOT / "Makefile"),
         f"PYTHON={sys.executable}",
         f"CHECK_PYTHON={sys.executable}",
         "check-full",
-        cwd=PROJECT_ROOT,
+        cwd=tmp_path,
     )
 
     assert proportional.returncode == 0, proportional.stderr
@@ -281,14 +296,18 @@ def test_postgres_gate_is_announced_before_execution_and_always_cleans_up():
     assert "down -v" in result.stdout
 
 
-def test_make_check_propagates_the_first_gate_failure():
+def test_make_check_propagates_the_first_gate_failure(tmp_path: Path):
+    init_make_contract_repository(tmp_path)
+
     result = run(
         "make",
+        "-f",
+        str(PROJECT_ROOT / "Makefile"),
         "PYTHON=false",
         f"CHECK_PYTHON={sys.executable}",
         "CHECK_BASE_REF=HEAD",
         "check",
-        cwd=PROJECT_ROOT,
+        cwd=tmp_path,
     )
 
     assert result.returncode != 0
