@@ -67,7 +67,21 @@ A API local fica em `http://localhost:8000`. Consulte logs com `docker compose l
 
 Os alvos atuais do `Makefile` incluem `make build`, `make up-api`, `make test`, `make test-postgres` e `make logs`. Revise o alvo antes de executa-lo, em especial os que removem recursos. `make clean-razao-temp` remove explicitamente o volume temporario do Razao e nao e um comando rotineiro.
 
-`make check` e `make check-full` sao contratos planejados da [#398](https://github.com/Lucassribeiro9/classificador-conta-contabil/issues/398); eles ainda nao existem e nao devem ser apresentados como comandos executaveis.
+Use `make check` como gate local proporcional antes de abrir ou atualizar um
+PR. Ele compara commits, staging, alteracoes locais e arquivos novos com o
+merge-base de `origin/main`, seleciona os gates aplicaveis e sempre inspeciona
+o diff contra indicios de segredos. Para outra base conhecida, execute, por
+exemplo, `make CHECK_BASE_REF=main check`. Base inexistente, caminho sem
+classificacao ou falha de qualquer gate encerra o comando com erro; o scanner
+informa somente caminhos e categorias, sem reproduzir o valor detectado.
+
+Use `make check-full` na validacao tecnica de maior risco, pre-merge ou
+homologacao. Ele executa a matriz completa disponivel: seguranca, backend,
+PostgreSQL real, frontend (`lint`, `typecheck`, testes e build), Playwright,
+Docker Compose e contratos documentais. Prepare antes o ambiente Python, as
+dependencias do frontend, os navegadores Playwright, o Docker Engine e os
+arquivos `.env*` locais a partir dos exemplos sanitizados. Os targets nao
+substituem a homologacao manual e nao devem apontar para HML ou producao.
 
 ### Matriz de ambientes
 
