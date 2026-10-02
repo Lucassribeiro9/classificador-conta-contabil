@@ -156,6 +156,7 @@ def test_make_exposes_proportional_and_full_check_targets():
         "-n",
         f"PYTHON={sys.executable}",
         f"CHECK_PYTHON={sys.executable}",
+        "CHECK_BASE_REF=HEAD",
         "check",
         cwd=PROJECT_ROOT,
     )
@@ -285,7 +286,7 @@ def test_make_check_propagates_the_first_gate_failure():
         "make",
         "PYTHON=false",
         f"CHECK_PYTHON={sys.executable}",
-        "CHECK_BASE_REF=origin/main",
+        "CHECK_BASE_REF=HEAD",
         "check",
         cwd=PROJECT_ROOT,
     )
