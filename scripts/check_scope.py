@@ -51,6 +51,7 @@ def classify(paths: list[str]) -> list[str]:
             raw_path == "Makefile"
             or raw_path.startswith("scripts/check_")
             or raw_path == "tests/test_make_check.py"
+            or raw_path.startswith(".github/workflows/")
         ):
             gates.update(FULL_GATES)
         elif first_part in {"api", "core", "alembic"}:

@@ -17,6 +17,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Prepare test environment
         run: cp .env.example .env
@@ -34,6 +36,56 @@ jobs:
       - name: Run backend tests
         run: python -m pytest -q tests
 
+  postgres:
+    name: PostgreSQL integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      APP_ENV: test
+      DATABASE_URL: postgresql+psycopg://ci:ci@localhost:5432/classificador_ci
+      ADMIN_TOKEN: ci-admin
+      JWT_SECRET_KEY: ci-jwt
+      SERVICE_CREDENTIAL_SECRET: ci-service
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: classificador_ci
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d classificador_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+          --health-start-period 5s
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Prepare test environment
+        run: cp .env.example .env
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install backend dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Apply PostgreSQL migrations
+        run: python -m alembic upgrade head
+
+      - name: Run PostgreSQL integration tests
+        run: python -m pytest -q -m integration_postgres tests/integration
+
   frontend:
     name: Frontend validation
     runs-on: ubuntu-latest
@@ -44,6 +96,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -67,6 +121,35 @@ jobs:
       - name: Build frontend
         run: npm run build
 
+  playwright:
+    name: Playwright end-to-end
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install Chromium dependencies
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright tests
+        run: npm run test:e2e
+
   docker-compose:
     name: Docker Compose validation
     runs-on: ubuntu-latest
@@ -74,6 +157,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Validate development Compose
         run: docker compose --env-file .env.example -f docker-compose.yml config --quiet
@@ -86,3 +171,39 @@ jobs:
 
       - name: Validate production Compose
         run: docker compose --env-file .env.prod.example -f docker-compose.prod.yml config --quiet
+
+  docs:
+    name: Documentation validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install documentation test dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Run documentation tests
+        run: python -m pytest -q tests/test_*docs.py
+
+  security:
+    name: Diff security validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Scan changed files for sensitive material
+        run: python scripts/check_diff_security.py --base-ref origin/main
