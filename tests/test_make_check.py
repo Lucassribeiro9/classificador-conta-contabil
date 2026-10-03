@@ -119,6 +119,31 @@ def test_scope_classifier_uses_every_gate_for_harness_changes(tmp_path: Path):
     ]
 
 
+def test_scope_classifier_uses_every_gate_for_workflow_changes(tmp_path: Path):
+    init_repository(tmp_path)
+    workflow = tmp_path / ".github" / "workflows"
+    workflow.mkdir(parents=True)
+    (workflow / "ci.yml").write_text("name: CI\n", encoding="utf-8")
+
+    result = run(
+        sys.executable,
+        str(CHECK_SCOPE),
+        "--base-ref",
+        "HEAD",
+        cwd=tmp_path,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip().splitlines() == [
+        "backend",
+        "compose",
+        "docs",
+        "frontend",
+        "playwright",
+        "postgres",
+    ]
+
+
 def test_scope_classifier_fails_closed_for_an_unknown_path(tmp_path: Path):
     init_repository(tmp_path)
     (tmp_path / "arquivo.bin").write_bytes(b"conteudo")
