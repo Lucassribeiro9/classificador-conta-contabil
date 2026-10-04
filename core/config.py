@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
     SERVICE_CREDENTIAL_SECRET: str = os.getenv("SERVICE_CREDENTIAL_SECRET", "")
     MODEL_DIR: str = os.getenv("MODEL_DIR", "./data/models")
+    TECHNICAL_LOG_DIR: str = os.getenv("TECHNICAL_LOG_DIR", "./data/logs")
 
     RAZAO_STORAGE_DIR: str = "./data/razao-temporario"
     RAZAO_UPLOAD_MAX_BYTES: int = Field(default=50_000_000, gt=0)

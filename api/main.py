@@ -1,3 +1,7 @@
+import logging
+from contextlib import asynccontextmanager
+from time import perf_counter
+
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.utils import get_openapi
@@ -31,9 +35,20 @@ from api.request_context import (
     resolve_request_id,
     set_current_request_id,
 )
+from core.config import settings
+from core.technical_logging import configure_technical_logging
 
 
-app = FastAPI(title="Classificador contábil")
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(_app):
+    configure_technical_logging(service="api", log_dir=settings.TECHNICAL_LOG_DIR)
+    yield
+
+
+app = FastAPI(title="Classificador contábil", lifespan=lifespan)
 app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(Exception, unexpected_exception_handler)
@@ -41,6 +56,7 @@ app.add_exception_handler(Exception, unexpected_exception_handler)
 
 @app.middleware("http")
 async def request_context_middleware(request, call_next):
+    started_at = perf_counter()
     request_id = resolve_request_id(request.headers.get(REQUEST_ID_HEADER))
     request_id_token = set_current_request_id(request_id)
     begin_audit_request_context()
@@ -53,6 +69,17 @@ async def request_context_middleware(request, call_next):
             message="Erro interno inesperado.",
         )
     finally:
+        route = request.scope.get("route")
+        logger.info(
+            "request complete",
+            extra={
+                "event": "http.request",
+                "method": request.method,
+                "route": getattr(route, "path", request.url.path),
+                "status_code": response.status_code,
+                "duration_ms": round((perf_counter() - started_at) * 1000, 3),
+            },
+        )
         end_audit_request_context()
         reset_current_request_id(request_id_token)
 

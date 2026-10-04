@@ -26,6 +26,7 @@ services:
     image: classificador-contabil:${APP_IMAGE_TAG_PROD:-prod}
     volumes:
       - razao-temp-prod:/app/data/razao-temporario
+      - technical-logs-api-prod:/app/data/logs
     environment:
       APP_ENV: prod
       DATABASE_URL: ${DATABASE_URL_PROD:?Defina DATABASE_URL no ambiente de producao}
@@ -33,6 +34,7 @@ services:
       JWT_SECRET_KEY: ${JWT_SECRET_KEY_PROD:?Defina JWT_SECRET_KEY no ambiente de producao}
       JWT_ALGORITHM: ${JWT_ALGORITHM_PROD:-HS256}
       SERVICE_CREDENTIAL_SECRET: ${SERVICE_CREDENTIAL_SECRET_PROD:?Defina SERVICE_CREDENTIAL_SECRET no ambiente de producao}
+      TECHNICAL_LOG_DIR: ${TECHNICAL_LOG_DIR_PROD:-/app/data/logs}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://classificador.interno}
       RAZAO_STORAGE_DIR: /app/data/razao-temporario
       RAZAO_UPLOAD_MAX_BYTES: ${RAZAO_UPLOAD_MAX_BYTES_PROD:-50000000}
@@ -72,9 +74,11 @@ services:
     image: classificador-contabil:${APP_IMAGE_TAG_PROD:-prod}
     volumes:
       - razao-temp-prod:/app/data/razao-temporario
+      - technical-logs-worker-prod:/app/data/logs
     environment:
       APP_ENV: prod
       DATABASE_URL: ${DATABASE_URL_PROD:?Defina DATABASE_URL no ambiente de producao}
+      TECHNICAL_LOG_DIR: ${TECHNICAL_LOG_DIR_PROD:-/app/data/logs}
       RAZAO_STORAGE_DIR: /app/data/razao-temporario
       RAZAO_UPLOAD_MAX_BYTES: ${RAZAO_UPLOAD_MAX_BYTES_PROD:-50000000}
       RAZAO_STORAGE_MIN_FREE_BYTES: ${RAZAO_STORAGE_MIN_FREE_BYTES_PROD:-5000000000}
@@ -124,3 +128,7 @@ volumes:
     name: classificador-prod-postgres-data
   razao-temp-prod:
     name: classificador-prod-razao-temp
+  technical-logs-api-prod:
+    name: classificador-prod-technical-logs-api
+  technical-logs-worker-prod:
+    name: classificador-prod-technical-logs-worker

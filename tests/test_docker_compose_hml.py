@@ -61,6 +61,7 @@ def test_hml_compose_uses_only_environment_scoped_runtime_variables():
         "SERVICE_CREDENTIAL_SECRET": (
             "${SERVICE_CREDENTIAL_SECRET_HML:?Defina SERVICE_CREDENTIAL_SECRET_HML no ambiente de homologacao}"
         ),
+        "TECHNICAL_LOG_DIR": "${TECHNICAL_LOG_DIR_HML:-/app/data/logs}",
         "CORS_ALLOWED_ORIGINS": (
             "${CORS_ALLOWED_ORIGINS_HML:-https://classificador-hml.interno}"
         ),
@@ -83,6 +84,7 @@ def test_hml_compose_mounts_only_sanitized_seed_fixtures_as_read_only():
     assert compose["services"]["api"]["volumes"] == [
         "./tests/fixtures/homologacao:/app/tests/fixtures/homologacao:ro",
         "razao-temp-hml:/app/data/razao-temporario",
+        "technical-logs-api-hml:/app/data/logs",
     ]
 
 
@@ -95,7 +97,10 @@ def test_hml_compose_runs_private_razao_worker_with_environment_storage():
     assert worker["image"] == api["image"]
     assert worker["networks"] == ["hml-db"]
     assert "ports" not in worker
-    assert worker["volumes"] == ["razao-temp-hml:/app/data/razao-temporario"]
+    assert worker["volumes"] == [
+        "razao-temp-hml:/app/data/razao-temporario",
+        "technical-logs-worker-hml:/app/data/logs",
+    ]
     assert worker["command"] == "python -m scripts.razao_worker"
     assert compose["volumes"]["razao-temp-hml"]["name"] == (
         "classificador-hml-razao-temp"
@@ -119,6 +124,7 @@ def test_hml_environment_example_and_validation_commands_are_sanitized():
         "ADMIN_TOKEN_HML=CHANGE_ME",
         "JWT_SECRET_KEY_HML=CHANGE_ME",
         "SERVICE_CREDENTIAL_SECRET_HML=CHANGE_ME",
+        "TECHNICAL_LOG_DIR_HML=./data/logs",
         "CORS_ALLOWED_ORIGINS_HML=https://classificador-hml.interno",
         "RAZAO_UPLOAD_MAX_BYTES_HML=50000000",
         "RAZAO_STORAGE_MIN_FREE_BYTES_HML=5000000000",

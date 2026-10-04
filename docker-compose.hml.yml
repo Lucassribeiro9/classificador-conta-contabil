@@ -27,6 +27,7 @@ services:
     volumes:
       - ./tests/fixtures/homologacao:/app/tests/fixtures/homologacao:ro
       - razao-temp-hml:/app/data/razao-temporario
+      - technical-logs-api-hml:/app/data/logs
     environment:
       APP_ENV: hml
       DATABASE_URL: ${DATABASE_URL_HML:?Defina DATABASE_URL_HML no ambiente de homologacao}
@@ -34,6 +35,7 @@ services:
       JWT_SECRET_KEY: ${JWT_SECRET_KEY_HML:?Defina JWT_SECRET_KEY_HML no ambiente de homologacao}
       JWT_ALGORITHM: ${JWT_ALGORITHM_HML:-HS256}
       SERVICE_CREDENTIAL_SECRET: ${SERVICE_CREDENTIAL_SECRET_HML:?Defina SERVICE_CREDENTIAL_SECRET_HML no ambiente de homologacao}
+      TECHNICAL_LOG_DIR: ${TECHNICAL_LOG_DIR_HML:-/app/data/logs}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS_HML:-https://classificador-hml.interno}
       RAZAO_STORAGE_DIR: /app/data/razao-temporario
       RAZAO_UPLOAD_MAX_BYTES: ${RAZAO_UPLOAD_MAX_BYTES_HML:-50000000}
@@ -73,9 +75,11 @@ services:
     image: classificador-contabil:${APP_IMAGE_TAG_HML:-hml}
     volumes:
       - razao-temp-hml:/app/data/razao-temporario
+      - technical-logs-worker-hml:/app/data/logs
     environment:
       APP_ENV: hml
       DATABASE_URL: ${DATABASE_URL_HML:?Defina DATABASE_URL_HML no ambiente de homologacao}
+      TECHNICAL_LOG_DIR: ${TECHNICAL_LOG_DIR_HML:-/app/data/logs}
       RAZAO_STORAGE_DIR: /app/data/razao-temporario
       RAZAO_UPLOAD_MAX_BYTES: ${RAZAO_UPLOAD_MAX_BYTES_HML:-50000000}
       RAZAO_STORAGE_MIN_FREE_BYTES: ${RAZAO_STORAGE_MIN_FREE_BYTES_HML:-5000000000}
@@ -125,3 +129,7 @@ volumes:
     name: classificador-hml-postgres-data
   razao-temp-hml:
     name: classificador-hml-razao-temp
+  technical-logs-api-hml:
+    name: classificador-hml-technical-logs-api
+  technical-logs-worker-hml:
+    name: classificador-hml-technical-logs-worker
