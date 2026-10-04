@@ -84,6 +84,7 @@ def test_prod_example_and_runbook_require_release_gate_without_real_secrets():
         "ADMIN_TOKEN_PROD=CHANGE_ME",
         "JWT_SECRET_KEY_PROD=CHANGE_ME",
         "SERVICE_CREDENTIAL_SECRET_PROD=CHANGE_ME",
+        "TECHNICAL_LOG_DIR_PROD=./data/logs",
         "CORS_ALLOWED_ORIGINS=https://classificador.interno",
         "RAZAO_UPLOAD_MAX_BYTES_PROD=50000000",
         "RAZAO_STORAGE_MIN_FREE_BYTES_PROD=5000000000",

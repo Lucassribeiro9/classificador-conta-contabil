@@ -119,6 +119,7 @@ def test_dev_razao_limits_are_configurable_for_api_and_worker():
 
     env_example = (PROJECT_ROOT / ".env.example").read_text(encoding="utf-8")
     for key, value in {
+        "TECHNICAL_LOG_DIR": "./data/logs",
         "RAZAO_UPLOAD_MAX_BYTES": "50000000",
         "RAZAO_STORAGE_MIN_FREE_BYTES": "5000000000",
         "RAZAO_STORAGE_MIN_FREE_RATIO": "0.15",

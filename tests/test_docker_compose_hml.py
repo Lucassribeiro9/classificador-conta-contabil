@@ -124,6 +124,7 @@ def test_hml_environment_example_and_validation_commands_are_sanitized():
         "ADMIN_TOKEN_HML=CHANGE_ME",
         "JWT_SECRET_KEY_HML=CHANGE_ME",
         "SERVICE_CREDENTIAL_SECRET_HML=CHANGE_ME",
+        "TECHNICAL_LOG_DIR_HML=./data/logs",
         "CORS_ALLOWED_ORIGINS_HML=https://classificador-hml.interno",
         "RAZAO_UPLOAD_MAX_BYTES_HML=50000000",
         "RAZAO_STORAGE_MIN_FREE_BYTES_HML=5000000000",
