@@ -215,6 +215,7 @@ check-security:
 
 check-backend:
 	@echo "[check] backend"
+	$(PYTHON) -m ruff check .
 	$(PYTHON) -m pytest -q tests
 
 check-postgres:

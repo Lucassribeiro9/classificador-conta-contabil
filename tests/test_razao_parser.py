@@ -65,7 +65,7 @@ def test_parse_razao_detects_account_blocks_and_ignores_report_noise(tmp_path):
 
     lancamentos = parse_razao_xlsx(xlsx_path)
 
-    assert [_base_lancamento(l) for l in lancamentos] == [
+    assert [_base_lancamento(item) for item in lancamentos] == [
         {
             "conta_origem": "10046",
             "data": "2026-01-02",
@@ -124,7 +124,7 @@ def test_parse_razao_fixture_sanitizada_representa_layout_real_dominio():
     assert result.metadata.cnpj_cpf == "11222333000181"
     assert result.metadata.periodo_inicio == "2024-01-01"
     assert result.metadata.periodo_fim == "2024-12-31"
-    assert [_base_lancamento(l) for l in result.lancamentos] == [
+    assert [_base_lancamento(item) for item in result.lancamentos] == [
         {
             "conta_origem": "10001",
             "data": "2024-01-31",
@@ -174,7 +174,7 @@ def test_parse_razao_fixture_tabular_modelo_com_conta_origem():
     assert result.metadata.cnpj_cpf == "22333444000155"
     assert result.metadata.periodo_inicio == "2024-01-01"
     assert result.metadata.periodo_fim == "2024-12-31"
-    assert [_base_lancamento(l) for l in result.lancamentos] == [
+    assert [_base_lancamento(item) for item in result.lancamentos] == [
         {
             "conta_origem": "10046",
             "data": "2024-01-02",
@@ -228,7 +228,7 @@ def test_parse_razao_normalizes_integer_like_numeric_account_codes(tmp_path):
 
     result = parse_razao_xlsx_with_metadata(xlsx_path)
 
-    assert [_base_lancamento(l) for l in result.lancamentos] == [
+    assert [_base_lancamento(item) for item in result.lancamentos] == [
         {
             "conta_origem": "10046",
             "data": "2024-01-31",
@@ -364,7 +364,7 @@ def test_parse_razao_accepts_dominio_export_layout_without_entry_number(tmp_path
 
     lancamentos = parse_razao_xlsx(xlsx_path)
 
-    assert [_base_lancamento(l) for l in lancamentos] == [
+    assert [_base_lancamento(item) for item in lancamentos] == [
         {
             "conta_origem": "10001",
             "data": "2024-01-31",
@@ -658,7 +658,7 @@ def test_parse_razao_with_metadata_extracts_company_header(tmp_path):
     assert result.metadata.periodo_inicio == "2024-01-01"
     assert result.metadata.periodo_fim == "2024-12-31"
     assert not hasattr(result.metadata, "cod_dominio")
-    assert [_base_lancamento(l) for l in result.lancamentos] == [
+    assert [_base_lancamento(item) for item in result.lancamentos] == [
         {
             "conta_origem": "10001",
             "data": "2024-01-31",

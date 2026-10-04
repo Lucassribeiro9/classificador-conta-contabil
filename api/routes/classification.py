@@ -250,7 +250,7 @@ def trigger_classification(
         db.query(Transacao)
         .filter(
             Transacao.empresa_id == company_id,
-            Transacao.conta_contabil == None,
+            Transacao.conta_contabil.is_(None),
         )
         .all()
     )

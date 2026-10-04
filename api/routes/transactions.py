@@ -183,7 +183,7 @@ def list_transactions_for_review(
         db.query(Transacao)
         .filter(
             Transacao.empresa_id == company_id,
-            Transacao.needs_review == True,
+            Transacao.needs_review.is_(True),
         )
         .order_by(Transacao.confidence.asc())  # Menor confiança primeiro
         .limit(limit)

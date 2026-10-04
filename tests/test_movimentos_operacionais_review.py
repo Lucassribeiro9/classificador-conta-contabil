@@ -1,9 +1,8 @@
 import pytest
-from datetime import date
-from core.models import MovimentoOperacionalImportado, ContaContabil, EmpresaContaContabil
+from core.models import MovimentoOperacionalImportado, ContaContabil
 from core.movimentos_operacionais_review import review_movimento_operacional, MovimentoReviewError
 from tests.conftest import TestingSessionLocal
-from tests.test_movimentos_operacionais_api import _seed_operational_lote_with_movements, _conta, _vinculo
+from tests.test_movimentos_operacionais_api import _seed_operational_lote_with_movements
 
 def test_approve_movimento_sets_status_and_final_conta(setup_db):
     usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(permissao="operacao")

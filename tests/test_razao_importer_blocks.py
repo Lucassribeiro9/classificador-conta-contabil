@@ -1,7 +1,5 @@
 """Contratos do processamento em blocos da importação do Razão."""
 
-from pathlib import Path
-
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool

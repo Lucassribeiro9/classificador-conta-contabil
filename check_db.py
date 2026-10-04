@@ -1,5 +1,4 @@
 from core.database import engine, Base
-from core.models import Empresa, Transacao
 import os
 
 # 1. Caminho do banco

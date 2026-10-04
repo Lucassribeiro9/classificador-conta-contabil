@@ -44,7 +44,10 @@ def test_ci_validates_backend_frontend_and_compose_without_secrets():
     backend = jobs["backend"]
     assert any(step.get("uses") == "actions/setup-python@v6" for step in backend["steps"])
     assert "python -m pip install -r requirements.txt" in _commands(backend)
-    assert _commands(backend)[-1] == "python -m pytest -q tests"
+    assert _commands(backend)[-2:] == [
+        "python -m ruff check .",
+        "python -m pytest -q tests",
+    ]
     assert all(
         step.get("name") != "Run order-sensitive duplicate-file audit test"
         for step in backend["steps"]

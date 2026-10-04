@@ -5,7 +5,7 @@ from alembic import context
 
 from core.config import settings
 from core.database import Base
-from core import models  # garante registro dos modelos no metadata
+from core import models  # noqa: F401  # garante registro dos modelos no metadata
 
 config = context.config
 
