@@ -81,7 +81,10 @@ def _cleanup(engine, sessions, empresa_id, usuario_id):
 
 def test_two_workers_claim_distinct_jobs_with_skip_locked():
     engine, sessions, empresa_id, usuario_id, ids = _context()
-    processor = lambda *_: JobResult(0, 0, 0, 0, {"totals_by_code": {}})
+
+    def processor(*_):
+        return JobResult(0, 0, 0, 0, {"totals_by_code": {}})
+
     workers = [
         RazaoWorker(sessions, FakeStorage(), processor, worker_id=f"worker-{index}")
         for index in range(2)

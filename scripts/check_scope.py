@@ -60,6 +60,7 @@ def classify(paths: list[str]) -> list[str]:
             "requirements.txt",
             "pyproject.toml",
             "pytest.ini",
+            "ruff.toml",
         } or (len(path.parts) == 1 and path.suffix == ".py"):
             gates.add("backend")
         elif first_part == "frontend":

@@ -1,7 +1,6 @@
 import json
 from pathlib import Path
 
-from core.agent.notificacoes.eventos import EventoNotificavel
 from core.agent.notificacoes.payload import sanitizar_evento
 from core.agent.notificacoes.roteamento import rotear_evento, notificar
 

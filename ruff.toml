@@ -1,0 +1,7 @@
+# Notebooks are auxiliary artifacts and are outside the backend quality gate.
+extend-exclude = ["*.ipynb"]
+
+[lint]
+select = ["E", "F"]
+# Defer legacy line-length cleanup to avoid a non-functional baseline rewrite.
+ignore = ["E501"]

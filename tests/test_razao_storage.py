@@ -1,7 +1,18 @@
 """Contrato do armazenamento temporário, usando arquivos reais e dados sintéticos."""
 
+from collections import namedtuple
+from datetime import datetime, timedelta, timezone
 from hashlib import sha256
+import multiprocessing
+import os
+from pathlib import Path
 
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from core.database import Base
+from core.models import Empresa, Usuario, LoteImportacaoRazao
 from core.razao_storage import RazaoStorage
 
 
@@ -53,14 +64,6 @@ def test_reserves_maximum_before_consuming_and_rejects_insufficient_capacity(tmp
     assert error.value.code == "temporary_capacity_unavailable"
     assert not consumed
     assert not list(tmp_path.glob("*/*.xlsx"))
-
-
-import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from core.database import Base
-from core.models import Empresa, Usuario, LoteImportacaoRazao
-
 
 @pytest.fixture
 def sessions(tmp_path):
@@ -119,10 +122,6 @@ def test_cleanup_deletes_committed_success_but_preserves_rollback(tmp_path, sess
     with pytest.raises(FileNotFoundError):
         with storage.open_for_job(lote_id):
             pytest.fail("arquivo concluído ainda existe")
-
-
-from datetime import datetime, timedelta, timezone
-
 
 @pytest.mark.parametrize("status,lease_seconds,age_seconds,removed", [
     ("failed", None, 3599, 0), ("failed", None, 3600, 1),
@@ -219,13 +218,6 @@ def test_filesystem_failure_is_safe_and_releases_reservation(tmp_path, monkeypat
             pytest.fail("arquivo não durável foi aceito")
     assert str(tmp_path) not in str(error.value)
     assert not list(tmp_path.glob("*/*.xlsx"))
-
-
-import multiprocessing
-import os
-from collections import namedtuple
-from pathlib import Path
-
 
 def _paused_upload(root, ready, release):
     """Processo interrompível após reservar espaço e antes de concluir upload."""

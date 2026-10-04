@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 import subprocess
 import sys
+import tomllib
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -211,6 +212,7 @@ def test_make_exposes_proportional_and_full_check_targets(tmp_path: Path):
 
     assert proportional.returncode == 0, proportional.stderr
     assert "scripts/check_scope.py" in proportional.stdout
+    assert f"{sys.executable} -m ruff check ." in proportional.stdout
     for gate in (
         "security", "backend", "postgres", "frontend", "playwright", "compose", "docs"
     ):
@@ -229,6 +231,7 @@ def test_make_exposes_proportional_and_full_check_targets(tmp_path: Path):
         ("scripts/maintenance.py", ["backend"]),
         ("tests/test_api.py", ["backend"]),
         ("requirements.txt", ["backend"]),
+        ("ruff.toml", ["backend"]),
         ("docker-compose.hml.yml", ["compose"]),
         ("frontend/package.json", ["frontend"]),
     ],
@@ -347,3 +350,46 @@ def test_readme_documents_both_executable_gates():
 
     assert "Use `make check` como gate local proporcional" in readme
     assert "Use `make check-full`" in readme
+
+
+def test_ruff_baseline_is_versioned_with_only_e_and_f_rules():
+    requirements = (PROJECT_ROOT / "requirements.txt").read_text(encoding="utf-8")
+    config = tomllib.loads((PROJECT_ROOT / "ruff.toml").read_text(encoding="utf-8"))
+
+    assert "ruff==0.16.10" in requirements.splitlines()
+    assert config["lint"]["select"] == ["E", "F"]
+    assert config["lint"]["ignore"] == ["E501"]
+    assert config["extend-exclude"] == ["*.ipynb"]
+
+
+def test_ruff_accepts_valid_python_and_rejects_an_undefined_name(tmp_path: Path):
+    valid = tmp_path / "valid.py"
+    invalid = tmp_path / "invalid.py"
+    valid.write_text("value = 1\n", encoding="utf-8")
+    invalid.write_text("print(missing_name)\n", encoding="utf-8")
+    config = str(PROJECT_ROOT / "ruff.toml")
+
+    valid_result = run(
+        sys.executable,
+        "-m",
+        "ruff",
+        "check",
+        "--config",
+        config,
+        str(valid),
+        cwd=tmp_path,
+    )
+    invalid_result = run(
+        sys.executable,
+        "-m",
+        "ruff",
+        "check",
+        "--config",
+        config,
+        str(invalid),
+        cwd=tmp_path,
+    )
+
+    assert valid_result.returncode == 0, valid_result.stdout + valid_result.stderr
+    assert invalid_result.returncode == 1
+    assert "F821" in invalid_result.stdout
