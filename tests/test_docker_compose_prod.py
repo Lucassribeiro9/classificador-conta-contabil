@@ -55,8 +55,14 @@ def test_prod_compose_runs_private_razao_worker_with_environment_storage():
     assert worker["image"] == api["image"]
     assert worker["networks"] == ["prod-db"]
     assert "ports" not in worker
-    assert api["volumes"] == ["razao-temp-prod:/app/data/razao-temporario"]
-    assert worker["volumes"] == ["razao-temp-prod:/app/data/razao-temporario"]
+    assert api["volumes"] == [
+        "razao-temp-prod:/app/data/razao-temporario",
+        "technical-logs-api-prod:/app/data/logs",
+    ]
+    assert worker["volumes"] == [
+        "razao-temp-prod:/app/data/razao-temporario",
+        "technical-logs-worker-prod:/app/data/logs",
+    ]
     assert worker["command"] == "python -m scripts.razao_worker"
     assert compose["volumes"]["razao-temp-prod"]["name"] == (
         "classificador-prod-razao-temp"

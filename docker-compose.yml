@@ -9,12 +9,14 @@ services:
     volumes:
       - ./data:/app/data
       - razao-temp-dev:/app/data/razao-temporario
+      - technical-logs-api-dev:/app/data/logs
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - ADMIN_TOKEN=${ADMIN_TOKEN}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
       - SERVICE_CREDENTIAL_SECRET=${SERVICE_CREDENTIAL_SECRET}
+      - TECHNICAL_LOG_DIR=${TECHNICAL_LOG_DIR:-/app/data/logs}
       - RAZAO_STORAGE_DIR=/app/data/razao-temporario
       - RAZAO_UPLOAD_MAX_BYTES=${RAZAO_UPLOAD_MAX_BYTES:-50000000}
       - RAZAO_STORAGE_MIN_FREE_BYTES=${RAZAO_STORAGE_MIN_FREE_BYTES:-5000000000}
@@ -38,8 +40,10 @@ services:
     image: classificador-contabil:${APP_IMAGE_TAG:-dev}
     volumes:
       - razao-temp-dev:/app/data/razao-temporario
+      - technical-logs-worker-dev:/app/data/logs
     environment:
       - DATABASE_URL=${DATABASE_URL}
+      - TECHNICAL_LOG_DIR=${TECHNICAL_LOG_DIR:-/app/data/logs}
       - RAZAO_STORAGE_DIR=/app/data/razao-temporario
       - RAZAO_UPLOAD_MAX_BYTES=${RAZAO_UPLOAD_MAX_BYTES:-50000000}
       - RAZAO_STORAGE_MIN_FREE_BYTES=${RAZAO_STORAGE_MIN_FREE_BYTES:-5000000000}
@@ -125,3 +129,7 @@ volumes:
   postgres-data:
   razao-temp-dev:
     name: ${RAZAO_TEMP_VOLUME_NAME:-classificador-dev-razao-temp}
+  technical-logs-api-dev:
+    name: ${TECHNICAL_LOG_API_VOLUME_NAME:-classificador-dev-technical-logs-api}
+  technical-logs-worker-dev:
+    name: ${TECHNICAL_LOG_WORKER_VOLUME_NAME:-classificador-dev-technical-logs-worker}

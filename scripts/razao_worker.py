@@ -11,6 +11,7 @@ from core.config import settings
 from core.database import SessionLocal
 from core.razao_storage import RazaoStorage
 from core.razao_worker import build_workers, process_razao_upload
+from core.technical_logging import configure_technical_logging
 
 
 def run_worker_loop(worker, storage, *, poll_seconds: float, stop_event: Event) -> None:
@@ -23,6 +24,10 @@ def run_worker_loop(worker, storage, *, poll_seconds: float, stop_event: Event) 
 
 
 def main() -> None:
+    configure_technical_logging(
+        service="razao-worker",
+        log_dir=settings.TECHNICAL_LOG_DIR,
+    )
     stop_event = Event()
     signal(SIGTERM, lambda *_: stop_event.set())
     signal(SIGINT, lambda *_: stop_event.set())

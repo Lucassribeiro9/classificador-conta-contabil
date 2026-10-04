@@ -98,6 +98,28 @@ sensiveis. Por isso:
 - trate automacao, criptografia, retencao e teste recorrente de restore em
   issue propria antes de uso operacional recorrente.
 
+## Logs tecnicos
+
+API e `razao-worker` gravam diagnósticos em JSONL em volumes separados por
+serviço, no diretório configurado por `TECHNICAL_LOG_DIR`. O arquivo da API é
+`api.jsonl` e o do worker é `razao-worker.jsonl`. A rotação ocorre diariamente,
+em UTC, com retenção inicial de 30 arquivos rotacionados (30 dias).
+
+Os campos técnicos permitidos são timestamp, nível, logger, evento, mensagem
+sanitizada, `request_id`, método, rota, status HTTP, duração, tipo de erro e
+serviço. Senhas, tokens, API keys, credenciais, headers, query strings, corpos,
+respostas completas, planilhas e dados contábeis não devem ser registrados.
+`audit_events` continua sendo a trilha persistente de auditoria e não é
+redirecionado para esses arquivos.
+
+Falha de escrita ou rotação do log técnico é best-effort: não deve invalidar a
+operação de negócio. O acesso aos arquivos deve permanecer restrito ao
+ambiente operacional; não copie logs brutos para issues, PRs ou documentos.
+
+Para diagnóstico, consulte apenas trechos sanitizados no container do serviço
+correspondente e preserve os arquivos nos volumes dedicados. A limpeza e a
+retenção da auditoria não fazem parte desta configuração.
+
 ## Checklist operacional minimo
 
 Antes de operar com dados reais, confirme:

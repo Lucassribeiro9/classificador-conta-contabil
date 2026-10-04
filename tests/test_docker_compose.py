@@ -65,7 +65,10 @@ def test_dev_compose_runs_razao_worker_with_shared_private_storage():
     assert "ports" not in worker
     assert worker["depends_on"] == api["depends_on"]
     assert worker["networks"] == api["networks"]
-    assert worker["volumes"] == ["razao-temp-dev:/app/data/razao-temporario"]
+    assert worker["volumes"] == [
+        "razao-temp-dev:/app/data/razao-temporario",
+        "technical-logs-worker-dev:/app/data/logs",
+    ]
     assert "razao-temp-dev:/app/data/razao-temporario" in api["volumes"]
     assert worker["command"] == "python -m scripts.razao_worker"
     assert compose["volumes"]["razao-temp-dev"]["name"] == (
@@ -98,6 +101,7 @@ def test_dev_razao_limits_are_configurable_for_api_and_worker():
     api_environment = _environment_as_dict(compose["services"]["api-contabil"]["environment"])
     worker_environment = _environment_as_dict(compose["services"]["razao-worker"]["environment"])
     expected = {
+        "TECHNICAL_LOG_DIR": "${TECHNICAL_LOG_DIR:-/app/data/logs}",
         "RAZAO_STORAGE_DIR": "/app/data/razao-temporario",
         "RAZAO_UPLOAD_MAX_BYTES": "${RAZAO_UPLOAD_MAX_BYTES:-50000000}",
         "RAZAO_STORAGE_MIN_FREE_BYTES": "${RAZAO_STORAGE_MIN_FREE_BYTES:-5000000000}",
