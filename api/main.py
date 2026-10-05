@@ -14,6 +14,7 @@ from api.routes import (
     auth,
     classification,
     companies,
+    empresa_plano_contas,
     feedback,
     movimentos_operacionais,
     notificacoes,
@@ -110,6 +111,7 @@ def health_check(db: Session = Depends(get_db)):
 app.include_router(auth.router, prefix="/api/v1", tags=["Auth"])
 app.include_router(audit.router, prefix="/api/v1", tags=["Auditoria"])
 app.include_router(companies.router, prefix="/api/v1", tags=["Empresas"])
+app.include_router(empresa_plano_contas.router, prefix="/api/v1", tags=["Plano de Contas"])
 app.include_router(transactions.router, prefix="/api/v1", tags=["Transações"])
 app.include_router(classification.router, prefix="/api/v1", tags=["Classificação"])
 app.include_router(feedback.router, prefix="/api/v1", tags=["Feedback"])
