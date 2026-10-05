@@ -643,6 +643,23 @@ class ContaContabilResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ContaContabilContextualResponse(BaseModel):
+    empresa_id: int
+    id: int | None
+    legacy_id: int | None
+    origem: Literal["empresa", "legado"]
+    codigo: int
+    classificacao: str
+    nome: str
+    tipo: str
+    grau: int
+    is_active: bool
+    is_financial_origin: bool
+    created_at: datetime
+    updated_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
 # Schemas para predição
 class PredictInput(BaseModel):
     historico: str

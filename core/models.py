@@ -438,6 +438,41 @@ class EmpresaContaContabil(Base):
     conta: Mapped["ContaContabil"] = relationship("ContaContabil")
 
 
+class ContaContabilEmpresa(Base):
+    """Identidade contabil estavel e atributos atuais no contexto da empresa."""
+
+    __tablename__ = "contas_contabeis_empresas"
+    __table_args__ = (
+        CheckConstraint("tipo IN ('A', 'S')", name="ck_contas_contabeis_empresas_tipo"),
+        Index(
+            "uq_contas_contabeis_empresas_empresa_codigo",
+            "empresa_id",
+            "codigo",
+            unique=True,
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("empresas.id"), nullable=False
+    )
+    codigo: Mapped[int] = mapped_column(Integer, nullable=False)
+    classificacao: Mapped[str] = mapped_column(String(80), nullable=False)
+    nome: Mapped[str] = mapped_column(String(255), nullable=False)
+    tipo: Mapped[str] = mapped_column(String(1), nullable=False)
+    grau: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_financial_origin: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, onupdate=datetime.now, nullable=False
+    )
+
+
 class LoteImportacaoRazao(Base):
     """
     Representa um lote de importacao do livro-razao de uma empresa.

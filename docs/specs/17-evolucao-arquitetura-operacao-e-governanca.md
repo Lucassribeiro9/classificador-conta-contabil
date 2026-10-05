@@ -167,6 +167,33 @@ Mudancas de modelo com dados existentes seguem `expand -> migrate -> transition
 migrate faz backfill idempotente e verificavel; transition move consumidores
 por recorte; contract remove o legado somente quando nao houver dependentes.
 
+### Contrato de identidade e leitura da #499
+
+A fase `expand` acrescenta `contas_contabeis_empresas` ao lado do catalogo
+global `contas_contabeis` e dos vinculos `empresa_contas_contabeis`. A chave
+primaria `id` da nova tabela e a identidade estavel no contexto da empresa.
+O par `(empresa_id, codigo)` e unico nessa tabela; `codigo` sozinho nao e
+identidade global. Atributos atuais como `nome`, `classificacao`, `tipo` e
+`grau` pertencem a identidade da empresa. O catalogo global e suas chaves
+continuam legiveis durante a transicao.
+
+O seam `GET /api/v1/empresas/{company_id}/plano-contas/{codigo}` exige
+permissao de leitura para a empresa. Primeiro retorna a identidade propria da
+empresa. Se ela ainda nao existir, retorna a conta do catalogo legado somente
+quando houver vinculo em `empresa_contas_contabeis` para a mesma empresa.
+Sem contexto de empresa ou sem vinculo, a leitura falha fechada. A resposta
+indica `origem=empresa` com `id` estavel, ou `origem=legado` com `legacy_id`;
+um resultado legado nao afirma possuir identidade por empresa. Os endpoints
+globais existentes permanecem como contrato legado nesta fase.
+
+A #499 nao copia nem altera registros existentes. A #516 executara o backfill
+idempotente e seu rollback; a #517 migrara importadores, consultas, APIs e
+outros consumidores do catalogo global. A futura #501 trata versoes e
+snapshots, sem alterar a identidade estavel definida aqui. A reversao da
+entrega consiste em desativar o novo seam e reverter a migration apenas
+enquanto nenhuma identidade nova precisar ser preservada; depois disso,
+rollback exige preservar/exportar essas linhas antes de remover a tabela.
+
 Nenhuma issue pode usar esta spec para alterar silenciosamente dados historicos,
 substituir classificacao por sugestao, apagar snapshots ou escolher um conflito
 temporal sem revisao.
