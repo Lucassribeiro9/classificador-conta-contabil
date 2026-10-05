@@ -7,7 +7,7 @@ TEMPLATE_PATH = Path("modelo-razao-importacao.xlsx")
 
 
 def test_modelo_razao_importacao_define_campos_esperados():
-    workbook = load_workbook(TEMPLATE_PATH, read_only=True, data_only=True)
+    workbook = load_workbook(TEMPLATE_PATH, data_only=True)
     try:
         sheet = workbook["Razao"]
 
@@ -18,7 +18,7 @@ def test_modelo_razao_importacao_define_campos_esperados():
         assert sheet["A5"].value == "Periodo inicio"
         assert sheet["A6"].value == "Periodo fim"
 
-        headers = [sheet.cell(10, column).value for column in range(1, 11)]
+        headers = [sheet.cell(10, column).value for column in range(1, 13)]
         assert headers == [
             "data",
             "numero",
@@ -29,15 +29,19 @@ def test_modelo_razao_importacao_define_campos_esperados():
             "contrapartida",
             "debito",
             "credito",
-            "saldo_exercicio_original",
+            "saldo_anterior",
+            "saldo",
+            "saldo_exercicio",
         ]
 
         help_text = " ".join(
-            str(sheet.cell(11, column).value) for column in range(1, 11)
+            str(sheet.cell(10, column).comment.text)
+            for column in range(1, 13)
         ).lower()
         assert "pode ficar vazio" in help_text
         assert "opcional" in help_text
         assert "debito ou credito" in sheet["B115"].value.lower()
         assert "cod_dominio" not in help_text
+        assert all(sheet.cell(11, column).value is None for column in range(1, 13))
     finally:
         workbook.close()
