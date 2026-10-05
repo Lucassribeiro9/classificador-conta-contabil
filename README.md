@@ -145,7 +145,7 @@ Notebooks e arquivos de apoio nao sao o caminho operacional principal. Use apena
 
 Os contratos de entrada e os exemplos sanitizados estao em documentos do dominio, como [modelo de Razao](docs/razao-planilha-modelo.md) e [movimentos operacionais](docs/movimentos-operacionais-planilha-modelo.md).
 
-O Streamlit permanece como apoio legado best-effort e nao e o caminho critico da Release 1. A arquitetura-alvo usa a API FastAPI e a SPA; o legado nao deve acessar o banco diretamente nem bloquear a homologacao do frontend interno.
+O [Streamlit legado](docs/legado/streamlit.md) permanece como apoio best-effort e nao e o caminho critico da Release 1. A arquitetura-alvo usa a API FastAPI e a SPA; o legado nao deve acessar o banco diretamente nem bloquear a homologacao do frontend interno.
 
 ## Workflows operacionais e esteira supervisionada
 
