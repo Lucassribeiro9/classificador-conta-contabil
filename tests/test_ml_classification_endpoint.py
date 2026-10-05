@@ -209,6 +209,37 @@ def test_classification_endpoint_returns_counterpart_prediction_with_probability
     }
 
 
+def test_classification_endpoint_does_not_use_balance_fields_as_features(
+    client, monkeypatch, tmp_path
+):
+    headers, empresa_id = _seed_user_company_and_account()
+    model_path = tmp_path / f"empresa_{empresa_id}" / "model_.joblib"
+    model_path.parent.mkdir(parents=True)
+    model_path.write_bytes(b"modelo mockado")
+    model = ModeloMockado()
+    monkeypatch.setattr(settings, "MODEL_DIR", str(tmp_path))
+    monkeypatch.setattr("core.ml_engine.joblib.load", lambda path: model)
+
+    response = client.post(
+        f"/api/v1/companies/{empresa_id}/ml/classification",
+        json={
+            "historico": "Pagamento Fornecedor",
+            "conta_origem": 10046,
+            "direcao": "credito",
+            "saldo_anterior_decimal": "9000.00",
+            "saldo_observado_decimal": "8749.25",
+            "saldo_calculado_decimal": "8749.25",
+            "warnings_saldo": ["saldo_divergente"],
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert model.features_seen == [
+        "pagamento fornecedor origem_10046 direcao_credito"
+    ]
+
+
 def test_classification_endpoint_creates_started_and_completed_audit_events(
     client, monkeypatch, tmp_path
 ):

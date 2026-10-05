@@ -496,6 +496,67 @@ def test_dataset_builder_features_have_deterministic_initial_format(session):
     assert "9876.54" not in features
 
 
+def test_dataset_builder_ignores_balance_values_in_razao_examples(session):
+    empresa = _empresa()
+    lote = LoteImportacaoRazao(
+        empresa=empresa,
+        usuario=_usuario(),
+        original_filename="razao-saldos-variaveis.xlsx",
+        file_hash="sha256:razao-saldos-variaveis",
+        status="completed",
+    )
+    lancamento = _lancamento(
+        lote=lote,
+        empresa=empresa,
+        saldo_anterior_original="1.000,00D",
+        saldo_anterior_decimal=Decimal("1000.00"),
+        saldo_anterior_natureza="D",
+        saldo_original="749,25D",
+        saldo_decimal=Decimal("749.25"),
+        saldo_natureza="D",
+        saldo_exercicio_original="749,25D",
+        saldo_exercicio_decimal=Decimal("749.25"),
+        saldo_exercicio_natureza="D",
+    )
+    lancamento_com_saldos_diferentes = _lancamento(
+        lote=lote,
+        empresa=empresa,
+        saldo_anterior_original="9.000,00C",
+        saldo_anterior_decimal=Decimal("9000.00"),
+        saldo_anterior_natureza="C",
+        saldo_original="8.749,25C",
+        saldo_decimal=Decimal("8749.25"),
+        saldo_natureza="C",
+        saldo_exercicio_original="8.749,25C",
+        saldo_exercicio_decimal=Decimal("8749.25"),
+        saldo_exercicio_natureza="C",
+    )
+    session.add_all(
+        [
+            _conta(10046, is_financial_origin=True),
+            _conta(50057, is_financial_origin=False),
+            lancamento,
+            lancamento_com_saldos_diferentes,
+        ]
+    )
+    session.commit()
+
+    dataset = build_dataset_treino_contrapartida(session, empresa_id=empresa.id)
+
+    assert dataset.linhas == [
+        {
+            "features": "recebimento cliente origem_10046 direcao_credito",
+            "target_conta_contrapartida": 50057,
+        },
+        {
+            "features": "recebimento cliente origem_10046 direcao_credito",
+            "target_conta_contrapartida": 50057,
+        },
+    ]
+    assert all("saldo" not in linha["features"] for linha in dataset.linhas)
+    assert all("8749.25" not in linha["features"] for linha in dataset.linhas)
+
+
 def test_dataset_builder_features_support_minimal_history(session):
     empresa = _empresa()
     lote = LoteImportacaoRazao(

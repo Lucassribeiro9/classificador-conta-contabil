@@ -870,6 +870,38 @@ def test_build_razao_dedup_key_is_stable_for_equivalent_history_text():
     )
 
 
+def test_build_razao_dedup_key_ignores_balance_variations():
+    base_lancamento = {
+        "empresa_id": 7,
+        "numero_lancamento": "42",
+        "data": "2026-01-02",
+        "conta_origem": "10046",
+        "conta_contrapartida": "20001",
+        "valor": 250.75,
+        "direcao": "debito",
+        "historico": "Pagamento fornecedor",
+        "saldo_anterior": {"valor_decimal": Decimal("1000.00"), "natureza": "D"},
+        "saldo": {"valor_decimal": Decimal("749.25"), "natureza": "D"},
+        "saldo_exercicio": {
+            "valor_decimal": Decimal("749.25"),
+            "natureza": "D",
+        },
+    }
+    lancamento_com_saldos_diferentes = {
+        **base_lancamento,
+        "saldo_anterior": {"valor_decimal": Decimal("9000.00"), "natureza": "C"},
+        "saldo": {"valor_decimal": Decimal("8749.25"), "natureza": "C"},
+        "saldo_exercicio": {
+            "valor_decimal": Decimal("8749.25"),
+            "natureza": "C",
+        },
+    }
+
+    assert build_razao_dedup_key(base_lancamento) == build_razao_dedup_key(
+        lancamento_com_saldos_diferentes
+    )
+
+
 @pytest.mark.parametrize(
     "changed_fields",
     [
