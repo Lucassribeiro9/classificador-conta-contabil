@@ -8,6 +8,7 @@ from core.config import settings
 from core.models import (
     AuditEvent,
     ContaContabil,
+    ContaContabilEmpresa,
     Empresa,
     Usuario,
     UsuarioEmpresaPermissao,
@@ -207,6 +208,45 @@ def test_classification_endpoint_returns_counterpart_prediction_with_probability
             }
         ],
     }
+
+
+def test_classification_rejects_account_inactive_for_company(
+    client, monkeypatch, tmp_path
+):
+    from tests.conftest import TestingSessionLocal
+
+    headers, empresa_id = _seed_user_company_and_account()
+    with TestingSessionLocal() as session:
+        session.add(
+            ContaContabilEmpresa(
+                empresa_id=empresa_id,
+                codigo=50057,
+                classificacao="3.1.01.01.50057",
+                nome="Inativa na empresa",
+                tipo="A",
+                grau=5,
+                is_active=False,
+            )
+        )
+        session.commit()
+    model_path = tmp_path / f"empresa_{empresa_id}" / "model_.joblib"
+    model_path.parent.mkdir(parents=True)
+    model_path.write_bytes(b"modelo mockado")
+    monkeypatch.setattr(settings, "MODEL_DIR", str(tmp_path))
+    monkeypatch.setattr("core.ml_engine.joblib.load", lambda path: ModeloMockado())
+
+    response = client.post(
+        f"/api/v1/companies/{empresa_id}/ml/classification",
+        json={
+            "historico": "Pagamento Fornecedor",
+            "conta_origem": 10046,
+            "direcao": "credito",
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 422
+    assert response.json()["message"] == "Modelo retornou conta de contrapartida inválida"
 
 
 def test_classification_endpoint_does_not_use_balance_fields_as_features(

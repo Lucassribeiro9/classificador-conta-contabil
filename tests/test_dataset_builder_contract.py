@@ -10,6 +10,7 @@ from core.database import Base
 from core.dataset_builder import build_dataset_treino_contrapartida
 from core.models import (
     ContaContabil,
+    ContaContabilEmpresa,
     Empresa,
     LancamentoRazaoNormalizado,
     LoteImportacaoRazao,
@@ -213,6 +214,52 @@ def test_dataset_builder_can_be_called_for_known_company(session):
             "target_conta_contrapartida": 50057,
         }
     ]
+
+
+def test_dataset_uses_financial_flag_from_company_identity(session):
+    empresa = _empresa()
+    lote = LoteImportacaoRazao(
+        empresa=empresa,
+        usuario=_usuario(),
+        original_filename="razao-identidade-empresa.xlsx",
+        file_hash="sha256:identidade-empresa",
+        status="completed",
+    )
+    session.add_all(
+        [
+            _conta(10046, is_financial_origin=True),
+            _conta(50057, is_financial_origin=False),
+            _lancamento(lote=lote, empresa=empresa),
+        ]
+    )
+    session.flush()
+    session.add_all(
+        [
+            ContaContabilEmpresa(
+                empresa_id=empresa.id,
+                codigo=10046,
+                classificacao="1.1.10046",
+                nome="Origem nao financeira nesta empresa",
+                tipo="A",
+                grau=4,
+                is_financial_origin=False,
+            ),
+            ContaContabilEmpresa(
+                empresa_id=empresa.id,
+                codigo=50057,
+                classificacao="1.1.50057",
+                nome="Destino da empresa",
+                tipo="A",
+                grau=4,
+            ),
+        ]
+    )
+    session.commit()
+
+    dataset = build_dataset_treino_contrapartida(session, empresa_id=empresa.id)
+
+    assert dataset.linhas == []
+    assert dataset.metadata["total_descartes_razao"] == 1
 
 
 def test_dataset_builder_uses_imported_razao_instead_of_legacy_transactions(session):

@@ -99,7 +99,12 @@ def test_sql_statements_scale_with_blocks_instead_of_rows(tmp_path, monkeypatch)
             block_size=block_size,
         )
 
-        catalog_selects = [sql for sql, _ in statements if "FROM contas_contabeis" in sql]
+        catalog_selects = [
+            sql for sql, _ in statements if "FROM contas_contabeis " in sql
+        ]
+        identity_selects = [
+            sql for sql, _ in statements if "FROM contas_contabeis_empresas" in sql
+        ]
         link_selects = [sql for sql, _ in statements if "FROM empresa_contas_contabeis" in sql]
         entry_inserts = [
             (sql, many)
@@ -107,6 +112,7 @@ def test_sql_statements_scale_with_blocks_instead_of_rows(tmp_path, monkeypatch)
             if "INSERT INTO lancamentos_razao_normalizados" in sql
         ]
         assert len(catalog_selects) == 1
+        assert len(identity_selects) == 1
         assert len(link_selects) == 1
         assert len(entry_inserts) == ceil(row_count / block_size)
         assert all(many for _, many in entry_inserts)

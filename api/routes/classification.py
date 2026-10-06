@@ -15,9 +15,10 @@ from api.schemas import (
 )
 from api.dependencies import DB_DEPENDENCY, require_company_access, verify_company
 from core.audit import record_audit_event
+from core.conta_contabil_empresa import garantir_identidade_contabil
 from core.dataset_builder import build_dataset_treino_contrapartida
 from core.ml_engine import ClassificadorContabil
-from core.models import ContaContabil, Empresa, Transacao
+from core.models import Empresa, Transacao
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -111,13 +112,16 @@ def classify_lancamentos_with_saved_model(
     predicted_accounts = {
         prediction["conta_contrapartida"] for prediction in predictions
     }
+    contas_contextuais = [
+        garantir_identidade_contabil(
+            db, empresa_id=company_id, codigo=codigo
+        )
+        for codigo in predicted_accounts
+    ]
     valid_accounts = {
         conta.codigo
-        for conta in db.query(ContaContabil)
-        .filter(ContaContabil.codigo.in_(predicted_accounts))
-        .filter(ContaContabil.tipo == "A")
-        .filter(ContaContabil.is_active.is_(True))
-        .all()
+        for conta in contas_contextuais
+        if conta is not None and conta.is_classificavel
     }
     invalid_accounts = predicted_accounts - valid_accounts
     if invalid_accounts:

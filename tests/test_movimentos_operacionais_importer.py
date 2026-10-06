@@ -10,6 +10,7 @@ from sqlalchemy.pool import StaticPool
 from core.database import Base
 from core.models import (
     ContaContabil,
+    ContaContabilEmpresa,
     Empresa,
     EmpresaContaContabil,
     LoteImportacaoMovimentoOperacional,
@@ -170,9 +171,68 @@ def test_import_movimentos_operacionais_aceita_periodos_como_data_nativa_excel(
     )
 
     lote = session.query(LoteImportacaoMovimentoOperacional).one()
+    vinculos = session.query(EmpresaContaContabil).all()
     assert result.status == "completed_with_warnings"
     assert lote.periodo_inicio == date(2025, 1, 1)
     assert lote.periodo_fim == date(2025, 1, 31)
+    assert all(vinculo.conta_contabil_empresa_id is not None for vinculo in vinculos)
+
+
+def test_import_movimentos_usa_status_da_conta_na_empresa(session, tmp_path):
+    empresa = _empresa()
+    usuario = _usuario()
+    session.add_all([empresa, usuario, _conta(10046), _conta(10722)])
+    session.flush()
+    session.add_all(
+        [
+            ContaContabilEmpresa(
+                empresa_id=empresa.id,
+                codigo=10046,
+                classificacao="1.1.10046",
+                nome="Conta inativa na empresa",
+                tipo="A",
+                grau=6,
+                is_active=False,
+            ),
+            ContaContabilEmpresa(
+                empresa_id=empresa.id,
+                codigo=10722,
+                classificacao="1.1.10722",
+                nome="Contrapartida da empresa",
+                tipo="A",
+                grau=6,
+            ),
+        ]
+    )
+    session.flush()
+    xlsx_path = tmp_path / "movimentos-identidade-empresa.xlsx"
+    _write_movimentos_workbook(
+        xlsx_path,
+        rows=[
+            [
+                "02/01/2025",
+                10046,
+                "MOVIMENTO SINTETICO",
+                100,
+                10722,
+                "entrada",
+                "DOC-517",
+                "Conta empresarial prevalece",
+            ]
+        ],
+    )
+
+    result = import_movimentos_operacionais(
+        session,
+        xlsx_path,
+        empresa_id=empresa.id,
+        usuario_id=usuario.id,
+        original_filename="movimentos-identidade-empresa.xlsx",
+    )
+
+    assert result.total_importadas == 0
+    assert result.total_invalidas == 1
+    assert "inexistente, sintetica ou inativa" in str(result.warnings)
 
 
 def test_import_movimentos_operacionais_persiste_layout_valor_saldo(session, tmp_path):

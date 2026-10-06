@@ -186,3 +186,57 @@ def test_conta_de_outra_empresa_nao_e_legivel_sem_permissao(client):
     )
     assert resposta.status_code == 403
     assert "Conta privada" not in resposta.text
+
+
+def test_busca_contextual_lista_somente_identidades_da_empresa(client):
+    from core.models import ContaContabilEmpresa
+
+    with TestingSessionLocal() as session:
+        primeira, segunda, usuario = _empresa(6), _empresa(7), _usuario()
+        session.add_all([primeira, segunda, usuario])
+        session.flush()
+        session.add_all(
+            [
+                UsuarioEmpresaPermissao(
+                    usuario_id=usuario.id,
+                    empresa_id=primeira.id,
+                    permissao="leitura",
+                ),
+                ContaContabilEmpresa(
+                    empresa_id=primeira.id,
+                    codigo=10046,
+                    classificacao="1.1",
+                    nome="Banco exclusivo A",
+                    tipo="A",
+                    grau=2,
+                ),
+                ContaContabilEmpresa(
+                    empresa_id=segunda.id,
+                    codigo=10046,
+                    classificacao="2.1",
+                    nome="Despesa exclusiva B",
+                    tipo="A",
+                    grau=2,
+                ),
+            ]
+        )
+        session.commit()
+        primeira_id, usuario_id = primeira.id, usuario.id
+
+    resposta = client.get(
+        f"/api/v1/empresas/{primeira_id}/plano-contas?nome=Banco",
+        headers=_headers(usuario_id),
+    )
+
+    assert resposta.status_code == 200
+    assert resposta.json() == [
+        {
+            **resposta.json()[0],
+            "empresa_id": primeira_id,
+            "codigo": 10046,
+            "nome": "Banco exclusivo A",
+            "origem": "empresa",
+            "legacy_id": None,
+        }
+    ]
+    assert "Despesa exclusiva B" not in resposta.text

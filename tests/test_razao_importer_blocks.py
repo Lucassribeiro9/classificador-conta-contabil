@@ -108,9 +108,13 @@ def test_import_razao_preloads_catalog_and_persists_blocks_and_normalized_warnin
         (3, "conta_nao_encontrada"),
     ]
     assert session.query(LancamentoRazaoNormalizado).count() == 2
-    catalog_queries = [sql for sql in statements if "FROM contas_contabeis" in sql]
+    catalog_queries = [sql for sql in statements if "FROM contas_contabeis " in sql]
+    identity_queries = [
+        sql for sql in statements if "FROM contas_contabeis_empresas" in sql
+    ]
     account_link_queries = [sql for sql in statements if "FROM empresa_contas_contabeis" in sql]
     assert len(catalog_queries) == 1
+    assert len(identity_queries) == 1
     assert len(account_link_queries) == 1
 
     session.close()

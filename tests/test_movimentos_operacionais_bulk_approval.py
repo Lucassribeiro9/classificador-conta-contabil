@@ -10,6 +10,7 @@ from core.database import Base
 from core.models import (
     AuditEvent,
     ContaContabil,
+    ContaContabilEmpresa,
     Empresa,
     EmpresaContaContabil,
     LoteImportacaoMovimentoOperacional,
@@ -291,3 +292,54 @@ def test_aprovar_movimentos_em_lote_aprova_elegiveis_e_audita(session):
     }
     assert "Pagamento fornecedor sensivel" not in str(event.metadata_json)
     assert "DOC-SENSIVEL-001" not in str(event.metadata_json)
+
+
+def test_aprovacao_em_lote_respeita_status_da_identidade_da_empresa(session):
+    empresa = _empresa()
+    usuario = _usuario()
+    lote = _lote(empresa, usuario)
+    session.add_all([empresa, usuario, _conta(10046), _conta(20001)])
+    session.flush()
+    identidade_financeira = ContaContabilEmpresa(
+        empresa_id=empresa.id,
+        codigo=10046,
+        classificacao="1.1.10046",
+        nome="CONTA FINANCEIRA",
+        tipo="A",
+        grau=6,
+    )
+    identidade_inativa = ContaContabilEmpresa(
+        empresa_id=empresa.id,
+        codigo=20001,
+        classificacao="1.1.20001",
+        nome="CONTRAPARTIDA INATIVA",
+        tipo="A",
+        grau=6,
+        is_active=False,
+    )
+    session.add_all([identidade_financeira, identidade_inativa])
+    session.flush()
+    vinculo_financeiro = _vinculo(empresa.id, 10046)
+    vinculo_financeiro.conta_contabil_empresa_id = identidade_financeira.id
+    vinculo_contrapartida = _vinculo(empresa.id, 20001)
+    vinculo_contrapartida.conta_contabil_empresa_id = identidade_inativa.id
+    movimento = _movimento(
+        lote,
+        empresa,
+        status="pre_classificado",
+        contrapartida_informada=20001,
+    )
+    session.add_all([lote, vinculo_financeiro, vinculo_contrapartida, movimento])
+    session.commit()
+
+    result = aprovar_movimentos_operacionais_em_lote(
+        session,
+        empresa_id=empresa.id,
+        usuario_id=usuario.id,
+        movimento_ids=[movimento.id],
+    )
+
+    assert result["aprovados"] == []
+    assert result["ignorados"] == [
+        {"id": movimento.id, "motivo": "contrapartida_nao_vinculada"}
+    ]

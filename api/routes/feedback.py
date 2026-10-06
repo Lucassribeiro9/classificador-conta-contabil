@@ -1,6 +1,8 @@
 import logging
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from api import schemas
@@ -11,9 +13,10 @@ from api.dependencies import (
     verify_api_key,
 )
 from core.audit import record_audit_event
+from core.conta_contabil_empresa import garantir_identidade_contabil
 from core.models import (
-    ContaContabil,
     Empresa,
+    EmpresaContaContabil,
     FeedbackClassificacao,
     LancamentoRazaoNormalizado,
     Transacao,
@@ -44,18 +47,31 @@ def submit_feedback_classificacao(
             detail="Lançamento pertence a outra empresa",
         )
 
-    conta_final = (
-        db.query(ContaContabil)
-        .filter(ContaContabil.codigo == feedback.conta_final)
-        .filter(ContaContabil.tipo == "A")
-        .filter(ContaContabil.is_active.is_(True))
-        .first()
+    conta_final = garantir_identidade_contabil(
+        db,
+        empresa_id=company_id,
+        codigo=feedback.conta_final,
     )
-    if conta_final is None:
+    if conta_final is None or not conta_final.is_classificavel:
         raise HTTPException(
             status_code=422,
             detail="Conta final deve ser analítica e ativa",
         )
+
+    vinculo = db.scalars(
+        select(EmpresaContaContabil).where(
+            EmpresaContaContabil.empresa_id == company_id,
+            EmpresaContaContabil.conta_codigo == feedback.conta_final,
+        )
+    ).first()
+    if vinculo is None:
+        vinculo = EmpresaContaContabil(
+            empresa_id=company_id,
+            conta_codigo=feedback.conta_final,
+            ultima_utilizacao=date.today(),
+        )
+        db.add(vinculo)
+    vinculo.conta_contabil_empresa_id = conta_final.id
 
     feedback_anterior = (
         db.query(FeedbackClassificacao)

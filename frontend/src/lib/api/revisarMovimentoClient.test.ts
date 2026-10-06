@@ -51,7 +51,10 @@ describe("revisarMovimentoClient", () => {
       .mockResolvedValueOnce(
         jsonResponse([
           {
+            empresa_id: 7,
             id: 3,
+            legacy_id: null,
+            origem: "empresa",
             codigo: 20001,
             classificacao: "2.0.0",
             nome: "Fornecedores nacionais",
@@ -75,7 +78,7 @@ describe("revisarMovimentoClient", () => {
       mensagensValidacao: ["Conferencia humana obrigatoria."],
     });
     await expect(
-      revisarMovimentoClient.searchContas("jwt-de-teste", "fornecedor"),
+      revisarMovimentoClient.searchContas("jwt-de-teste", "7", "fornecedor"),
     ).resolves.toEqual([
       {
         codigo: 20001,
@@ -92,7 +95,7 @@ describe("revisarMovimentoClient", () => {
       { headers: { Authorization: "Bearer jwt-de-teste" } },
     );
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/v1/plano-contas?nome=fornecedor",
+      "/api/v1/empresas/7/plano-contas?nome=fornecedor",
       {
         headers: { Authorization: "Bearer jwt-de-teste" },
       },
@@ -174,7 +177,7 @@ describe("revisarMovimentoClient", () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError()));
 
     await expect(
-      revisarMovimentoClient.searchContas("jwt-de-teste", "fornecedor"),
+      revisarMovimentoClient.searchContas("jwt-de-teste", "7", "fornecedor"),
     ).rejects.toBeInstanceOf(RevisarMovimentoNetworkError);
   });
 
@@ -194,7 +197,7 @@ describe("revisarMovimentoClient", () => {
       contrapartidaSugerida: 20001,
     });
     await expect(
-      revisarMovimentoClient.searchContas("demo-preview-token", "fornecedor"),
+      revisarMovimentoClient.searchContas("demo-preview-token", "7", "fornecedor"),
     ).resolves.toEqual(
       expect.arrayContaining([expect.objectContaining({ codigo: 20001 })]),
     );

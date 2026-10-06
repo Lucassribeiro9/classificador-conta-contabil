@@ -1,10 +1,11 @@
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session
 
 from core.models import (
     ContaContabil,
+    ContaContabilEmpresa,
     FeedbackClassificacao,
     LancamentoRazaoNormalizado,
     MovimentoOperacionalImportado,
@@ -31,24 +32,27 @@ def build_dataset_treino_contrapartida(
     if empresa_id is None:
         raise ValueError("empresa_id e obrigatorio")
 
-    conta_origem = aliased(ContaContabil)
     lancamentos_empresa = session.query(LancamentoRazaoNormalizado).filter(
         LancamentoRazaoNormalizado.empresa_id == empresa_id
     )
-
-    lancamentos_financeiros = (
-        lancamentos_empresa
-        .join(
-            conta_origem,
-            conta_origem.codigo == LancamentoRazaoNormalizado.conta_origem,
+    lancamentos_candidatos = lancamentos_empresa.order_by(
+        LancamentoRazaoNormalizado.id.asc()
+    ).all()
+    origens = _company_accounts(
+        session,
+        empresa_id,
+        [lancamento.conta_origem for lancamento in lancamentos_candidatos],
+    )
+    lancamentos = [
+        lancamento
+        for lancamento in lancamentos_candidatos
+        if (
+            (conta := origens.get(lancamento.conta_origem)) is not None
+            and conta.tipo == "A"
+            and conta.is_active is True
+            and conta.is_financial_origin is True
         )
-        .filter(LancamentoRazaoNormalizado.empresa_id == empresa_id)
-        .filter(conta_origem.is_financial_origin.is_(True))
-    )
-
-    lancamentos = (
-        lancamentos_financeiros.order_by(LancamentoRazaoNormalizado.id.asc()).all()
-    )
+    ]
 
     feedback_por_lancamento = _latest_feedback_by_lancamento(
         session,
@@ -57,6 +61,7 @@ def build_dataset_treino_contrapartida(
     )
     contas_validas = _valid_target_accounts(
         session,
+        empresa_id,
         [
             _target_for_lancamento(lancamento, feedback_por_lancamento)
             for lancamento in lancamentos
@@ -74,7 +79,9 @@ def build_dataset_treino_contrapartida(
     movimentos = (
         movimentos_empresa.order_by(MovimentoOperacionalImportado.id.asc()).all()
     )
-    linhas_movimentos = _dataset_rows_from_movimentos(session, movimentos)
+    linhas_movimentos = _dataset_rows_from_movimentos(
+        session, empresa_id, movimentos
+    )
     linhas = linhas_razao + linhas_movimentos
     contagem_por_target = _count_targets(linhas)
     total_descartes_razao = lancamentos_empresa.count() - len(linhas_razao)
@@ -117,6 +124,7 @@ def _to_dataset_row(
 
 def _dataset_rows_from_movimentos(
     session: Session,
+    empresa_id: int,
     movimentos: list[MovimentoOperacionalImportado],
 ) -> list[dict[str, Any]]:
     candidates = [
@@ -127,6 +135,7 @@ def _dataset_rows_from_movimentos(
 
     valid_accounts = _valid_target_accounts(
         session,
+        empresa_id,
         [
             codigo
             for movimento in candidates
@@ -141,6 +150,7 @@ def _dataset_rows_from_movimentos(
     )
     financial_sources = _valid_financial_origin_accounts(
         session,
+        empresa_id,
         [movimento.conta_financeira for movimento in candidates],
     )
 
@@ -221,33 +231,61 @@ def _latest_feedback_by_lancamento(
     return latest
 
 
-def _valid_target_accounts(session: Session, targets: list[int]) -> set[int]:
+def _valid_target_accounts(
+    session: Session, empresa_id: int, targets: list[int]
+) -> set[int]:
     if not targets:
         return set()
 
+    contas = _company_accounts(session, empresa_id, targets)
     return {
-        conta.codigo
-        for conta in session.query(ContaContabil)
-        .filter(ContaContabil.codigo.in_(set(targets)))
-        .filter(ContaContabil.tipo == "A")
-        .filter(ContaContabil.is_active.is_(True))
-        .all()
+        codigo
+        for codigo, conta in contas.items()
+        if conta.tipo == "A" and conta.is_active is True
     }
 
 
-def _valid_financial_origin_accounts(session: Session, accounts: list[int]) -> set[int]:
+def _valid_financial_origin_accounts(
+    session: Session, empresa_id: int, accounts: list[int]
+) -> set[int]:
     if not accounts:
         return set()
 
+    contas = _company_accounts(session, empresa_id, accounts)
     return {
-        conta.codigo
+        codigo
+        for codigo, conta in contas.items()
+        if (
+            conta.tipo == "A"
+            and conta.is_active is True
+            and conta.is_financial_origin is True
+        )
+    }
+
+
+def _company_accounts(
+    session: Session, empresa_id: int, codigos: list[int]
+) -> dict[int, ContaContabil | ContaContabilEmpresa]:
+    """Identidade empresarial prevalece; catálogo global é fallback transitório."""
+    requested = set(codigos)
+    if not requested:
+        return {}
+    contas: dict[int, ContaContabil | ContaContabilEmpresa] = {
+        conta.codigo: conta
         for conta in session.query(ContaContabil)
-        .filter(ContaContabil.codigo.in_(set(accounts)))
-        .filter(ContaContabil.tipo == "A")
-        .filter(ContaContabil.is_active.is_(True))
-        .filter(ContaContabil.is_financial_origin.is_(True))
+        .filter(ContaContabil.codigo.in_(requested))
         .all()
     }
+    contas.update(
+        {
+            conta.codigo: conta
+            for conta in session.query(ContaContabilEmpresa)
+            .filter(ContaContabilEmpresa.empresa_id == empresa_id)
+            .filter(ContaContabilEmpresa.codigo.in_(requested))
+            .all()
+        }
+    )
+    return contas
 
 
 def _count_targets(linhas: list[dict[str, Any]]) -> dict[int, int]:
