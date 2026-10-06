@@ -473,6 +473,69 @@ class ContaContabilEmpresa(Base):
     )
 
 
+class BackfillContasContabeisExecucao(Base):
+    """Auditable lifecycle for a legacy-to-company-account backfill run."""
+
+    __tablename__ = "backfill_contas_contabeis_execucoes"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('running', 'completed', 'partial', 'rolled_back', 'rollback_partial')",
+            name="ck_backfill_contas_contabeis_execucoes_status",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, nullable=False
+    )
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    rolled_back_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+class BackfillContasContabeisItem(Base):
+    """Sanitized per-link outcome and ownership proof for a backfill run."""
+
+    __tablename__ = "backfill_contas_contabeis_itens"
+    __table_args__ = (
+        CheckConstraint(
+            "resultado IN ('created', 'already_present', 'conflict', 'ineligible', 'failed')",
+            name="ck_backfill_contas_contabeis_itens_resultado",
+        ),
+        CheckConstraint(
+            "rollback_status IS NULL OR rollback_status IN ('rolled_back', 'blocked')",
+            name="ck_backfill_contas_contabeis_itens_rollback_status",
+        ),
+        Index(
+            "uq_backfill_contas_contabeis_itens_execucao_vinculo",
+            "execucao_id",
+            "vinculo_legado_id",
+            unique=True,
+        ),
+        Index(
+            "ix_backfill_contas_contabeis_itens_identidade",
+            "identidade_id",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    execucao_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("backfill_contas_contabeis_execucoes.id"), nullable=False
+    )
+    vinculo_legado_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    empresa_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    conta_codigo: Mapped[int] = mapped_column(Integer, nullable=False)
+    identidade_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    resultado: Mapped[str] = mapped_column(String(24), nullable=False)
+    source_fingerprint: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    target_fingerprint: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    error_code: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    rollback_status: Mapped[Optional[str]] = mapped_column(String(24), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, nullable=False
+    )
+
+
 class LoteImportacaoRazao(Base):
     """
     Representa um lote de importacao do livro-razao de uma empresa.
