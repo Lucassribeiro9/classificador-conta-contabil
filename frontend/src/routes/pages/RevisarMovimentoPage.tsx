@@ -113,7 +113,11 @@ export function RevisarMovimentoPage() {
 
   const searchMutation = useMutation({
     mutationFn: (searchText: string) =>
-      revisarMovimentoClient.searchContas(accessToken, searchText),
+      revisarMovimentoClient.searchContas(
+        accessToken,
+        empresaId ?? "",
+        searchText,
+      ),
     onSuccess: (contas) => {
       setResultados(contas);
       setMessage(contas.length ? null : "Nenhuma conta encontrada.");

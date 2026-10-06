@@ -10,6 +10,7 @@ from core.dataset_builder import build_dataset_treino_contrapartida
 from core.models import (
     AuditEvent,
     ContaContabil,
+    ContaContabilEmpresa,
     Empresa,
     FeedbackClassificacao,
     LancamentoRazaoNormalizado,
@@ -180,6 +181,39 @@ def test_feedback_classificacao_endpoint_persists_user_and_final_account(client)
         assert feedback.conta_sugerida == 50057
         assert feedback.conta_final == 70001
         assert feedback.usuario_id == usuario_id
+
+
+def test_feedback_uses_company_identity_status(client):
+    headers, empresa_id, _usuario_id, lancamento_id = _seed_context()
+
+    from tests.conftest import TestingSessionLocal
+
+    with TestingSessionLocal() as session:
+        session.add(
+            ContaContabilEmpresa(
+                empresa_id=empresa_id,
+                codigo=70001,
+                classificacao="1.1.1.70001",
+                nome="Inativa na empresa",
+                tipo="A",
+                grau=4,
+                is_active=False,
+            )
+        )
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/companies/{empresa_id}/ml/feedback",
+        json={
+            "lancamento_id": lancamento_id,
+            "conta_sugerida": 50057,
+            "conta_final": 70001,
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 422
+    assert response.json()["message"] == "Conta final deve ser analítica e ativa"
 
 
 def test_feedback_classificacao_created_audit_event_has_safe_metadata(client):

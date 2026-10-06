@@ -58,7 +58,10 @@ type MovimentoRevisaoListApi = {
 };
 
 type ContaContabilApi = {
-  id: number;
+  empresa_id: number;
+  id: number | null;
+  legacy_id: number | null;
+  origem: "empresa" | "legado";
   codigo: number;
   classificacao: string;
   nome: string;
@@ -155,7 +158,7 @@ function mapMovimento(data: MovimentoRevisaoApi): MovimentoRevisao {
 
 function mapConta(data: ContaContabilApi): ContaContabilResumo {
   return {
-    id: data.id,
+    id: data.id ?? data.legacy_id ?? data.codigo,
     codigo: data.codigo,
     classificacao: data.classificacao,
     nome: data.nome,
@@ -234,6 +237,7 @@ async function getMovimento(
 
 async function searchContas(
   accessToken: string,
+  empresaId: string,
   query: string,
 ): Promise<ContaContabilResumo[]> {
   if (isDemoPreviewToken(accessToken)) {
@@ -254,7 +258,7 @@ async function searchContas(
   }
 
   const data = await fetchJson<ContaContabilApi[]>(
-    `/api/v1/plano-contas?${params.toString()}`,
+    `/api/v1/empresas/${empresaId}/plano-contas?${params.toString()}`,
     accessToken,
   );
   return data.map(mapConta);

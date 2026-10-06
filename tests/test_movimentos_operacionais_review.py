@@ -1,5 +1,10 @@
 import pytest
-from core.models import MovimentoOperacionalImportado, ContaContabil
+from core.models import (
+    ContaContabil,
+    ContaContabilEmpresa,
+    EmpresaContaContabil,
+    MovimentoOperacionalImportado,
+)
 from core.movimentos_operacionais_review import review_movimento_operacional, MovimentoReviewError
 from tests.conftest import TestingSessionLocal
 from tests.test_movimentos_operacionais_api import _seed_operational_lote_with_movements
@@ -246,3 +251,60 @@ def test_correct_rejects_inactive_or_synthetic_account(setup_db):
         assert mov.contrapartida_final is None
         assert mov.conta_debito is None
         assert mov.conta_credito is None
+
+
+def test_review_uses_company_identity_and_persists_link_reference(setup_db):
+    usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(
+        permissao="operacao"
+    )
+
+    with TestingSessionLocal() as session:
+        global_account = ContaContabil(
+            codigo=51701,
+            classificacao="1.0.0",
+            nome="Global ativa",
+            tipo="A",
+            grau=3,
+            is_active=True,
+        )
+        company_account = ContaContabilEmpresa(
+            empresa_id=empresa_id,
+            codigo=51701,
+            classificacao="1.0.0",
+            nome="Empresa inativa",
+            tipo="A",
+            grau=3,
+            is_active=False,
+        )
+        session.add_all([global_account, company_account])
+        session.commit()
+        movimento = session.query(MovimentoOperacionalImportado).filter_by(
+            lote_id=lote_id
+        ).first()
+
+        with pytest.raises(
+            MovimentoReviewError, match="Conta final inválida ou inativa"
+        ):
+            review_movimento_operacional(
+                db=session,
+                movimento_id=movimento.id,
+                empresa_id=empresa_id,
+                usuario_id=usuario.id,
+                action="correct",
+                conta_final=51701,
+            )
+
+        company_account.is_active = True
+        review_movimento_operacional(
+            db=session,
+            movimento_id=movimento.id,
+            empresa_id=empresa_id,
+            usuario_id=usuario.id,
+            action="correct",
+            conta_final=51701,
+        )
+
+        vinculo = session.query(EmpresaContaContabil).filter_by(
+            empresa_id=empresa_id, conta_codigo=51701
+        ).one()
+        assert vinculo.conta_contabil_empresa_id == company_account.id

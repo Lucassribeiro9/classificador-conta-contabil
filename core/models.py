@@ -9,6 +9,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     JSON,
@@ -412,6 +413,12 @@ class EmpresaContaContabil(Base):
             "conta_codigo",
             unique=True,
         ),
+        ForeignKeyConstraint(
+            ["conta_contabil_empresa_id", "empresa_id"],
+            ["contas_contabeis_empresas.id", "contas_contabeis_empresas.empresa_id"],
+            name="fk_empresa_contas_contabeis_identidade_empresa",
+            ondelete="RESTRICT",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -420,6 +427,11 @@ class EmpresaContaContabil(Base):
     )
     conta_codigo: Mapped[int] = mapped_column(
         Integer, ForeignKey("contas_contabeis.codigo"), nullable=False
+    )
+    conta_contabil_empresa_id: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        nullable=True,
+        index=True,
     )
     quantidade_lancamentos: Mapped[int] = mapped_column(
         Integer, default=0, nullable=False
@@ -436,6 +448,10 @@ class EmpresaContaContabil(Base):
         "Empresa", back_populates="contas_contabeis_usadas"
     )
     conta: Mapped["ContaContabil"] = relationship("ContaContabil")
+    identidade_empresa: Mapped[Optional["ContaContabilEmpresa"]] = relationship(
+        "ContaContabilEmpresa",
+        viewonly=True,
+    )
 
 
 class ContaContabilEmpresa(Base):
@@ -444,6 +460,11 @@ class ContaContabilEmpresa(Base):
     __tablename__ = "contas_contabeis_empresas"
     __table_args__ = (
         CheckConstraint("tipo IN ('A', 'S')", name="ck_contas_contabeis_empresas_tipo"),
+        UniqueConstraint(
+            "id",
+            "empresa_id",
+            name="uq_contas_contabeis_empresas_id_empresa",
+        ),
         Index(
             "uq_contas_contabeis_empresas_empresa_codigo",
             "empresa_id",
@@ -471,6 +492,11 @@ class ContaContabilEmpresa(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.now, onupdate=datetime.now, nullable=False
     )
+
+    @property
+    def is_classificavel(self) -> bool:
+        """Indica se a identidade da empresa pode receber lançamentos."""
+        return self.is_active and self.tipo == "A"
 
 
 class BackfillContasContabeisExecucao(Base):

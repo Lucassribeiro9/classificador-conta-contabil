@@ -4,8 +4,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from core.audit import record_audit_event
+from core.conta_contabil_empresa import garantir_identidade_contabil
 from core.models import (
-    ContaContabil,
     EmpresaContaContabil,
     MovimentoOperacionalImportado,
 )
@@ -121,9 +121,9 @@ def _ensure_empresa_conta_link(
     conta_codigo: int,
 ) -> None:
     """Valida conta classificavel e cria vinculo empresa-conta quando necessario."""
-    conta = db.scalars(
-        select(ContaContabil).where(ContaContabil.codigo == conta_codigo)
-    ).first()
+    conta = garantir_identidade_contabil(
+        db, empresa_id=empresa_id, codigo=conta_codigo
+    )
     if not conta or not conta.is_classificavel:
         raise MovimentoReviewError("Conta final inválida ou inativa")
 
@@ -134,12 +134,14 @@ def _ensure_empresa_conta_link(
         )
     ).first()
     if vinculo:
+        vinculo.conta_contabil_empresa_id = conta.id
         return
 
     db.add(
         EmpresaContaContabil(
             empresa_id=empresa_id,
             conta_codigo=conta_codigo,
+            conta_contabil_empresa_id=conta.id,
             ultima_utilizacao=date.today(),
         )
     )

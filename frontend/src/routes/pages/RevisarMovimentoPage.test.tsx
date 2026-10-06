@@ -145,7 +145,11 @@ describe("RevisarMovimentoPage", () => {
     expect(
       await screen.findByRole("button", { name: /Usar 30001/ }),
     ).toBeInTheDocument();
-    expect(searchContasMock).toHaveBeenCalledWith("jwt-de-teste", "fornecedor");
+    expect(searchContasMock).toHaveBeenCalledWith(
+      "jwt-de-teste",
+      "7",
+      "fornecedor",
+    );
   });
 
   it("avisa quando a conta global escolhida ainda nao esta vinculada e corrige", async () => {

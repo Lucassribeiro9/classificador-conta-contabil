@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from core.config import settings
 from core.models import (
     ContaContabil,
+    ContaContabilEmpresa,
     Empresa,
     EmpresaContaContabil,
     FechamentoRazaoMensal,
@@ -97,7 +98,11 @@ def import_razao(
         if lote.empresa_id != empresa_id:
             raise RazaoImportError("Lote não pertence à empresa da importação.")
 
-    catalog_codes = _preload_catalog_codes(session, parsed_lancamentos)
+    catalog_accounts = _preload_catalog_accounts(session, parsed_lancamentos)
+    catalog_codes = set(catalog_accounts)
+    account_identities = _ensure_company_account_identities(
+        session, empresa_id, catalog_accounts
+    )
     account_links = _preload_account_links(session, empresa_id, catalog_codes)
 
     for block_start in range(0, len(parsed_lancamentos), block_size):
@@ -139,7 +144,13 @@ def import_razao(
                     normalized["historico"]
                 )
                 models.append(_to_model(lote.id, empresa_id, normalized))
-                _update_account_links(account_links, session, empresa_id, normalized)
+                _update_account_links(
+                    account_links,
+                    account_identities,
+                    session,
+                    empresa_id,
+                    normalized,
+                )
                 _update_fechamento_mensal(
                     session,
                     fechamentos,
@@ -518,10 +529,10 @@ def _signed_balance(valor: Decimal, natureza: str | None) -> Decimal:
     return abs(valor)
 
 
-def _preload_catalog_codes(
+def _preload_catalog_accounts(
     session: Session,
     parsed_lancamentos: list[dict[str, Any]],
-) -> set[int]:
+) -> dict[int, ContaContabil]:
     """Carrega em uma consulta todos os códigos potencialmente usados."""
     requested: set[int] = set()
     for parsed in parsed_lancamentos:
@@ -534,12 +545,11 @@ def _preload_catalog_codes(
             except (TypeError, ValueError):
                 continue
     if not requested:
-        return set()
-    return set(
-        session.execute(
-            select(ContaContabil.codigo).where(ContaContabil.codigo.in_(requested))
-        ).scalars()
-    )
+        return {}
+    accounts = session.scalars(
+        select(ContaContabil).where(ContaContabil.codigo.in_(requested))
+    ).all()
+    return {account.codigo: account for account in accounts}
 
 
 def _preload_account_links(
@@ -558,8 +568,43 @@ def _preload_account_links(
     return {link.conta_codigo: link for link in links}
 
 
+def _ensure_company_account_identities(
+    session: Session,
+    empresa_id: int,
+    catalog_accounts: dict[int, ContaContabil],
+) -> dict[int, ContaContabilEmpresa]:
+    """Materializa identidades da empresa para os códigos legados válidos."""
+    if not catalog_accounts:
+        return {}
+    existing = session.scalars(
+        select(ContaContabilEmpresa).where(
+            ContaContabilEmpresa.empresa_id == empresa_id,
+            ContaContabilEmpresa.codigo.in_(catalog_accounts),
+        )
+    ).all()
+    identities = {identity.codigo: identity for identity in existing}
+    for codigo, account in catalog_accounts.items():
+        if codigo in identities:
+            continue
+        identity = ContaContabilEmpresa(
+            empresa_id=empresa_id,
+            codigo=codigo,
+            classificacao=account.classificacao,
+            nome=account.nome,
+            tipo=account.tipo,
+            grau=account.grau,
+            is_active=account.is_active,
+            is_financial_origin=account.is_financial_origin,
+        )
+        session.add(identity)
+        identities[codigo] = identity
+    session.flush()
+    return identities
+
+
 def _update_account_links(
     account_links: dict[int, EmpresaContaContabil],
+    account_identities: dict[int, ContaContabilEmpresa],
     session: Session,
     empresa_id: int,
     lancamento: dict[str, Any],
@@ -574,6 +619,7 @@ def _update_account_links(
             vinculo = EmpresaContaContabil(
                 empresa_id=empresa_id,
                 conta_codigo=conta_codigo,
+                conta_contabil_empresa_id=account_identities[conta_codigo].id,
                 quantidade_lancamentos=1,
                 ultima_utilizacao=data_lancamento,
             )
@@ -581,6 +627,7 @@ def _update_account_links(
             session.add(vinculo)
             continue
 
+        vinculo.conta_contabil_empresa_id = account_identities[conta_codigo].id
         vinculo.quantidade_lancamentos += 1
         if data_lancamento > vinculo.ultima_utilizacao:
             vinculo.ultima_utilizacao = data_lancamento

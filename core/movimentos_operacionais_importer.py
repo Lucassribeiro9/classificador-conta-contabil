@@ -8,8 +8,10 @@ from typing import Any, Mapping
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from core.conta_contabil_empresa import garantir_identidade_contabil
 from core.models import (
     ContaContabil,
+    ContaContabilEmpresa,
     Empresa,
     EmpresaContaContabil,
     LoteImportacaoMovimentoOperacional,
@@ -66,8 +68,10 @@ def import_movimentos_operacionais(
     )
     periodo_inicio = date.fromisoformat(parsed.metadata.periodo_inicio)
     periodo_fim = date.fromisoformat(parsed.metadata.periodo_fim)
-    contas_por_codigo = _load_contas_por_codigo(session)
-    contas_vinculadas = _load_contas_vinculadas(session, empresa_id)
+    contas_por_codigo = _load_contas_por_codigo(session, empresa_id)
+    contas_vinculadas = _load_contas_vinculadas(
+        session, empresa_id, contas_por_codigo
+    )
     warnings = _metadata_warnings(empresa, parsed.metadata.codigo_dominio)
     imported = 0
     saldo_por_conta: dict[int, Decimal] = {}
@@ -182,7 +186,7 @@ def _metadata_warnings(
 def _validar_movimento(
     movimento: Mapping[str, Any],
     *,
-    contas_por_codigo: Mapping[int, ContaContabil],
+    contas_por_codigo: Mapping[int, ContaContabilEmpresa],
     contas_vinculadas: set[int],
     periodo_inicio: date,
     periodo_fim: date,
@@ -255,7 +259,7 @@ def _invalid_warnings(
     historico: str | None,
     valor_original: Decimal | None,
     contrapartida: int | None,
-    contas_por_codigo: Mapping[int, ContaContabil],
+    contas_por_codigo: Mapping[int, ContaContabilEmpresa],
 ) -> list[str]:
     """Monta mensagens de bloqueio para linha invalida."""
 
@@ -447,22 +451,36 @@ def _money_decimal(value: Decimal) -> Decimal:
     return value.quantize(Decimal("0.01"))
 
 
-def _load_contas_por_codigo(session: Session) -> dict[int, ContaContabil]:
-    """Carrega catalogo contabil por codigo reduzido."""
+def _load_contas_por_codigo(
+    session: Session, empresa_id: int
+) -> dict[int, ContaContabilEmpresa]:
+    """Carrega identidades da empresa, criando a transição para contas legadas."""
 
-    contas = session.execute(select(ContaContabil)).scalars().all()
-    return {conta.codigo: conta for conta in contas}
+    codigos = session.scalars(select(ContaContabil.codigo)).all()
+    contas = [
+        garantir_identidade_contabil(session, empresa_id=empresa_id, codigo=codigo)
+        for codigo in codigos
+    ]
+    return {conta.codigo: conta for conta in contas if conta is not None}
 
 
-def _load_contas_vinculadas(session: Session, empresa_id: int) -> set[int]:
+def _load_contas_vinculadas(
+    session: Session,
+    empresa_id: int,
+    contas_por_codigo: Mapping[int, ContaContabilEmpresa],
+) -> set[int]:
     """Carrega codigos de contas ja vinculadas a empresa."""
 
-    rows = session.execute(
-        select(EmpresaContaContabil.conta_codigo).where(
+    vinculos = session.scalars(
+        select(EmpresaContaContabil).where(
             EmpresaContaContabil.empresa_id == empresa_id
         )
     ).all()
-    return {row[0] for row in rows}
+    for vinculo in vinculos:
+        identidade = contas_por_codigo.get(vinculo.conta_codigo)
+        if identidade is not None:
+            vinculo.conta_contabil_empresa_id = identidade.id
+    return {vinculo.conta_codigo for vinculo in vinculos}
 
 
 def _ensure_file_hash_not_successfully_imported(
@@ -494,7 +512,9 @@ def _file_hash(path: Path) -> str:
     return f"sha256:{digest}"
 
 
-def _is_classificavel(conta: ContaContabil | None) -> bool:
+def _is_classificavel(
+    conta: ContaContabil | ContaContabilEmpresa | None,
+) -> bool:
     """Indica se conta pode ser usada em movimento operacional."""
 
     if conta is None:

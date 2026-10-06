@@ -11,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 from core.database import Base
 from core.models import (
     ContaContabil,
+    ContaContabilEmpresa,
     FechamentoRazaoMensal,
     EmpresaContaContabil,
     Empresa,
@@ -1213,6 +1214,16 @@ def test_import_razao_links_origin_and_counterpart_accounts_to_company(
     assert [vinculo.conta_codigo for vinculo in vinculos] == [10046, 20001]
     assert [vinculo.quantidade_lancamentos for vinculo in vinculos] == [1, 1]
     assert all(vinculo.ultima_utilizacao == date(2026, 1, 2) for vinculo in vinculos)
+    identidades = (
+        session.query(ContaContabilEmpresa)
+        .filter(ContaContabilEmpresa.empresa_id == empresa.id)
+        .order_by(ContaContabilEmpresa.codigo)
+        .all()
+    )
+    assert [identidade.codigo for identidade in identidades] == [10046, 20001]
+    assert [vinculo.conta_contabil_empresa_id for vinculo in vinculos] == [
+        identidade.id for identidade in identidades
+    ]
 
 
 def test_import_razao_updates_existing_account_links_without_duplicates(

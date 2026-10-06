@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from core.audit import record_audit_event
+from core.conta_contabil_empresa import garantir_identidade_contabil
 from core.models import EmpresaContaContabil, MovimentoOperacionalImportado
 
 
@@ -98,14 +99,26 @@ def _approve_movimento(
 
 
 def _load_contas_vinculadas(session: Session, empresa_id: int) -> set[int]:
-    """Carrega contas ja vinculadas a empresa sem criar novas relacoes."""
+    """Carrega vínculos classificáveis, materializando a identidade de transição."""
 
-    rows = session.execute(
-        select(EmpresaContaContabil.conta_codigo).where(
+    vinculos = session.scalars(
+        select(EmpresaContaContabil).where(
             EmpresaContaContabil.empresa_id == empresa_id
         )
     ).all()
-    return {row[0] for row in rows}
+    classificaveis: set[int] = set()
+    for vinculo in vinculos:
+        identidade = garantir_identidade_contabil(
+            session,
+            empresa_id=empresa_id,
+            codigo=vinculo.conta_codigo,
+        )
+        if identidade is None:
+            continue
+        vinculo.conta_contabil_empresa_id = identidade.id
+        if identidade.is_classificavel:
+            classificaveis.add(vinculo.conta_codigo)
+    return classificaveis
 
 
 def _audit_bulk_approval(

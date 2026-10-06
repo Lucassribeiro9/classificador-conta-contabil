@@ -194,6 +194,42 @@ entrega consiste em desativar o novo seam e reverter a migration apenas
 enquanto nenhuma identidade nova precisar ser preservada; depois disso,
 rollback exige preservar/exportar essas linhas antes de remover a tabela.
 
+### Contrato de transicao da #517
+
+A fase `transition` preserva `codigo` nos contratos publicos e acrescenta ao
+vinculo legado `empresa_contas_contabeis` uma referencia opcional para a
+identidade estavel em `contas_contabeis_empresas`. Essa referencia possui
+integridade composta com `empresa_id`: um vinculo nunca pode apontar para a
+identidade de outra empresa. A migration preenche a referencia quando ja
+existe correspondencia por `(empresa_id, codigo)`; a reversao remove somente a
+referencia e nao apaga identidades nem dados historicos.
+
+Em todo consumidor com contexto de empresa, a identidade empresarial tem
+precedencia. Na ausencia dela, o consumidor pode materializa-la a partir do
+catalogo global ou usar o fallback legado somente quando o codigo estiver
+vinculado a mesma empresa. Atributos empresariais, inclusive atividade, tipo e
+origem financeira, prevalecem sobre os atributos globais. Escritas que aceitam
+uma conta classificavel criam ou atualizam o vinculo para a identidade estavel.
+Os endpoints globais de administracao do catalogo permanecem legados; sua
+remocao pertence a futura fase `contract`.
+
+| Consumidor | Regra apos #517 |
+| --- | --- |
+| API e busca do plano por empresa | lista e resolve primeiro a identidade da empresa; fallback exige vinculo da mesma empresa |
+| Importacao do Razao | materializa identidades para codigos validos e persiste a referencia nos vinculos de uso |
+| Importacao e revisao de movimentos | valida atributos empresariais e persiste a identidade em aprovacoes e correcoes |
+| Aprovacao em lote e feedback | aceita somente identidade empresarial analitica e ativa; planilha de feedback reutiliza a mesma regra |
+| Dataset e classificacao | atributos da empresa controlam origem financeira, elegibilidade e alvo classificavel |
+| Busca de conta na SPA | usa exclusivamente o endpoint contextual da empresa selecionada |
+| Endpoints globais do catalogo | continuam como compatibilidade legada, sem ganhar semantica empresarial |
+| Versoes, snapshots e remocao do legado | permanecem diferidos para #501 e para a fase `contract` |
+
+Falhas de permissao continuam fechadas por empresa. Conta ausente, sintetica,
+inativa ou sem vinculo valido nao pode virar alvo por fallback global. Para
+rollback operacional, a aplicacao anterior pode ignorar a nova coluna; o
+downgrade estrutural so deve ocorrer depois de confirmar que nenhuma escrita
+depende da referencia, pois as identidades empresariais sao preservadas.
+
 Nenhuma issue pode usar esta spec para alterar silenciosamente dados historicos,
 substituir classificacao por sugestao, apagar snapshots ou escolher um conflito
 temporal sem revisao.
