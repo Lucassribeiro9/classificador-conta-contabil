@@ -28,6 +28,9 @@ export function AppShell() {
             {empresaId ? (
               <Link to={ROUTES.empresa.operacao(empresaId)}>Operacao</Link>
             ) : null}
+            {empresaId ? (
+              <Link to={ROUTES.empresa.reviewItems(empresaId)}>Revisoes</Link>
+            ) : null}
             <button
               className="border-l border-slate-300 pl-4 text-slate-600 hover:text-[#004E61]"
               onClick={() => setSession(null)}

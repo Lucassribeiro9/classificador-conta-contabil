@@ -120,6 +120,9 @@ class Empresa(Base):
         back_populates="empresa",
         cascade="all, delete-orphan",
     )
+    review_items: Mapped[list["ReviewItem"]] = relationship(
+        "ReviewItem", back_populates="empresa", cascade="all, delete-orphan"
+    )
 
 
 class Usuario(Base):
@@ -175,6 +178,9 @@ class Usuario(Base):
     audit_events: Mapped[list["AuditEvent"]] = relationship(
         "AuditEvent",
         back_populates="usuario",
+    )
+    assigned_review_items: Mapped[list["ReviewItem"]] = relationship(
+        "ReviewItem", back_populates="assignee", foreign_keys="ReviewItem.assignee_id"
     )
 
 
@@ -361,6 +367,133 @@ class AuditEvent(Base):
     )
     empresa: Mapped[Optional["Empresa"]] = relationship(
         "Empresa", back_populates="audit_events"
+    )
+
+
+class ReviewItem(Base):
+    """Pendencia generica que requer uma decisao humana auditavel."""
+
+    __tablename__ = "review_items"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'in_review', 'resolved', 'dismissed')",
+            name="ck_review_items_status",
+        ),
+        CheckConstraint(
+            "criticality IN ('low', 'medium', 'high', 'critical')",
+            name="ck_review_items_criticality",
+        ),
+        UniqueConstraint(
+            "empresa_id",
+            "source_type",
+            "grouping_key",
+            name="uq_review_items_company_source_group",
+        ),
+        Index(
+            "ix_review_items_company_status_criticality_created",
+            "empresa_id",
+            "status",
+            "criticality",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(
+        ForeignKey("empresas.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    source_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    grouping_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    summary: Mapped[str] = mapped_column(String(500), nullable=False)
+    criticality: Mapped[str] = mapped_column(String(20), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20), default="pending", server_default="pending", nullable=False
+    )
+    assignee_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    claimed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.now,
+        onupdate=datetime.now,
+        server_default=func.now(),
+        nullable=False,
+    )
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    dismissed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    empresa: Mapped["Empresa"] = relationship("Empresa", back_populates="review_items")
+    assignee: Mapped[Optional["Usuario"]] = relationship(
+        "Usuario",
+        back_populates="assigned_review_items",
+        foreign_keys=[assignee_id],
+    )
+    evidences: Mapped[list["ReviewEvidence"]] = relationship(
+        "ReviewEvidence", back_populates="review_item", cascade="all, delete-orphan"
+    )
+    events: Mapped[list["ReviewItemEvent"]] = relationship(
+        "ReviewItemEvent", back_populates="review_item", cascade="all, delete-orphan"
+    )
+
+
+class ReviewEvidence(Base):
+    """Referencia segura e rastreavel a evidencia de uma pendencia."""
+
+    __tablename__ = "review_item_evidences"
+    __table_args__ = (
+        UniqueConstraint(
+            "review_item_id",
+            "source_type",
+            "source_id",
+            name="uq_review_item_evidence_source",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    review_item_id: Mapped[int] = mapped_column(
+        ForeignKey("review_items.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    source_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    source_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    summary: Mapped[str] = mapped_column(String(500), nullable=False)
+    safe_metadata: Mapped[dict] = mapped_column(
+        "metadata", JSON, default=dict, nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, server_default=func.now(), nullable=False
+    )
+
+    review_item: Mapped["ReviewItem"] = relationship(
+        "ReviewItem", back_populates="evidences"
+    )
+
+
+class ReviewItemEvent(Base):
+    """Historico imutavel de transicoes e justificativas da pendencia."""
+
+    __tablename__ = "review_item_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    review_item_id: Mapped[int] = mapped_column(
+        ForeignKey("review_items.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True
+    )
+    event_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    from_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    to_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    reason: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, server_default=func.now(), nullable=False
+    )
+
+    review_item: Mapped["ReviewItem"] = relationship(
+        "ReviewItem", back_populates="events"
     )
 
 

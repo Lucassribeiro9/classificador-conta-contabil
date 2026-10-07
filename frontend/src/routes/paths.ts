@@ -7,6 +7,7 @@ export const ROUTES = {
     loteMovimentosPath: "/empresas/:empresaId/movimentos/lotes/:loteId",
     revisarMovimentoPath: "/empresas/:empresaId/movimentos/:movimentoId",
     razaoContasPath: "/empresas/:empresaId/razao",
+    reviewItemsPath: "/empresas/:empresaId/revisoes",
     operacao: (empresaId: string) => `/empresas/${empresaId}`,
     importarMovimentos: (empresaId: string) =>
       `/empresas/${empresaId}/movimentos/importar`,
@@ -19,5 +20,6 @@ export const ROUTES = {
     ) =>
       `/empresas/${empresaId}/movimentos/${movimentoId}${loteId ? `?loteId=${loteId}` : ""}`,
     razaoContas: (empresaId: string) => `/empresas/${empresaId}/razao`,
+    reviewItems: (empresaId: string) => `/empresas/${empresaId}/revisoes`,
   },
 } as const;

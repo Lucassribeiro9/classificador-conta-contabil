@@ -9,6 +9,7 @@ import { LoginPage } from "../routes/pages/LoginPage";
 import { LoteMovimentosPage } from "../routes/pages/LoteMovimentosPage";
 import { OperacaoEmpresaPage } from "../routes/pages/OperacaoEmpresaPage";
 import { RazaoContasPage } from "../routes/pages/RazaoContasPage";
+import { ReviewItemsPage } from "../routes/pages/ReviewItemsPage";
 import { RevisarMovimentoPage } from "../routes/pages/RevisarMovimentoPage";
 
 export function AppRouter() {
@@ -39,6 +40,10 @@ export function AppRouter() {
             <Route
               path={ROUTES.empresa.razaoContasPath}
               element={<RazaoContasPage />}
+            />
+            <Route
+              path={ROUTES.empresa.reviewItemsPath}
+              element={<ReviewItemsPage />}
             />
           </Route>
         </Route>
