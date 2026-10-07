@@ -168,6 +168,61 @@ class AuditEventListResponse(BaseModel):
     has_next: bool
 
 
+class ReviewEvidenceResponse(BaseModel):
+    id: int
+    source_type: str
+    source_id: str
+    summary: str
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ReviewItemResponse(BaseModel):
+    id: int
+    empresa_id: int
+    source_type: str
+    grouping_key: str
+    summary: str
+    criticality: str
+    status: str
+    assignee_id: int | None
+    assignee_name: str | None
+    claimed_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+    resolved_at: datetime | None
+    dismissed_at: datetime | None
+    available_actions: list[str]
+    evidences: list[ReviewEvidenceResponse]
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ReviewItemListResponse(BaseModel):
+    items: list[ReviewItemResponse]
+    total: int
+    page: int
+    limit: int
+    has_next: bool
+
+
+class ReviewItemReassignRequest(BaseModel):
+    assignee_id: int = Field(gt=0)
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class ReviewItemReasonRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class ReviewAssigneeResponse(BaseModel):
+    id: int
+    nome: str
+
+
+class ReviewAssigneeListResponse(BaseModel):
+    items: list[ReviewAssigneeResponse]
+
+
 class UsuarioCreate(BaseModel):
     nome: str
     login: str

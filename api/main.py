@@ -20,6 +20,7 @@ from api.routes import (
     notificacoes,
     plano_contas,
     razao,
+    review_items,
     transactions,
     users,
 )
@@ -128,6 +129,11 @@ app.include_router(
 )
 app.include_router(razao.router, prefix="/api/v1", tags=["Razão"])
 app.include_router(razao.admin_router, prefix="/api/v1", tags=["Razão"])
+app.include_router(
+    review_items.router,
+    prefix="/api/v1",
+    tags=["Central de Revisões"],
+)
 app.include_router(
     movimentos_operacionais.router,
     prefix="/api/v1",
