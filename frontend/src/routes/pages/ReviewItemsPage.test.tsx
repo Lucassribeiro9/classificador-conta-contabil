@@ -11,6 +11,7 @@ import { ReviewItemsPage } from "./ReviewItemsPage";
 vi.mock("../../lib/api/reviewItemsClient", () => ({
   reviewItemsClient: {
     list: vi.fn(),
+    get: vi.fn(),
     listAssignees: vi.fn(),
     claim: vi.fn(),
     release: vi.fn(),
@@ -22,16 +23,17 @@ vi.mock("../../lib/api/reviewItemsClient", () => ({
 }));
 
 const listMock = vi.mocked(reviewItemsClient.list);
+const getMock = vi.mocked(reviewItemsClient.get);
 const claimMock = vi.mocked(reviewItemsClient.claim);
 
-function renderPage() {
+function renderPage(path = ROUTES.empresa.reviewItems("7")) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   return render(
     <QueryClientProvider client={queryClient}>
       <AuthProvider initialSession={{ accessToken: "jwt", userEmail: "user@test" }}>
-        <MemoryRouter initialEntries={[ROUTES.empresa.reviewItems("7")]}>
+        <MemoryRouter initialEntries={[path]}>
           <Routes>
             <Route
               path={ROUTES.empresa.reviewItemsPath}
@@ -47,6 +49,7 @@ function renderPage() {
 describe("ReviewItemsPage", () => {
   beforeEach(() => {
     listMock.mockReset();
+    getMock.mockReset();
     claimMock.mockReset();
   });
 
@@ -133,5 +136,34 @@ describe("ReviewItemsPage", () => {
 
     expect(await screen.findByText("Consulta apenas")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Assumir" })).toBeNull();
+  });
+
+  it("abre uma pendência por ID mesmo fora da página atual", async () => {
+    listMock.mockResolvedValue({
+      items: [], total: 150, page: 1, limit: 100, hasNext: true,
+    });
+    getMock.mockResolvedValue({
+      id: 501,
+      empresaId: 7,
+      sourceType: "movimento_operacional_manual",
+      groupingKey: "movimento:91",
+      summary: "Movimento operacional 91 enviado para revisão",
+      criticality: "medium",
+      status: "pending",
+      assigneeId: null,
+      assigneeName: null,
+      claimedAt: null,
+      createdAt: "2026-01-02T10:00:00",
+      updatedAt: "2026-01-02T10:00:00",
+      resolvedAt: null,
+      dismissedAt: null,
+      availableActions: ["claim"],
+      evidences: [],
+    });
+
+    renderPage(`${ROUTES.empresa.reviewItems("7")}?itemId=501`);
+
+    expect(await screen.findByText("Movimento operacional 91 enviado para revisão")).toBeInTheDocument();
+    expect(getMock).toHaveBeenCalledWith("jwt", "7", 501);
   });
 });

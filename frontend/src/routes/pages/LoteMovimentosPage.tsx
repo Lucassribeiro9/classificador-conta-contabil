@@ -56,6 +56,8 @@ export function LoteMovimentosPage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [message, setMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [reviewIssues, setReviewIssues] = useState<string[]>([]);
+  const [reviewLinks, setReviewLinks] = useState<Array<{ movimentoId: number; reviewItemId: number }>>([]);
 
   const movimentos = useQuery({
     queryKey: ["empresas", empresaId, "lotes", loteId, "movimentos", status],
@@ -116,6 +118,40 @@ export function LoteMovimentosPage() {
     },
     onError: () => {
       setMessage("Nao foi possivel classificar pendentes da empresa.");
+    },
+  });
+
+  const sendReviewMutation = useMutation({
+    mutationFn: (ids: number[]) =>
+      loteMovimentosClient.sendToReview(
+        accessToken,
+        empresaId ?? "",
+        loteId ?? "",
+        ids,
+      ),
+    onSuccess: (result) => {
+      const sent = result.items.filter((item) =>
+        item.outcome === "created" || item.outcome === "existing",
+      );
+      const issues = result.items
+        .filter((item) => !sent.includes(item))
+        .map((item) => `Movimento ${item.movimentoId}: ${item.message}`);
+      setStatusMessage(`${sent.length} enviado para revisao.`);
+      setReviewIssues(issues);
+      setReviewLinks(sent.flatMap((item) =>
+        item.reviewItemId === null ? [] : [{ movimentoId: item.movimentoId, reviewItemId: item.reviewItemId }],
+      ));
+      setMessage(null);
+      setSelectedIds(new Set());
+      void queryClient.invalidateQueries({
+        queryKey: ["empresas", empresaId, "review-items"],
+      });
+    },
+    onError: () => {
+      setStatusMessage(null);
+      setReviewIssues([]);
+      setReviewLinks([]);
+      setMessage("Nao foi possivel enviar os movimentos para revisao.");
     },
   });
 
@@ -193,8 +229,9 @@ export function LoteMovimentosPage() {
     );
   }
 
-  function markReviewUnsupported() {
-    setMessage("Envio para revisao aguarda contrato da API.");
+  function sendSelectedToReview() {
+    if (!selectedMovimentos.length) return;
+    sendReviewMutation.mutate(selectedMovimentos.map((movement) => movement.id));
   }
 
   return (
@@ -227,6 +264,25 @@ export function LoteMovimentosPage() {
         >
           {statusMessage}
         </p>
+      ) : null}
+      {reviewIssues.length ? (
+        <ul className="border-l-4 border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-950" role="alert">
+          {reviewIssues.map((issue) => <li key={issue}>{issue}</li>)}
+        </ul>
+      ) : null}
+      {reviewLinks.length && empresaId ? (
+        <ul className="flex flex-wrap gap-3 text-sm">
+          {reviewLinks.map((item) => (
+            <li key={item.movimentoId}>
+              <Link
+                className="font-semibold text-brand-dark underline"
+                to={`${ROUTES.empresa.reviewItems(empresaId)}?itemId=${item.reviewItemId}`}
+              >
+                Abrir pendência {item.reviewItemId}
+              </Link>
+            </li>
+          ))}
+        </ul>
       ) : null}
 
       <section className="border border-slate-200 bg-white p-4 shadow-sm">
@@ -275,7 +331,7 @@ export function LoteMovimentosPage() {
           <button
             className="border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
             disabled={!selectedMovimentos.length}
-            onClick={markReviewUnsupported}
+            onClick={sendSelectedToReview}
             type="button"
           >
             Enviar para revisao

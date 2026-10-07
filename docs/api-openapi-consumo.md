@@ -160,6 +160,20 @@ curl -sS -X PATCH \
   -d '{"action":"approve"}'
 ```
 
+Envio manual de movimentos selecionados para a central:
+
+```bash
+curl -sS -X POST \
+  "http://localhost:8000/api/v1/companies/123/movimentos-operacionais/lotes/456/enviar-revisao" \
+  -H "Authorization: Bearer <JWT_DE_USUARIO>" \
+  -H "Content-Type: application/json" \
+  -d '{"movimento_ids":[789,790]}'
+```
+
+A resposta contem `items`, com `movimento_id`, `outcome`, `message` e
+`review_item_id` por movimento. Os resultados permitem distinguir envio novo,
+pendencia aberta ja existente, pendencia encerrada e item inelegivel.
+
 Consulte o OpenAPI para o schema exato de payloads e respostas. Este documento
 mantem exemplos curtos para orientar consumo, sem duplicar o contrato inteiro.
 

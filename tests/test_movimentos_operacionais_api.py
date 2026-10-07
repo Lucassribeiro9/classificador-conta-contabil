@@ -18,6 +18,7 @@ from core.models import (
     IdentidadeServicoEscopo,
     LoteImportacaoMovimentoOperacional,
     MovimentoOperacionalImportado,
+    ReviewItem,
     Usuario,
     UsuarioEmpresaPermissao,
 )
@@ -312,6 +313,203 @@ def _seed_operational_lote_with_movements(
         session.refresh(empresa)
         session.refresh(lote)
         return usuario, empresa.id, lote.id
+
+
+def test_send_selected_movements_to_review_creates_reusable_company_items(client):
+    from tests.conftest import TestingSessionLocal
+
+    usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(
+        permissao="operacao"
+    )
+    with TestingSessionLocal() as session:
+        movements = session.query(MovimentoOperacionalImportado).order_by(
+            MovimentoOperacionalImportado.id
+        ).all()
+        ids = [movement.id for movement in movements]
+        original = [(movement.status, movement.row_version) for movement in movements]
+
+    url = f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/{lote_id}/enviar-revisao"
+    first = client.post(url, json={"movimento_ids": ids}, headers=_auth_headers(usuario))
+    second = client.post(url, json={"movimento_ids": ids}, headers=_auth_headers(usuario))
+
+    assert first.status_code == 200
+    assert [(item["movimento_id"], item["outcome"]) for item in first.json()["items"]] == [
+        (ids[0], "created"),
+        (ids[1], "created"),
+    ]
+    assert second.status_code == 200
+    assert [item["outcome"] for item in second.json()["items"]] == ["existing", "existing"]
+    assert [item["review_item_id"] for item in first.json()["items"]] == [
+        item["review_item_id"] for item in second.json()["items"]
+    ]
+    with TestingSessionLocal() as session:
+        assert session.query(ReviewItem).filter_by(empresa_id=empresa_id).count() == 2
+        events = session.query(AuditEvent).filter_by(
+            event_type="operational_movements.review_submitted",
+            empresa_id=empresa_id,
+        ).all()
+        assert len(events) == 2
+        assert {event.resource_id for event in events} == {str(item) for item in ids}
+        assert all(event.user_id == usuario.id for event in events)
+        assert all("sensivel" not in str(event.metadata_json).lower() for event in events)
+        movements = session.query(MovimentoOperacionalImportado).order_by(
+            MovimentoOperacionalImportado.id
+        ).all()
+        assert [(movement.status, movement.row_version) for movement in movements] == original
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        ("pendente", "created"),
+        ("pre_classificado", "created"),
+        ("sugerido", "created"),
+        ("revisao", "created"),
+        ("aprovado", "ineligible"),
+        ("corrigido", "ineligible"),
+        ("rejeitado", "ineligible"),
+        ("convertido", "ineligible"),
+    ],
+)
+def test_send_to_review_reports_status_eligibility(client, status, expected):
+    from tests.conftest import TestingSessionLocal
+
+    usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(
+        permissao="operacao"
+    )
+    with TestingSessionLocal() as session:
+        movement = session.query(MovimentoOperacionalImportado).first()
+        movement.status = status
+        movement_id = movement.id
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/{lote_id}/enviar-revisao",
+        json={"movimento_ids": [movement_id]},
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["items"][0]["outcome"] == expected
+
+
+def test_send_to_review_reports_partial_failures_without_exposing_other_company(client):
+    from tests.conftest import TestingSessionLocal
+
+    usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(
+        permissao="operacao"
+    )
+    with TestingSessionLocal() as session:
+        ids = [movement.id for movement in session.query(MovimentoOperacionalImportado).all()]
+        session.get(MovimentoOperacionalImportado, ids[1]).status = "aprovado"
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/{lote_id}/enviar-revisao",
+        json={"movimento_ids": [ids[0], ids[1], 99999]},
+        headers=_auth_headers(usuario),
+    )
+    wrong_lote = client.post(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/99999/enviar-revisao",
+        json={"movimento_ids": [ids[0]]},
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 200
+    assert [item["outcome"] for item in response.json()["items"]] == [
+        "created", "ineligible", "not_found"
+    ]
+    assert wrong_lote.json()["items"][0]["outcome"] == "not_found"
+    with TestingSessionLocal() as session:
+        assert session.query(ReviewItem).filter_by(empresa_id=empresa_id).count() == 1
+
+
+def test_send_to_review_requires_operation_permission(client):
+    from tests.conftest import TestingSessionLocal
+
+    usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(
+        permissao="leitura"
+    )
+    with TestingSessionLocal() as session:
+        movement_id = session.query(MovimentoOperacionalImportado).first().id
+
+    response = client.post(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/{lote_id}/enviar-revisao",
+        json={"movimento_ids": [movement_id]},
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 403
+    with TestingSessionLocal() as session:
+        assert session.query(ReviewItem).count() == 0
+
+
+def test_send_to_review_cannot_cross_company_boundary(client):
+    from tests.conftest import TestingSessionLocal
+
+    usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(
+        permissao="operacao"
+    )
+    _, other_company_id, other_lote_id = _seed_operational_lote_with_movements(
+        permissao="operacao",
+        empresa_overrides={
+            "nome_empresa": "Outra Empresa LTDA",
+            "cnpj_cpf": "88777666000155",
+            "api_key": "api-key-outra-empresa",
+            "cod_dominio": 3311,
+        },
+        usuario_overrides={
+            "login": "outra.empresa.revisao",
+            "email": "outra.empresa.revisao@example.com",
+        },
+    )
+    with TestingSessionLocal() as session:
+        other_movement_id = session.query(MovimentoOperacionalImportado).filter_by(
+            empresa_id=other_company_id
+        ).first().id
+
+    as_own_company = client.post(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/{lote_id}/enviar-revisao",
+        json={"movimento_ids": [other_movement_id]},
+        headers=_auth_headers(usuario),
+    )
+    as_other_company = client.post(
+        f"/api/v1/companies/{other_company_id}/movimentos-operacionais/lotes/{other_lote_id}/enviar-revisao",
+        json={"movimento_ids": [other_movement_id]},
+        headers=_auth_headers(usuario),
+    )
+
+    assert as_own_company.status_code == 200
+    assert as_own_company.json()["items"][0]["outcome"] == "not_found"
+    assert as_other_company.status_code == 403
+    with TestingSessionLocal() as session:
+        assert session.query(ReviewItem).count() == 0
+
+
+def test_send_to_review_does_not_reopen_closed_item(client):
+    from tests.conftest import TestingSessionLocal
+
+    usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(
+        permissao="operacao"
+    )
+    with TestingSessionLocal() as session:
+        movement_id = session.query(MovimentoOperacionalImportado).first().id
+    url = f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/{lote_id}/enviar-revisao"
+    headers = _auth_headers(usuario)
+    first = client.post(url, json={"movimento_ids": [movement_id]}, headers=headers)
+    item_id = first.json()["items"][0]["review_item_id"]
+    with TestingSessionLocal() as session:
+        session.get(ReviewItem, item_id).status = "resolved"
+        session.commit()
+
+    again = client.post(url, json={"movimento_ids": [movement_id]}, headers=headers)
+
+    assert again.status_code == 200
+    assert again.json()["items"][0]["outcome"] == "closed"
+    assert again.json()["items"][0]["review_item_id"] == item_id
+    with TestingSessionLocal() as session:
+        assert session.query(ReviewItem).count() == 1
+        assert session.get(ReviewItem, item_id).status == "resolved"
 
 
 def test_user_with_operacao_permission_imports_operational_movements(client):

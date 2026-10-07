@@ -122,6 +122,17 @@ async function list(
   };
 }
 
+async function get(
+  accessToken: string,
+  companyId: string,
+  itemId: number,
+): Promise<ReviewItem> {
+  const item = await apiClient.get<ReviewItemApi>(`${root(companyId)}/${itemId}`, {
+    accessToken,
+  });
+  return mapItem(item);
+}
+
 async function listAssignees(
   accessToken: string,
   companyId: string,
@@ -149,6 +160,7 @@ async function transition(
 
 export const reviewItemsClient = {
   list,
+  get,
   listAssignees,
   claim: (token: string, company: string, id: number) =>
     transition("claim", token, company, id),
