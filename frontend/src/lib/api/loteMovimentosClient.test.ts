@@ -15,6 +15,34 @@ describe("loteMovimentosClient", () => {
     vi.unstubAllGlobals();
   });
 
+  it("envia IDs selecionados e preserva resultados por movimento", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        items: [
+          { movimento_id: 91, outcome: "created", review_item_id: 12, message: "Enviado para revisão" },
+          { movimento_id: 92, outcome: "ineligible", review_item_id: null, message: "Status não permite envio" },
+        ],
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      loteMovimentosClient.sendToReview("jwt-de-teste", "7", "15", [91, 92]),
+    ).resolves.toEqual({
+      items: [
+        { movimentoId: 91, outcome: "created", reviewItemId: 12, message: "Enviado para revisão" },
+        { movimentoId: 92, outcome: "ineligible", reviewItemId: null, message: "Status não permite envio" },
+      ],
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/companies/7/movimentos-operacionais/lotes/15/enviar-revisao",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ movimento_ids: [91, 92] }),
+      }),
+    );
+  });
+
   it("lista movimentos do lote com filtro de status", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({

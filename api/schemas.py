@@ -205,6 +205,21 @@ class ReviewItemListResponse(BaseModel):
     has_next: bool
 
 
+class MovimentoReviewSubmissionRequest(BaseModel):
+    movimento_ids: list[int] = Field(min_length=1, max_length=100)
+
+
+class MovimentoReviewSubmissionItem(BaseModel):
+    movimento_id: int
+    outcome: Literal["created", "existing", "closed", "ineligible", "not_found", "error"]
+    message: str
+    review_item_id: int | None = None
+
+
+class MovimentoReviewSubmissionResponse(BaseModel):
+    items: list[MovimentoReviewSubmissionItem]
+
+
 class ReviewItemReassignRequest(BaseModel):
     assignee_id: int = Field(gt=0)
     reason: str = Field(min_length=1, max_length=500)

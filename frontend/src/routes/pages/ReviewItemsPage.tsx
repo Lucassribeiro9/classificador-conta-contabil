@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../../app/auth";
 import {
@@ -35,6 +35,10 @@ function itemDate(value: string) {
 
 export function ReviewItemsPage() {
   const { empresaId = "" } = useParams();
+  const [searchParams] = useSearchParams();
+  const requestedItemId = Number(searchParams.get("itemId"));
+  const selectedItemId = Number.isSafeInteger(requestedItemId) && requestedItemId > 0
+    ? requestedItemId : null;
   const { session, setSession } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -51,6 +55,12 @@ export function ReviewItemsPage() {
     queryKey: ["empresas", empresaId, "review-items", status, page],
     queryFn: () => reviewItemsClient.list(accessToken, empresaId, page, status),
     enabled: Boolean(accessToken && empresaId),
+    retry: false,
+  });
+  const selectedItem = useQuery({
+    queryKey: ["empresas", empresaId, "review-items", "item", selectedItemId],
+    queryFn: () => reviewItemsClient.get(accessToken, empresaId, selectedItemId!),
+    enabled: Boolean(accessToken && empresaId && selectedItemId),
     retry: false,
   });
   const canReassign = items.data?.items.some((item) =>
@@ -123,13 +133,14 @@ export function ReviewItemsPage() {
   useEffect(() => {
     if (
       items.error instanceof ApiSessionExpiredError ||
+      selectedItem.error instanceof ApiSessionExpiredError ||
       reviewers.error instanceof ApiSessionExpiredError ||
       action.error instanceof ApiSessionExpiredError
     ) {
       setSession(null);
       navigate(ROUTES.login, { replace: true });
     }
-  }, [items.error, reviewers.error, action.error, navigate, setSession]);
+  }, [items.error, selectedItem.error, reviewers.error, action.error, navigate, setSession]);
 
   if (items.isLoading) {
     return (
@@ -162,6 +173,15 @@ export function ReviewItemsPage() {
     );
   }
 
+  if (selectedItemId && selectedItem.isLoading) {
+    return <PageState message={{ title: "Carregando pendência", description: "Buscando o item selecionado." }} />;
+  }
+  if (selectedItemId && selectedItem.isError) {
+    return <PageState message={{ title: "Pendência não encontrada", description: "Confira o ID ou volte à fila da empresa." }} />;
+  }
+  const visibleItems = selectedItemId && selectedItem.data
+    ? [selectedItem.data] : items.data.items;
+
   return (
     <section className="space-y-5">
       <header className="border-l-4 border-brand bg-white px-5 py-4 shadow-sm">
@@ -176,6 +196,12 @@ export function ReviewItemsPage() {
           responsável e histórico.
         </p>
       </header>
+
+      {selectedItemId ? (
+        <Link className="text-sm font-semibold text-brand-dark underline" to={ROUTES.empresa.reviewItems(empresaId)}>
+          Voltar à fila completa
+        </Link>
+      ) : null}
 
       {success ? (
         <p className="border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900" role="status">
@@ -242,7 +268,7 @@ export function ReviewItemsPage() {
         </div>
       </div>
 
-      {items.data.items.length === 0 ? (
+      {visibleItems.length === 0 ? (
         <PageState
           titleAs="h2"
           message={{
@@ -252,7 +278,7 @@ export function ReviewItemsPage() {
         />
       ) : (
         <div className="space-y-3">
-          {items.data.items.map((item) => (
+          {visibleItems.map((item) => (
             <article
               className="border border-slate-200 bg-white p-5 shadow-sm"
               key={item.id}

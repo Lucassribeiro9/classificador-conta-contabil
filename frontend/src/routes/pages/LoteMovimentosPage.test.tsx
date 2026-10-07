@@ -30,6 +30,7 @@ vi.mock("../../lib/api/loteMovimentosClient", async (importOriginal) => {
       listMovimentos: vi.fn(),
       reviewMovimentos: vi.fn(),
       classificarPendentes: vi.fn(),
+      sendToReview: vi.fn(),
     },
   };
 });
@@ -55,6 +56,7 @@ const reviewMovimentosMock = vi.mocked(loteMovimentosClient.reviewMovimentos);
 const classificarPendentesMock = vi.mocked(
   loteMovimentosClient.classificarPendentes,
 );
+const sendToReviewMock = vi.mocked(loteMovimentosClient.sendToReview);
 const getMovimentoMock = vi.mocked(revisarMovimentoClient.getMovimento);
 
 const movimentos: MovimentoOperacional[] = [
@@ -151,6 +153,7 @@ describe("LoteMovimentosPage", () => {
     listMovimentosMock.mockReset();
     reviewMovimentosMock.mockReset();
     classificarPendentesMock.mockReset();
+    sendToReviewMock.mockReset();
     getMovimentoMock.mockReset();
   });
 
@@ -299,7 +302,7 @@ describe("LoteMovimentosPage", () => {
     );
   });
 
-  it("bloqueia envio para revisao sem contrato e classifica pendentes da empresa", async () => {
+  it("envia selecionados, confirma o resultado e abre a central", async () => {
     listMovimentosMock.mockResolvedValue({
       items: movimentos,
       total: 3,
@@ -312,6 +315,11 @@ describe("LoteMovimentosPage", () => {
       quantidadeProcessada: 2,
       totalSugerido: 1,
       totalRevisao: 1,
+    });
+    sendToReviewMock.mockResolvedValueOnce({
+      items: [
+        { movimentoId: 93, outcome: "created", reviewItemId: 501, message: "Enviado para revisão" },
+      ],
     });
 
     renderLoteMovimentosPage();
@@ -329,8 +337,12 @@ describe("LoteMovimentosPage", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Enviar para revisao" }),
     );
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Envio para revisao aguarda contrato da API.",
+    await waitFor(() => {
+      expect(sendToReviewMock).toHaveBeenCalledWith("jwt-de-teste", "7", "15", [93]);
+    });
+    expect(await screen.findByRole("status")).toHaveTextContent("1 enviado para revisao");
+    expect(screen.getByRole("link", { name: "Abrir pendência 501" })).toHaveAttribute(
+      "href", `${ROUTES.empresa.reviewItems("7")}?itemId=501`,
     );
 
     fireEvent.click(
@@ -346,6 +358,34 @@ describe("LoteMovimentosPage", () => {
     expect(await screen.findByRole("status")).toHaveTextContent(
       "2 pendentes classificados.",
     );
+  });
+
+  it("mostra a razão de cada item não enviado", async () => {
+    listMovimentosMock.mockResolvedValue({
+      items: movimentos,
+      total: 3,
+      page: 1,
+      limit: 100,
+      hasNext: false,
+    });
+    sendToReviewMock.mockResolvedValueOnce({
+      items: [
+        { movimentoId: 91, outcome: "created", reviewItemId: 501, message: "Enviado para revisão" },
+        { movimentoId: 92, outcome: "ineligible", reviewItemId: null, message: "Status não permite envio" },
+      ],
+    });
+
+    renderLoteMovimentosPage();
+    await screen.findByText("pagamento fornecedor");
+    for (const name of [/pagamento fornecedor/, /transferencia sem contrapartida/]) {
+      fireEvent.click(within(screen.getByRole("row", { name })).getByRole("checkbox"));
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Enviar para revisao" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Movimento 92: Status não permite envio",
+    );
+    expect(screen.getByRole("link", { name: "Abrir pendência 501" })).toBeInTheDocument();
   });
 
   it("mostra estado de erro de rede", async () => {

@@ -14,10 +14,12 @@ from fastapi import (
 )
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError
 
 from api.dependencies import (
     DB_DEPENDENCY,
     get_current_user,
+    require_company_access,
     require_service_company_scope,
 )
 from core.service_credentials import identificar_credencial_servico
@@ -29,6 +31,8 @@ from api.schemas import (
     MovimentoOperacionalLoteListResponse,
     MovimentoOperacionalResponse,
     MovimentoOperacionalReviewRequest,
+    MovimentoReviewSubmissionRequest,
+    MovimentoReviewSubmissionResponse,
 )
 from core.audit import record_audit_event
 from core.models import (
@@ -59,6 +63,7 @@ from core.movimentos_operacionais_review import (
     MovimentoReviewError,
     review_movimento_operacional,
 )
+from core.movimentos_operacionais_review_submission import submit_movement_for_review
 from core.movimentos_operacionais_snapshot import (
     LoteOperacionalSnapshotNotFound,
     build_lote_operacional_snapshot,
@@ -568,6 +573,43 @@ def classify_company_pending_operational_movements(
     except MovimentoOperacionalModelNotFound as exc:
         db.commit()
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post(
+    "/lotes/{lote_id}/enviar-revisao",
+    response_model=MovimentoReviewSubmissionResponse,
+)
+def submit_company_operational_movements_for_review(
+    company_id: int,
+    lote_id: int,
+    request: MovimentoReviewSubmissionRequest,
+    _empresa: Empresa = Depends(require_company_access("operacao")),
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = DB_DEPENDENCY,
+) -> MovimentoReviewSubmissionResponse:
+    """Encaminha IDs selecionados sem decidir ou alterar os movimentos."""
+    results = []
+    for movimento_id in request.movimento_ids:
+        try:
+            with db.begin_nested():
+                result = submit_movement_for_review(
+                    db,
+                    empresa_id=company_id,
+                    lote_id=lote_id,
+                    movimento_id=movimento_id,
+                    user_id=current_user.id,
+                )
+            results.append(result)
+        except SQLAlchemyError:
+            results.append(
+                {
+                    "movimento_id": movimento_id,
+                    "outcome": "error",
+                    "message": "Não foi possível enviar este movimento para revisão",
+                }
+            )
+    db.commit()
+    return MovimentoReviewSubmissionResponse(items=results)
 
 
 @router.post(

@@ -48,6 +48,15 @@ export type ReviewBatchResult = {
   failures: Array<{ movimentoId: number; message: string }>;
 };
 
+export type ReviewSubmissionResult = {
+  items: Array<{
+    movimentoId: number;
+    outcome: "created" | "existing" | "closed" | "ineligible" | "not_found" | "error";
+    message: string;
+    reviewItemId: number | null;
+  }>;
+};
+
 export type ClassificacaoPendentesResult = {
   empresaId: number;
   quantidadeProcessada: number;
@@ -416,8 +425,41 @@ async function classificarPendentes(
   return mapClassificacao(data);
 }
 
+async function sendToReview(
+  accessToken: string,
+  empresaId: string,
+  loteId: string,
+  movimentoIds: number[],
+): Promise<ReviewSubmissionResult> {
+  const data = await fetchJson<{
+    items: Array<{
+      movimento_id: number;
+      outcome: ReviewSubmissionResult["items"][number]["outcome"];
+      message: string;
+      review_item_id: number | null;
+    }>;
+  }>(
+    `/api/v1/companies/${empresaId}/movimentos-operacionais/lotes/${loteId}/enviar-revisao`,
+    accessToken,
+    {
+      method: "POST",
+      headers: jsonHeaders(accessToken),
+      body: JSON.stringify({ movimento_ids: movimentoIds }),
+    },
+  );
+  return {
+    items: data.items.map((item) => ({
+      movimentoId: item.movimento_id,
+      outcome: item.outcome,
+      message: item.message,
+      reviewItemId: item.review_item_id,
+    })),
+  };
+}
+
 export const loteMovimentosClient = {
   classificarPendentes,
   listMovimentos,
   reviewMovimentos,
+  sendToReview,
 };

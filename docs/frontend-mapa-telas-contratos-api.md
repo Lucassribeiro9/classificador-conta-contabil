@@ -216,6 +216,17 @@ Contratos reais:
 - `GET /api/v1/companies/{company_id}/movimentos-operacionais/lotes/{lote_id}/movimentos`
 - `POST /api/v1/companies/{company_id}/movimentos-operacionais/classificar`
 - `POST /api/v1/companies/{company_id}/movimentos-operacionais/lotes/{lote_id}/movimentos/{movimento_id}/review`
+- `POST /api/v1/companies/{company_id}/movimentos-operacionais/lotes/{lote_id}/enviar-revisao`
+
+O envio manual recebe `movimento_ids` (1 a 100 IDs) e devolve um resultado
+por ID: `created`, `existing`, `closed`, `ineligible`, `not_found` ou `error`.
+`review_item_id` permite localizar a pendencia criada ou existente na central.
+O frontend abre o item diretamente por `?itemId={review_item_id}`, inclusive
+quando ele nao aparece na primeira pagina da fila.
+O envio exige permissao de operacao e nao altera o status ou a decisao do
+movimento. Aceita `pendente`, `pre_classificado`, `sugerido` e `revisao`;
+status finais retornam `ineligible`. Uma pendencia encerrada retorna `closed`
+sem reabertura automatica.
 
 Contratos esperados:
 
