@@ -58,6 +58,8 @@ docker compose --env-file .env.hml -f docker-compose.edge.yml ps
 O Swagger da API fica em `https://classificador-hml.interno/api/docs`.
 Em HML, `API_ROOT_PATH=/api` faz a pagina carregar o esquema em
 `/api/openapi.json` e enviar as operacoes pelo prefixo publico do proxy.
+O proxy preserva o caminho `/api/...` ao encaminhar a requisicao para a API;
+remover esse prefixo no Nginx faz as rotas versionadas retornarem 404.
 O acesso direto da API em dev continua usando `/docs`.
 
 Se imagens privadas forem necessarias, execute `make registry-login` antes de

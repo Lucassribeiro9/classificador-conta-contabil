@@ -52,7 +52,7 @@ def test_hml_nginx_terminates_tls_and_routes_frontend_and_api():
         "return 301 https://$host$request_uri;",
         "ssl_certificate /etc/nginx/certs/classificador-hml.crt;",
         "ssl_certificate_key /etc/nginx/certs/classificador-hml.key;",
-        "location /api/ { proxy_pass http://api:8000/;",
+        "location /api/ { proxy_pass http://api:8000;",
         "location / { proxy_pass http://frontend:80;",
         "proxy_set_header X-Forwarded-Proto $scheme;",
     )
