@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -12,6 +13,7 @@ from api.schemas import (
     ReviewItemReasonRequest,
     ReviewItemReassignRequest,
     ReviewItemResponse,
+    RazaoAliasConfirmationRequest,
 )
 from core.models import Empresa, ReviewItem, Usuario, UsuarioEmpresaPermissao
 from core.review_items import (
@@ -24,6 +26,8 @@ from core.review_items import (
     reopen_review_item,
     resolve_review_item,
 )
+from core.razao_aliases import confirmar_alias_razao
+from core.plano_contas_snapshots import SnapshotConflict, selecionar_snapshot
 
 
 router = APIRouter(prefix="/companies/{company_id}/review-items")
@@ -48,12 +52,16 @@ def _response(item: ReviewItem, user: Usuario) -> ReviewItemResponse:
         actions.append("claim")
     if rank >= 2 and item.status == "in_review" and item.assignee_id == user.id:
         actions.extend(("release", "resolve", "dismiss"))
+        if item.source_type == "razao_account_unknown":
+            actions.append("confirm_razao_alias")
     if rank >= 3 and item.status == "in_review":
         actions.append("reassign")
     if rank >= 3 and item.status in {"resolved", "dismissed"}:
         actions.append("reopen")
     if item.source_type == "snapshot_conflict":
         actions = [action for action in actions if action not in {"resolve", "dismiss", "reopen"}]
+    if item.source_type == "razao_account_unknown":
+        actions = [action for action in actions if action != "resolve"]
     data = {
         name: getattr(item, name)
         for name in ReviewItemResponse.model_fields
@@ -252,11 +260,21 @@ def resolve_item(
     item = db.query(ReviewItem).filter(
         ReviewItem.id == item_id, ReviewItem.empresa_id == company_id
     ).first()
-    if item is not None and item.source_type == "snapshot_conflict":
+    if item is not None and item.source_type in {"snapshot_conflict", "razao_account_unknown"}:
         raise HTTPException(
             status_code=409,
-            detail="Conflito de snapshot exige seleção e justificativa no fluxo do plano",
+            detail="Esta pendência exige uma decisão no fluxo específico da origem",
         )
+    if item is not None and item.source_type in {"razao_snapshot_conflict", "razao_snapshot_missing"}:
+        try:
+            movement_date = date.fromisoformat(item.grouping_key)
+            snapshot = selecionar_snapshot(
+                db, empresa_id=company_id, competencia=movement_date
+            )
+        except (ValueError, SnapshotConflict) as exc:
+            raise HTTPException(status_code=409, detail="Snapshot aplicável ainda indefinido") from exc
+        if snapshot is None:
+            raise HTTPException(status_code=409, detail="Snapshot aplicável ainda indefinido")
     return _transition_response(
         resolve_review_item,
         db=db,
@@ -265,6 +283,38 @@ def resolve_item(
         item_id=item_id,
         user_id=user.id,
     )
+
+
+@router.post("/{item_id}/confirm-razao-alias", response_model=ReviewItemResponse)
+def confirm_razao_alias_item(
+    company_id: int,
+    item_id: int,
+    request: RazaoAliasConfirmationRequest,
+    _company: Empresa = Depends(require_company_access("operacao")),
+    user: Usuario = Depends(get_current_user),
+    db: Session = DB_DEPENDENCY,
+) -> ReviewItemResponse:
+    try:
+        confirmar_alias_razao(
+            db,
+            empresa_id=company_id,
+            item_id=item_id,
+            target_codigo=request.target_codigo,
+            user_id=user.id,
+            reason=request.reason,
+        )
+        db.commit()
+        item = db.get(ReviewItem, item_id)
+        return _response(item, user)
+    except ReviewItemNotFound as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail="Pendência não encontrada") from exc
+    except ReviewItemConflict as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/{item_id}/dismiss", response_model=ReviewItemResponse)
@@ -279,7 +329,7 @@ def dismiss_item(
     item = db.query(ReviewItem).filter(
         ReviewItem.id == item_id, ReviewItem.empresa_id == company_id
     ).first()
-    if item is not None and item.source_type == "snapshot_conflict":
+    if item is not None and item.source_type in {"snapshot_conflict", "razao_snapshot_conflict"}:
         raise HTTPException(
             status_code=409,
             detail="Conflito de snapshot exige seleção e justificativa no fluxo do plano",
@@ -307,7 +357,7 @@ def reopen_item(
     item = db.query(ReviewItem).filter(
         ReviewItem.id == item_id, ReviewItem.empresa_id == company_id
     ).first()
-    if item is not None and item.source_type == "snapshot_conflict":
+    if item is not None and item.source_type in {"snapshot_conflict", "razao_snapshot_conflict"}:
         raise HTTPException(status_code=409, detail="Decisão de snapshot não pode ser reaberta")
     return _transition_response(
         reopen_review_item,

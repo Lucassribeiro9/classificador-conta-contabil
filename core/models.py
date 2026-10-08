@@ -676,6 +676,10 @@ class PlanoContasSnapshotEntry(Base):
     __tablename__ = "plano_contas_snapshot_entries"
     __table_args__ = (
         UniqueConstraint("snapshot_id", "codigo", name="uq_plano_snapshot_entry_code"),
+        UniqueConstraint(
+            "snapshot_id", "empresa_id", "codigo",
+            name="uq_plano_snapshot_entry_company_code",
+        ),
         ForeignKeyConstraint(
             ["snapshot_id", "empresa_id"],
             ["plano_contas_snapshots.id", "plano_contas_snapshots.empresa_id"],
@@ -721,6 +725,42 @@ class PlanoContasConflictDecision(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), nullable=False)
     reason: Mapped[str] = mapped_column(String(500), nullable=False)
     decided_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
+
+
+class RazaoAccountAlias(Base):
+    """Código observado no Razão confirmado para um único snapshot da empresa."""
+
+    __tablename__ = "razao_account_aliases"
+    __table_args__ = (
+        UniqueConstraint(
+            "empresa_id", "snapshot_id", "observed_code",
+            name="uq_razao_alias_company_snapshot_code",
+        ),
+        ForeignKeyConstraint(
+            ["snapshot_id", "empresa_id"],
+            ["plano_contas_snapshots.id", "plano_contas_snapshots.empresa_id"],
+            name="fk_razao_alias_snapshot_company",
+        ),
+        ForeignKeyConstraint(
+            ["snapshot_id", "empresa_id", "target_codigo"],
+            [
+                "plano_contas_snapshot_entries.snapshot_id",
+                "plano_contas_snapshot_entries.empresa_id",
+                "plano_contas_snapshot_entries.codigo",
+            ],
+            name="fk_razao_alias_target_snapshot_entry",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), nullable=False)
+    snapshot_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    observed_code: Mapped[int] = mapped_column(Integer, nullable=False)
+    target_codigo: Mapped[int] = mapped_column(Integer, nullable=False)
+    review_item_id: Mapped[int] = mapped_column(ForeignKey("review_items.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), nullable=False)
+    reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    confirmed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
 
 
 class BackfillContasContabeisExecucao(Base):

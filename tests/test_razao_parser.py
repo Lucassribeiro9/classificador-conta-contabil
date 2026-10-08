@@ -457,6 +457,7 @@ def test_parse_razao_preserva_saldos_do_layout_dominio_sem_gerar_lancamento(tmp_
     assert result.lancamentos[0] == {
         "bloco_id": "bloco:1",
         "conta_origem": "10001",
+        "conta_origem_nome": "CAIXA",
         "data": "2024-01-31",
         "numero": None,
         "historico": "PAGTO.PRO-LABORE.REF.",

@@ -108,6 +108,7 @@ def _parse_razao_xlsx(
     try:
         sheet = workbook.active
         conta_origem: str | None = None
+        conta_origem_nome: str | None = None
         header_by_column: dict[str, int | None] | None = None
         lancamentos: list[dict[str, Any]] = []
         empresa_nome: str | None = None
@@ -136,6 +137,7 @@ def _parse_razao_xlsx(
             conta_bloco = _extract_account_block(row)
             if conta_bloco is not None:
                 conta_origem = conta_bloco
+                conta_origem_nome = _extract_account_block_name(row, conta_bloco)
                 bloco_numero += 1
                 bloco_id = f"bloco:{bloco_numero}"
                 saldo_anterior_atual = None
@@ -167,6 +169,8 @@ def _parse_razao_xlsx(
                 bloco_id,
             )
             if lancamento is not None:
+                if conta_origem_nome:
+                    lancamento["conta_origem_nome"] = conta_origem_nome
                 lancamentos.append(lancamento)
 
         metadata = _build_metadata(
@@ -262,6 +266,24 @@ def _extract_account_block(row: tuple[Any, ...]) -> str | None:
             if account:
                 return account.split()[0]
 
+    return None
+
+
+def _extract_account_block_name(row: tuple[Any, ...], code: str) -> str | None:
+    for index, value in enumerate(row):
+        text = _clean_text(value)
+        if not text or code not in text:
+            continue
+        rest = text.split(code, 1)[1].strip(" :-")
+        if rest:
+            return rest
+        candidates = [_clean_text(later) for later in row[index + 1 :]]
+        candidates = [
+            name for name in candidates
+            if name and not re.fullmatch(r"[\d.\s]+", name)
+        ]
+        if candidates:
+            return candidates[-1]
     return None
 
 
