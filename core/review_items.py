@@ -277,7 +277,8 @@ def reassign_review_item(
 
 
 def resolve_review_item(
-    session: Session, *, empresa_id: int, item_id: int, user_id: int
+    session: Session, *, empresa_id: int, item_id: int, user_id: int,
+    reason: str | None = None,
 ) -> ReviewItem:
     return _finish_review_item(
         session,
@@ -286,6 +287,7 @@ def resolve_review_item(
         user_id=user_id,
         status="resolved",
         event_type="resolved",
+        reason=reason,
     )
 
 

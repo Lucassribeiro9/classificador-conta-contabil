@@ -30,6 +30,7 @@ services:
       - technical-logs-api-hml:/app/data/logs
     environment:
       APP_ENV: hml
+      API_ROOT_PATH: /api
       DATABASE_URL: ${DATABASE_URL_HML:?Defina DATABASE_URL_HML no ambiente de homologacao}
       ADMIN_TOKEN: ${ADMIN_TOKEN_HML:?Defina ADMIN_TOKEN_HML no ambiente de homologacao}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY_HML:?Defina JWT_SECRET_KEY_HML no ambiente de homologacao}

@@ -632,6 +632,97 @@ class ContaContabilEmpresa(Base):
         return self.is_active and self.tipo == "A"
 
 
+class PlanoContasSnapshot(Base):
+    """Conteúdo imutável de uma versão do plano de uma empresa."""
+
+    __tablename__ = "plano_contas_snapshots"
+    __table_args__ = (
+        UniqueConstraint("empresa_id", "content_hash", name="uq_plano_snapshot_content"),
+        UniqueConstraint("id", "empresa_id", name="uq_plano_snapshot_id_company"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    content: Mapped[list] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
+
+
+class PlanoContasImportEvent(Base):
+    """Cada tentativa válida preserva sua origem e vigência, mesmo após deduplicação."""
+
+    __tablename__ = "plano_contas_import_events"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["snapshot_id", "empresa_id"],
+            ["plano_contas_snapshots.id", "plano_contas_snapshots.empresa_id"],
+            name="fk_plano_import_snapshot_company",
+        ),
+        Index("ix_plano_import_company_date", "empresa_id", "vigencia"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), nullable=False)
+    snapshot_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    vigencia: Mapped[date] = mapped_column(Date, nullable=False)
+    vigencia_inferida: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    origem: Mapped[str] = mapped_column(String(255), nullable=False)
+    imported_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
+
+
+class PlanoContasSnapshotEntry(Base):
+    """Atributos da conta nesta versão, ligados à identidade estável."""
+
+    __tablename__ = "plano_contas_snapshot_entries"
+    __table_args__ = (
+        UniqueConstraint("snapshot_id", "codigo", name="uq_plano_snapshot_entry_code"),
+        ForeignKeyConstraint(
+            ["snapshot_id", "empresa_id"],
+            ["plano_contas_snapshots.id", "plano_contas_snapshots.empresa_id"],
+            name="fk_plano_snapshot_entry_snapshot_company",
+        ),
+        ForeignKeyConstraint(
+            ["conta_contabil_empresa_id", "empresa_id"],
+            ["contas_contabeis_empresas.id", "contas_contabeis_empresas.empresa_id"],
+            name="fk_plano_snapshot_entry_identity_company",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    snapshot_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), nullable=False)
+    conta_contabil_empresa_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    codigo: Mapped[int] = mapped_column(Integer, nullable=False)
+    classificacao: Mapped[str] = mapped_column(String(80), nullable=False)
+    nome: Mapped[str] = mapped_column(String(255), nullable=False)
+    tipo: Mapped[str] = mapped_column(String(1), nullable=False)
+    grau: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class PlanoContasConflictDecision(Base):
+    """Seleção humana auditável para uma vigência com múltiplos snapshots."""
+
+    __tablename__ = "plano_contas_conflict_decisions"
+    __table_args__ = (
+        UniqueConstraint("empresa_id", "vigencia", "candidate_hash", name="uq_plano_conflict_decision_candidates"),
+        ForeignKeyConstraint(
+            ["selected_snapshot_id", "empresa_id"],
+            ["plano_contas_snapshots.id", "plano_contas_snapshots.empresa_id"],
+            name="fk_plano_decision_snapshot_company",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), nullable=False)
+    vigencia: Mapped[date] = mapped_column(Date, nullable=False)
+    candidate_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    review_item_id: Mapped[int] = mapped_column(ForeignKey("review_items.id"), nullable=False)
+    selected_snapshot_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), nullable=False)
+    reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    decided_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
+
+
 class BackfillContasContabeisExecucao(Base):
     """Auditable lifecycle for a legacy-to-company-account backfill run."""
 

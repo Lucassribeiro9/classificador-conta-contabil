@@ -1,5 +1,9 @@
 """Contratos documentais do OpenAPI exposto pela API."""
 
+import asyncio
+
+from starlette.requests import Request
+
 from api.main import app
 
 
@@ -47,6 +51,24 @@ def test_openapi_schema_is_generated_and_parseable():
     assert schema["info"]["title"] == "Classificador contábil"
     assert isinstance(schema["paths"], dict)
     assert schema["paths"]
+
+
+def test_hml_swagger_uses_public_api_prefix(monkeypatch):
+    original_schema = app.openapi_schema
+    monkeypatch.setattr(app, "root_path", "/api")
+    app.openapi_schema = None
+    try:
+        docs_route = next(route for route in app.routes if route.path == "/docs")
+        request = Request({"type": "http", "root_path": "/api", "path": "/docs", "headers": []})
+        docs = asyncio.run(docs_route.endpoint(request))
+        schema = app.openapi()
+
+        assert docs.status_code == 200
+        assert 'url: \'/api/openapi.json\'' in docs.body.decode()
+        assert schema["servers"] == [{"url": "/api"}]
+        assert "/api/v1/auth/login" in schema["paths"]
+    finally:
+        app.openapi_schema = original_schema
 
 
 def test_openapi_contains_main_route_groups_and_paths():

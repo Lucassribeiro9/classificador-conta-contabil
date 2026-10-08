@@ -52,6 +52,8 @@ def _response(item: ReviewItem, user: Usuario) -> ReviewItemResponse:
         actions.append("reassign")
     if rank >= 3 and item.status in {"resolved", "dismissed"}:
         actions.append("reopen")
+    if item.source_type == "snapshot_conflict":
+        actions = [action for action in actions if action not in {"resolve", "dismiss", "reopen"}]
     data = {
         name: getattr(item, name)
         for name in ReviewItemResponse.model_fields
@@ -247,6 +249,14 @@ def resolve_item(
     user: Usuario = Depends(get_current_user),
     db: Session = DB_DEPENDENCY,
 ) -> ReviewItemResponse:
+    item = db.query(ReviewItem).filter(
+        ReviewItem.id == item_id, ReviewItem.empresa_id == company_id
+    ).first()
+    if item is not None and item.source_type == "snapshot_conflict":
+        raise HTTPException(
+            status_code=409,
+            detail="Conflito de snapshot exige seleção e justificativa no fluxo do plano",
+        )
     return _transition_response(
         resolve_review_item,
         db=db,
@@ -266,6 +276,14 @@ def dismiss_item(
     user: Usuario = Depends(get_current_user),
     db: Session = DB_DEPENDENCY,
 ) -> ReviewItemResponse:
+    item = db.query(ReviewItem).filter(
+        ReviewItem.id == item_id, ReviewItem.empresa_id == company_id
+    ).first()
+    if item is not None and item.source_type == "snapshot_conflict":
+        raise HTTPException(
+            status_code=409,
+            detail="Conflito de snapshot exige seleção e justificativa no fluxo do plano",
+        )
     return _transition_response(
         dismiss_review_item,
         db=db,
@@ -286,6 +304,11 @@ def reopen_item(
     user: Usuario = Depends(get_current_user),
     db: Session = DB_DEPENDENCY,
 ) -> ReviewItemResponse:
+    item = db.query(ReviewItem).filter(
+        ReviewItem.id == item_id, ReviewItem.empresa_id == company_id
+    ).first()
+    if item is not None and item.source_type == "snapshot_conflict":
+        raise HTTPException(status_code=409, detail="Decisão de snapshot não pode ser reaberta")
     return _transition_response(
         reopen_review_item,
         db=db,

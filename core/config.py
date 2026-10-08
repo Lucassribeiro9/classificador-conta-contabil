@@ -4,6 +4,7 @@ from pydantic import Field
 
 # Carrega o token de admin a partir da variável de ambiente
 class Settings(BaseSettings):
+    API_ROOT_PATH: str = ""
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./data/classificador.db")
     ADMIN_TOKEN: str = os.getenv("ADMIN_TOKEN", "")
     JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "")
