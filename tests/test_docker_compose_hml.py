@@ -48,6 +48,7 @@ def test_hml_compose_uses_only_environment_scoped_runtime_variables():
     assert compose["name"] == "classificador-hml"
     assert compose["services"]["api"]["environment"] == {
         "APP_ENV": "hml",
+        "API_ROOT_PATH": "/api",
         "DATABASE_URL": (
             "${DATABASE_URL_HML:?Defina DATABASE_URL_HML no ambiente de homologacao}"
         ),

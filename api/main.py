@@ -50,7 +50,11 @@ async def lifespan(_app):
     yield
 
 
-app = FastAPI(title="Classificador contábil", lifespan=lifespan)
+app = FastAPI(
+    title="Classificador contábil",
+    lifespan=lifespan,
+    root_path=settings.API_ROOT_PATH,
+)
 app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(Exception, unexpected_exception_handler)
@@ -152,6 +156,7 @@ def custom_openapi():
         title=app.title,
         version="0.1.0",
         routes=app.routes,
+        servers=[{"url": app.root_path}] if app.root_path else None,
     )
     components = schema.setdefault("components", {}).setdefault("schemas", {})
     components["PublicErrorEnvelope"] = {
