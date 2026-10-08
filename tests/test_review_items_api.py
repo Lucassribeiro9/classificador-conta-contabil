@@ -1,11 +1,13 @@
 from datetime import datetime, timedelta, timezone
+from datetime import date
 
 import jwt
 import pytest
 
 from core.config import settings
-from core.models import AuditEvent, Empresa, ReviewItem, ReviewItemEvent, Usuario, UsuarioEmpresaPermissao
+from core.models import AuditEvent, Empresa, RazaoAccountAlias, ReviewItem, ReviewItemEvent, Usuario, UsuarioEmpresaPermissao
 from core.review_items import create_review_item
+from core.plano_contas_snapshots import importar_snapshot
 
 
 _seed_number = 9200
@@ -93,6 +95,76 @@ def _auth_headers(user):
         algorithm=settings.JWT_ALGORITHM,
     )
     return {"Authorization": f"Bearer {token}"}
+
+
+def test_alias_confirmation_requires_claim_and_company_snapshot_target(client):
+    from tests.conftest import TestingSessionLocal
+
+    user, empresa_id = _seed_user_company(permission="operacao")
+    with TestingSessionLocal() as session:
+        imported = importar_snapshot(
+            session, empresa_id=empresa_id,
+            contas=[{"codigo": 100, "classificacao": "1.1", "nome": "Banco", "tipo": "A", "grau": 2}],
+            vigencia=date(2026, 1, 1), origem="teste-api",
+        )
+        item = create_review_item(
+            session, empresa_id=empresa_id, source_type="razao_account_unknown",
+            grouping_key=f"{imported.snapshot.id}:200",
+            summary="Conta observada fora do snapshot", criticality="high",
+            evidence=[{"source_type": "razao_line", "source_id": "1:1", "summary": "Lote 1, linha 1"}],
+        )
+        item_id = item.id
+        snapshot_id = imported.snapshot.id
+        session.commit()
+
+    base = f"/api/v1/companies/{empresa_id}/review-items/{item_id}"
+    headers = _auth_headers(user)
+    payload = {"target_codigo": 100, "reason": "Equivalência conferida"}
+    assert client.post(f"{base}/confirm-razao-alias", headers=headers, json=payload).status_code == 409
+    assert client.post(f"{base}/claim", headers=headers).status_code == 200
+    assert client.post(
+        f"{base}/confirm-razao-alias", headers=headers,
+        json={"target_codigo": 999, "reason": "Conta inválida"},
+    ).status_code == 409
+    response = client.post(f"{base}/confirm-razao-alias", headers=headers, json=payload)
+    assert response.status_code == 200
+    assert response.json()["status"] == "resolved"
+    with TestingSessionLocal() as session:
+        alias = session.query(RazaoAccountAlias).one()
+        assert alias.empresa_id == empresa_id
+        assert alias.snapshot_id == snapshot_id
+        assert alias.observed_code == 200
+        assert alias.target_codigo == 100
+
+
+def test_razao_temporal_review_resolves_only_after_snapshot_becomes_applicable(client):
+    from tests.conftest import TestingSessionLocal
+
+    user, empresa_id = _seed_user_company(permission="operacao")
+    with TestingSessionLocal() as session:
+        item = create_review_item(
+            session, empresa_id=empresa_id, source_type="razao_snapshot_missing",
+            grouping_key="2026-01-02", summary="Plano sem snapshot aplicável",
+            criticality="critical",
+            evidence=[{"source_type": "razao_line", "source_id": "1:1", "summary": "Lote 1, linha 1"}],
+        )
+        item_id = item.id
+        session.commit()
+    base = f"/api/v1/companies/{empresa_id}/review-items/{item_id}"
+    headers = _auth_headers(user)
+    assert client.post(f"{base}/claim", headers=headers).status_code == 200
+    assert client.post(f"{base}/resolve", headers=headers).status_code == 409
+
+    with TestingSessionLocal() as session:
+        importar_snapshot(
+            session, empresa_id=empresa_id,
+            contas=[{"codigo": 100, "classificacao": "1.1", "nome": "Banco", "tipo": "A", "grau": 2}],
+            vigencia=date(2026, 1, 1), origem="teste-api",
+        )
+        session.commit()
+    response = client.post(f"{base}/resolve", headers=headers)
+    assert response.status_code == 200
+    assert response.json()["status"] == "resolved"
 
 
 def test_authorized_user_lists_only_company_review_items(client):
