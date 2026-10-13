@@ -229,6 +229,11 @@ class ReviewItemReasonRequest(BaseModel):
     reason: str = Field(min_length=1, max_length=500)
 
 
+class RazaoAliasConfirmationRequest(BaseModel):
+    target_codigo: int = Field(gt=0)
+    reason: str = Field(min_length=1, max_length=500)
+
+
 class ReviewAssigneeResponse(BaseModel):
     id: int
     nome: str

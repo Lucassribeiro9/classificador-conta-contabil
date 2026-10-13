@@ -168,6 +168,16 @@ export const reviewItemsClient = {
     transition("release", token, company, id),
   resolve: (token: string, company: string, id: number) =>
     transition("resolve", token, company, id),
+  confirmRazaoAlias: (
+    token: string,
+    company: string,
+    id: number,
+    targetCodigo: number,
+    reason: string,
+  ) => transition("confirm-razao-alias", token, company, id, {
+    target_codigo: targetCodigo,
+    reason,
+  }),
   dismiss: (token: string, company: string, id: number, reason: string) =>
     transition("dismiss", token, company, id, { reason }),
   reopen: (token: string, company: string, id: number, reason: string) =>

@@ -19,12 +19,14 @@ vi.mock("../../lib/api/reviewItemsClient", () => ({
     resolve: vi.fn(),
     dismiss: vi.fn(),
     reopen: vi.fn(),
+    confirmRazaoAlias: vi.fn(),
   },
 }));
 
 const listMock = vi.mocked(reviewItemsClient.list);
 const getMock = vi.mocked(reviewItemsClient.get);
 const claimMock = vi.mocked(reviewItemsClient.claim);
+const confirmRazaoAliasMock = vi.mocked(reviewItemsClient.confirmRazaoAlias);
 
 function renderPage(path = ROUTES.empresa.reviewItems("7")) {
   const queryClient = new QueryClient({
@@ -51,6 +53,7 @@ describe("ReviewItemsPage", () => {
     listMock.mockReset();
     getMock.mockReset();
     claimMock.mockReset();
+    confirmRazaoAliasMock.mockReset();
   });
 
   it("lists safe evidence and claims an item when the API allows it", async () => {
@@ -165,5 +168,40 @@ describe("ReviewItemsPage", () => {
 
     expect(await screen.findByText("Movimento operacional 91 enviado para revisão")).toBeInTheDocument();
     expect(getMock).toHaveBeenCalledWith("jwt", "7", 501);
+  });
+
+  it("confirma um alias do Razão com destino e justificativa", async () => {
+    listMock.mockResolvedValue({
+      items: [{
+        id: 23,
+        empresaId: 7,
+        sourceType: "razao_account_unknown",
+        groupingKey: "8:20001",
+        summary: "Possível alias 20001 para conta 10046 no snapshot 8",
+        criticality: "high",
+        status: "in_review",
+        assigneeId: 2,
+        assigneeName: "Contadora",
+        claimedAt: "2026-01-02T10:00:00",
+        createdAt: "2026-01-02T10:00:00",
+        updatedAt: "2026-01-02T10:00:00",
+        resolvedAt: null,
+        dismissedAt: null,
+        availableActions: ["confirm_razao_alias"],
+        evidences: [],
+      }],
+      total: 1, page: 1, limit: 100, hasNext: false,
+    });
+    confirmRazaoAliasMock.mockResolvedValue({} as never);
+
+    renderPage();
+    expect(await screen.findByText("Possível alias 20001 para conta 10046 no snapshot 8")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Confirmar alias"));
+    fireEvent.change(screen.getByLabelText("Código da conta de destino"), { target: { value: "10046" } });
+    fireEvent.change(screen.getByLabelText("Justificativa do alias"), { target: { value: "Equivalência conferida" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar alias" }));
+    await waitFor(() => {
+      expect(confirmRazaoAliasMock).toHaveBeenCalledWith("jwt", "7", 23, 10046, "Equivalência conferida");
+    });
   });
 });

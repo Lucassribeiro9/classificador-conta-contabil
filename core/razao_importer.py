@@ -1,7 +1,10 @@
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 import hashlib
+import re
+import unicodedata
 from pathlib import Path
 from typing import Any, BinaryIO, Callable
 
@@ -17,9 +20,16 @@ from core.models import (
     FechamentoRazaoMensal,
     LancamentoRazaoNormalizado,
     LoteImportacaoRazao,
+    PlanoContasSnapshotEntry,
+    PlanoContasImportEvent,
+    PlanoContasSnapshot,
+    RazaoAccountAlias,
+    ReviewItem,
     WarningImportacaoRazao,
 )
+from core.plano_contas_snapshots import SnapshotConflict, selecionar_snapshot
 from core.razao_catalog_validator import validate_lancamento_razao_contas
+from core.review_items import create_review_item
 from core.razao_parser import (
     normalize_lancamento_razao,
     normalize_razao_historico,
@@ -39,6 +49,15 @@ class ImportacaoRazaoResumo:
     warnings: list[dict[str, Any]]
     warnings_total: int = 0
     warnings_metadata: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True)
+class _SnapshotAccountContext:
+    snapshot_id: int
+    account_names: dict[int, str]
+    account_codes: set[int]
+    alias_codes: set[int]
+    name_candidates: dict[str, list[int]]
 
 
 class RazaoImportError(ValueError):
@@ -100,10 +119,29 @@ def import_razao(
 
     catalog_accounts = _preload_catalog_accounts(session, parsed_lancamentos)
     catalog_codes = set(catalog_accounts)
-    account_identities = _ensure_company_account_identities(
-        session, empresa_id, catalog_accounts
-    )
+    has_company_snapshots = session.scalar(
+        select(PlanoContasImportEvent.id)
+        .where(PlanoContasImportEvent.empresa_id == empresa_id)
+        .limit(1)
+    ) is not None
+    if has_company_snapshots:
+        account_identities = {
+            identity.codigo: identity
+            for identity in session.scalars(
+                select(ContaContabilEmpresa).where(
+                    ContaContabilEmpresa.empresa_id == empresa_id,
+                    ContaContabilEmpresa.codigo.in_(catalog_codes),
+                )
+            ).all()
+        }
+    else:
+        account_identities = _ensure_company_account_identities(
+            session, empresa_id, catalog_accounts
+        )
     account_links = _preload_account_links(session, empresa_id, catalog_codes)
+    snapshot_codes_by_date: dict[date, _SnapshotAccountContext | None | str] = {}
+    snapshot_context_by_id: dict[int, _SnapshotAccountContext] = {}
+    review_group_keys: dict[tuple[str, str], str] = {}
 
     for block_start in range(0, len(parsed_lancamentos), block_size):
         models: list[LancamentoRazaoNormalizado] = []
@@ -128,29 +166,146 @@ def import_razao(
                     )
                     continue
 
-                validation = validate_lancamento_razao_contas(
-                    session, normalized, existing_codes=catalog_codes
-                )
-                if not validation.is_valid:
-                    block_warnings.append(
-                        {
-                            "linha": index,
-                            "warnings": validation.warnings,
-                        }
+                movement_date = _parse_date(normalized["data"])
+                if movement_date not in snapshot_codes_by_date:
+                    try:
+                        snapshot = selecionar_snapshot(
+                            session, empresa_id=empresa_id, competencia=movement_date
+                        )
+                    except SnapshotConflict:
+                        snapshot_codes_by_date[movement_date] = "conflict"
+                    else:
+                        if snapshot is None:
+                            snapshot_codes_by_date[movement_date] = None
+                        else:
+                            if snapshot.id not in snapshot_context_by_id:
+                                snapshot_context_by_id[snapshot.id] = _load_snapshot_account_context(
+                                    session, empresa_id, snapshot
+                                )
+                            snapshot_codes_by_date[movement_date] = snapshot_context_by_id[snapshot.id]
+                snapshot_context = snapshot_codes_by_date[movement_date]
+                if snapshot_context == "conflict":
+                    _create_razao_review_item(
+                        session,
+                        review_group_keys,
+                        empresa_id=empresa_id,
+                        source_type="razao_snapshot_conflict",
+                        grouping_key=movement_date.isoformat(),
+                        summary=f"Vigência do plano indefinida em {movement_date.isoformat()}",
+                        criticality="critical",
+                        evidence=[{
+                            "source_type": "razao_line",
+                            "source_id": f"{lote.id}:{index}",
+                            "summary": f"Lote {lote.id}, linha {index}",
+                        }],
                     )
-                    continue
+                elif snapshot_context is None and has_company_snapshots:
+                    _create_razao_review_item(
+                        session,
+                        review_group_keys,
+                        empresa_id=empresa_id,
+                        source_type="razao_snapshot_missing",
+                        grouping_key=movement_date.isoformat(),
+                        summary=f"Plano sem snapshot aplicável em {movement_date.isoformat()}",
+                        criticality="critical",
+                        evidence=[{
+                            "source_type": "razao_line",
+                            "source_id": f"{lote.id}:{index}",
+                            "summary": f"Lote {lote.id}, linha {index}",
+                        }],
+                    )
+                elif snapshot_context is None:
+                    validation = validate_lancamento_razao_contas(
+                        session, normalized, existing_codes=catalog_codes
+                    )
+                    if not validation.is_valid:
+                        block_warnings.append(
+                            {
+                                "linha": index,
+                                "warnings": validation.warnings,
+                            }
+                        )
+                        continue
+                else:
+                    snapshot_id = snapshot_context.snapshot_id
+                    snapshot_accounts = snapshot_context.account_names
+                    origin_code = int(normalized["conta_origem"])
+                    observed_name = parsed.get("conta_origem_nome")
+                    observed_normalized = (
+                        _normalize_account_name(observed_name) if observed_name else None
+                    )
+                    candidates = (
+                        snapshot_context.name_candidates.get(observed_normalized, [])
+                        if observed_normalized else []
+                    )
+                    for code in {int(normalized["conta_origem"]), int(normalized["conta_contrapartida"])} - snapshot_context.account_codes - snapshot_context.alias_codes:
+                        probable_alias = code == origin_code and len(candidates) == 1
+                        _create_razao_review_item(
+                            session,
+                            review_group_keys,
+                            empresa_id=empresa_id,
+                            source_type="razao_account_unknown",
+                            grouping_key=f"{snapshot_id}:{code}",
+                            summary=(
+                                f"Possível alias {code} para conta {candidates[0]} no snapshot {snapshot_id}"
+                                if probable_alias else f"Conta {code} ausente no snapshot {snapshot_id}"
+                            ),
+                            criticality="high",
+                            evidence=[{
+                                "source_type": "razao_line",
+                                "source_id": f"{lote.id}:{index}",
+                                "summary": (
+                                    f"Lote {lote.id}, linha {index}: "
+                                    f"'{_safe_account_name(observed_name)}' e "
+                                    f"'{_safe_account_name(snapshot_accounts[candidates[0]])}'"
+                                    if probable_alias else f"Lote {lote.id}, linha {index}"
+                                ),
+                            }],
+                        )
+                    if origin_code in snapshot_accounts and observed_normalized and (
+                        observed_normalized
+                        != _normalize_account_name(snapshot_accounts[origin_code])
+                    ):
+                        name_hash = hashlib.sha256(
+                            observed_normalized.encode("utf-8")
+                        ).hexdigest()[:16]
+                        _create_razao_review_item(
+                            session,
+                            review_group_keys,
+                            empresa_id=empresa_id,
+                            source_type="razao_semantic_divergence",
+                            grouping_key=f"{snapshot_id}:{origin_code}:{name_hash}",
+                            summary=f"Descrição da conta {origin_code} diverge do snapshot {snapshot_id}",
+                            criticality="critical",
+                            evidence=[{
+                                "source_type": "razao_line",
+                                "source_id": f"{lote.id}:{index}",
+                                "summary": (
+                                    f"Lote {lote.id}, linha {index}: "
+                                    f"'{_safe_account_name(observed_name)}' diverge de "
+                                    f"'{_safe_account_name(snapshot_accounts[origin_code])}'"
+                                ),
+                            }],
+                        )
 
                 normalized["historico_normalizado"] = normalize_razao_historico(
                     normalized["historico"]
                 )
                 models.append(_to_model(lote.id, empresa_id, normalized))
-                _update_account_links(
-                    account_links,
-                    account_identities,
-                    session,
-                    empresa_id,
-                    normalized,
+                line_codes = {int(normalized["conta_origem"]), int(normalized["conta_contrapartida"])}
+                linkable_codes = (
+                    snapshot_context.account_codes
+                    if isinstance(snapshot_context, _SnapshotAccountContext)
+                    else catalog_codes if not has_company_snapshots else set()
                 )
+                if line_codes <= linkable_codes and line_codes <= set(account_identities):
+                    _update_account_links(
+                        account_links,
+                        account_identities,
+                        session,
+                        empresa_id,
+                        normalized,
+                    )
                 _update_fechamento_mensal(
                     session,
                     fechamentos,
@@ -527,6 +682,83 @@ def _signed_balance(valor: Decimal, natureza: str | None) -> Decimal:
     if natureza == "C":
         return -abs(valor)
     return abs(valor)
+
+
+def _normalize_account_name(value: str) -> str:
+    text = unicodedata.normalize("NFKD", value.casefold())
+    text = "".join(char for char in text if not unicodedata.combining(char))
+    words = re.findall(r"[a-z0-9]+", text)
+    return " ".join("banco" if word == "bco" else word for word in words)
+
+
+def _safe_account_name(value: str) -> str:
+    return " ".join("".join(char for char in value if char.isprintable()).split())[:120]
+
+
+def _create_razao_review_item(
+    session: Session,
+    group_cache: dict[tuple[str, str], str],
+    *,
+    empresa_id: int,
+    source_type: str,
+    grouping_key: str,
+    summary: str,
+    criticality: str,
+    evidence: list[dict[str, str]],
+) -> ReviewItem:
+    cache_key = (source_type, grouping_key)
+    key = group_cache.get(cache_key)
+    if key is None:
+        key = grouping_key
+        while True:
+            previous = session.scalar(
+                select(ReviewItem).where(
+                    ReviewItem.empresa_id == empresa_id,
+                    ReviewItem.source_type == source_type,
+                    ReviewItem.grouping_key == key,
+                ).with_for_update()
+            )
+            if previous is None or previous.status in {"pending", "in_review"}:
+                break
+            key = f"{grouping_key}:after:{previous.id}"
+        group_cache[cache_key] = key
+    return create_review_item(
+        session,
+        empresa_id=empresa_id,
+        source_type=source_type,
+        grouping_key=key,
+        summary=summary,
+        criticality=criticality,
+        evidence=evidence,
+    )
+
+
+def _load_snapshot_account_context(
+    session: Session, empresa_id: int, snapshot: PlanoContasSnapshot
+) -> _SnapshotAccountContext:
+    entries = session.scalars(
+        select(PlanoContasSnapshotEntry).where(
+            PlanoContasSnapshotEntry.snapshot_id == snapshot.id,
+            PlanoContasSnapshotEntry.empresa_id == empresa_id,
+        )
+    ).all()
+    account_names = {entry.codigo: entry.nome for entry in entries}
+    candidates: dict[str, list[int]] = defaultdict(list)
+    for code, name in account_names.items():
+        candidates[_normalize_account_name(name)].append(code)
+    alias_codes = set(session.scalars(
+        select(RazaoAccountAlias.observed_code).where(
+            RazaoAccountAlias.snapshot_id == snapshot.id,
+            RazaoAccountAlias.empresa_id == empresa_id,
+        )
+    ).all())
+    return _SnapshotAccountContext(
+        snapshot_id=snapshot.id,
+        account_names=account_names,
+        account_codes=set(account_names),
+        alias_codes=alias_codes,
+        name_candidates=dict(candidates),
+    )
 
 
 def _preload_catalog_accounts(

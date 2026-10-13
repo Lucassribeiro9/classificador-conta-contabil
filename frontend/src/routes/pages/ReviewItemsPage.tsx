@@ -46,6 +46,7 @@ export function ReviewItemsPage() {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState("open");
   const [reasons, setReasons] = useState<Record<number, string>>({});
+  const [aliasTargets, setAliasTargets] = useState<Record<number, string>>({});
   const [assignees, setAssignees] = useState<Record<number, number | undefined>>(
     {},
   );
@@ -79,11 +80,13 @@ export function ReviewItemsPage() {
       item,
       reason,
       assigneeId,
+      targetCodigo,
     }: {
       name: string;
       item: ReviewItem;
       reason?: string;
       assigneeId?: number;
+      targetCodigo?: number;
     }) => {
       if (name === "claim") {
         return reviewItemsClient.claim(accessToken, empresaId, item.id);
@@ -93,6 +96,15 @@ export function ReviewItemsPage() {
       }
       if (name === "resolve") {
         return reviewItemsClient.resolve(accessToken, empresaId, item.id);
+      }
+      if (name === "confirm_razao_alias" && targetCodigo) {
+        return reviewItemsClient.confirmRazaoAlias(
+          accessToken,
+          empresaId,
+          item.id,
+          targetCodigo,
+          reason ?? "",
+        );
       }
       if (name === "dismiss") {
         return reviewItemsClient.dismiss(
@@ -124,6 +136,7 @@ export function ReviewItemsPage() {
     onSuccess: (_result, variables) => {
       setSuccess(`Ação ${variables.name} concluída.`);
       setReasons((current) => ({ ...current, [variables.item.id]: "" }));
+      setAliasTargets((current) => ({ ...current, [variables.item.id]: "" }));
       void queryClient.invalidateQueries({
         queryKey: ["empresas", empresaId, "review-items"],
       });
@@ -333,6 +346,22 @@ export function ReviewItemsPage() {
                   <button className="border border-emerald-700 px-3 py-2 text-sm font-semibold text-emerald-800" onClick={() => action.mutate({ name: "resolve", item })} type="button">
                     Resolver
                   </button>
+                ) : null}
+                {item.availableActions.includes("confirm_razao_alias") ? (
+                  <details className="text-sm">
+                    <summary className="cursor-pointer border border-emerald-700 px-3 py-2 font-semibold text-emerald-800">Confirmar alias</summary>
+                    <form className="mt-2 flex flex-wrap gap-2" onSubmit={(event) => {
+                      event.preventDefault();
+                      const targetCodigo = Number(aliasTargets[item.id]);
+                      if (Number.isSafeInteger(targetCodigo) && targetCodigo > 0) {
+                        action.mutate({ name: "confirm_razao_alias", item, targetCodigo, reason: reasons[item.id] });
+                      }
+                    }}>
+                      <input aria-label="Código da conta de destino" className="border border-slate-300 px-3 py-2" min={1} onChange={(event) => setAliasTargets((current) => ({ ...current, [item.id]: event.target.value }))} required type="number" value={aliasTargets[item.id] ?? ""} />
+                      <input aria-label="Justificativa do alias" className="border border-slate-300 px-3 py-2" maxLength={500} onChange={(event) => setReasons((current) => ({ ...current, [item.id]: event.target.value }))} required value={reasons[item.id] ?? ""} />
+                      <button className="bg-emerald-800 px-3 py-2 font-semibold text-white" disabled={action.isPending} type="submit">Salvar alias</button>
+                    </form>
+                  </details>
                 ) : null}
                 {item.availableActions.includes("dismiss") ? (
                   <details className="text-sm">

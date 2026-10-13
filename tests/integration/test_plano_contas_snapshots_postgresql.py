@@ -98,7 +98,19 @@ def test_concurrent_imports_create_review_and_history_is_immutable():
                         ),
                         {"hash": "0" * 64, "id": ids[0]},
                     )
-        with pytest.raises(RuntimeError, match="Snapshot history exists"):
+        with engine.connect() as connection:
+            aliases_exist = connection.execute(
+                text("SELECT EXISTS (SELECT 1 FROM razao_account_aliases)")
+            ).scalar_one()
+        if aliases_exist:
+            with pytest.raises(RuntimeError, match="Confirmed aliases exist"):
+                command.downgrade(config, "-1")
+        else:
             command.downgrade(config, "-1")
+            try:
+                with pytest.raises(RuntimeError, match="Snapshot history exists"):
+                    command.downgrade(config, "-1")
+            finally:
+                command.upgrade(config, "head")
     finally:
         engine.dispose()

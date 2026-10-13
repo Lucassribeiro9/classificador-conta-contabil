@@ -20,6 +20,10 @@ from core.models import (
     Usuario,
 )
 from core.razao_importer import RazaoImportError, import_razao
+from core.plano_contas_snapshots import importar_snapshot
+from core.models import ReviewItem
+from core.review_items import claim_review_item, dismiss_review_item
+from core.razao_aliases import confirmar_alias_razao
 
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -141,6 +145,305 @@ def test_import_razao_persists_valid_lines_and_completes_lote(session, tmp_path)
     assert lancamento.historico == "Pagamento fornecedor"
     assert lancamento.historico_normalizado == "pagamento fornecedor"
     assert lancamento.valor == Decimal("250.75")
+
+
+def test_import_razao_persists_unknown_snapshot_account_for_review(session, tmp_path):
+    empresa = _empresa()
+    usuario = _usuario()
+    session.add_all([empresa, usuario, _conta(10046), _conta(20001)])
+    session.flush()
+    importar_snapshot(
+        session,
+        empresa_id=empresa.id,
+        contas=[{"codigo": 10046, "classificacao": "1.1", "nome": "Banco", "tipo": "A", "grau": 2}],
+        vigencia=date(2026, 1, 1),
+        origem="teste",
+    )
+    xlsx_path = tmp_path / "razao-conta-ausente.xlsx"
+    _write_workbook(xlsx_path, [
+        ["Conta:", "10046", "Banco"],
+        ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito"],
+        ["2026-01-02", "42", "Pagamento", "20001", 250.75, None],
+    ])
+
+    result = import_razao(
+        session, xlsx_path, empresa_id=empresa.id, usuario_id=usuario.id,
+        original_filename="razao-conta-ausente.xlsx",
+    )
+
+    assert result.total_importadas == 1
+    assert result.total_invalidas == 0
+    assert session.query(LancamentoRazaoNormalizado).count() == 1
+    item = session.query(ReviewItem).filter_by(source_type="razao_account_unknown").one()
+    assert item.empresa_id == empresa.id
+    assert len(item.evidences) == 1
+    assert session.query(ContaContabilEmpresa).filter_by(
+        empresa_id=empresa.id, codigo=20001
+    ).count() == 0
+
+
+def test_import_razao_uses_company_snapshot_without_global_catalog(session, tmp_path):
+    empresa = _empresa()
+    usuario = _usuario()
+    session.add_all([empresa, usuario])
+    session.flush()
+    importar_snapshot(
+        session, empresa_id=empresa.id,
+        contas=[
+            {"codigo": 10046, "classificacao": "1.1", "nome": "Banco", "tipo": "A", "grau": 2},
+            {"codigo": 20001, "classificacao": "2.1", "nome": "Fornecedor", "tipo": "A", "grau": 2},
+        ],
+        vigencia=date(2026, 1, 1), origem="teste",
+    )
+    xlsx_path = tmp_path / "razao-snapshot-sem-legado.xlsx"
+    _write_workbook(xlsx_path, [
+        ["Conta:", "10046", "Banco"],
+        ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito"],
+        ["2026-01-02", "42", "Pagamento", "20001", 250.75, None],
+    ])
+
+    result = import_razao(
+        session, xlsx_path, empresa_id=empresa.id, usuario_id=usuario.id,
+        original_filename="razao-snapshot-sem-legado.xlsx",
+    )
+
+    assert result.total_importadas == 1
+    assert result.total_invalidas == 0
+    assert session.query(LancamentoRazaoNormalizado).count() == 1
+    assert session.query(ReviewItem).count() == 0
+
+
+def test_import_razao_groups_unknown_account_evidence(session, tmp_path):
+    empresa = _empresa()
+    usuario = _usuario()
+    session.add_all([empresa, usuario])
+    session.flush()
+    importar_snapshot(
+        session, empresa_id=empresa.id,
+        contas=[{"codigo": 10046, "classificacao": "1.1", "nome": "Banco", "tipo": "A", "grau": 2}],
+        vigencia=date(2026, 1, 1), origem="teste",
+    )
+    xlsx_path = tmp_path / "razao-duas-linhas.xlsx"
+    _write_workbook(xlsx_path, [
+        ["Conta:", "10046", "Banco"],
+        ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito"],
+        ["2026-01-02", "42", "Pagamento A", "20001", 250.75, None],
+        ["2026-01-03", "43", "Pagamento B", "20001", 120.00, None],
+    ])
+
+    result = import_razao(
+        session, xlsx_path, empresa_id=empresa.id, usuario_id=usuario.id,
+        original_filename="razao-duas-linhas.xlsx",
+    )
+
+    assert result.total_importadas == 2
+    assert result.total_invalidas == 0
+    item = session.query(ReviewItem).filter_by(source_type="razao_account_unknown").one()
+    assert len(item.evidences) == 2
+
+
+def test_import_razao_preserves_line_when_snapshot_vigencia_conflicts(session, tmp_path):
+    empresa = _empresa()
+    usuario = _usuario()
+    session.add_all([empresa, usuario])
+    session.flush()
+    base = {"codigo": 10046, "classificacao": "1.1", "nome": "Banco", "tipo": "A", "grau": 2}
+    importar_snapshot(session, empresa_id=empresa.id, contas=[base], vigencia=date(2026, 1, 1), origem="a")
+    importar_snapshot(session, empresa_id=empresa.id, contas=[dict(base, nome="Caixa")], vigencia=date(2026, 1, 1), origem="b")
+    xlsx_path = tmp_path / "razao-vigencia-conflitante.xlsx"
+    _write_workbook(xlsx_path, [
+        ["Conta:", "10046", "Banco"],
+        ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito"],
+        ["2026-01-02", "42", "Pagamento", "20001", 250.75, None],
+    ])
+
+    result = import_razao(
+        session, xlsx_path, empresa_id=empresa.id, usuario_id=usuario.id,
+        original_filename="razao-vigencia-conflitante.xlsx",
+    )
+
+    assert result.total_importadas == 1
+    assert session.query(LancamentoRazaoNormalizado).count() == 1
+    assert session.query(ReviewItem).filter_by(source_type="razao_snapshot_conflict").count() == 1
+
+
+def test_confirmed_alias_applies_only_to_its_snapshot_without_rewriting_lote(session, tmp_path):
+    empresa = _empresa()
+    usuario = _usuario()
+    session.add_all([empresa, usuario])
+    session.flush()
+    importar_snapshot(
+        session, empresa_id=empresa.id,
+        contas=[{"codigo": 10046, "classificacao": "1.1", "nome": "Banco", "tipo": "A", "grau": 2}],
+        vigencia=date(2026, 1, 1), origem="teste",
+    )
+
+    def import_file(number: str, movement_date: str = "2026-01-02"):
+        path = tmp_path / f"razao-{number}.xlsx"
+        _write_workbook(path, [
+            ["Conta:", "10046", "Banco"],
+            ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito"],
+            [movement_date, number, "Pagamento", "20001", 250.75, None],
+        ])
+        return import_razao(
+            session, path, empresa_id=empresa.id, usuario_id=usuario.id,
+            original_filename=path.name,
+        )
+
+    first = import_file("42")
+    item = session.query(ReviewItem).filter_by(source_type="razao_account_unknown").one()
+    claim_review_item(session, empresa_id=empresa.id, item_id=item.id, user_id=usuario.id)
+    confirmar_alias_razao(
+        session, empresa_id=empresa.id, item_id=item.id,
+        target_codigo=10046, user_id=usuario.id, reason="Equivalência conferida",
+    )
+    first_status = session.get(LoteImportacaoRazao, first.lote_id).status
+
+    second = import_file("43")
+
+    assert second.total_importadas == 1
+    assert len(item.evidences) == 1
+    assert item.status == "resolved"
+    assert session.get(LoteImportacaoRazao, first.lote_id).status == first_status
+
+    importar_snapshot(
+        session, empresa_id=empresa.id,
+        contas=[
+            {"codigo": 10046, "classificacao": "1.1", "nome": "Banco", "tipo": "A", "grau": 2},
+            {"codigo": 30001, "classificacao": "3.1", "nome": "Despesa", "tipo": "A", "grau": 2},
+        ],
+        vigencia=date(2026, 2, 1), origem="plano-novo",
+    )
+    import_file("44", "2026-02-02")
+    assert session.query(ReviewItem).filter_by(source_type="razao_account_unknown").count() == 2
+
+
+def test_semantic_divergence_in_razao_block_groups_critical_evidence(session, tmp_path):
+    empresa = _empresa()
+    usuario = _usuario()
+    session.add_all([empresa, usuario])
+    session.flush()
+    importar_snapshot(
+        session, empresa_id=empresa.id,
+        contas=[
+            {"codigo": 10046, "classificacao": "1.1", "nome": "Banco", "tipo": "A", "grau": 2},
+            {"codigo": 20001, "classificacao": "2.1", "nome": "Fornecedor", "tipo": "A", "grau": 2},
+        ],
+        vigencia=date(2026, 1, 1), origem="teste",
+    )
+    xlsx_path = tmp_path / "razao-divergente.xlsx"
+    _write_workbook(xlsx_path, [
+        ["Conta:", "10046", "Caixa"],
+        ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito"],
+        ["2026-01-02", "42", "Pagamento A", "20001", 250.75, None],
+        ["2026-01-03", "43", "Pagamento B", "20001", 120.00, None],
+    ])
+
+    result = import_razao(
+        session, xlsx_path, empresa_id=empresa.id, usuario_id=usuario.id,
+        original_filename="razao-divergente.xlsx",
+    )
+
+    assert result.total_importadas == 2
+    item = session.query(ReviewItem).filter_by(source_type="razao_semantic_divergence").one()
+    assert item.criticality == "critical"
+    assert len(item.evidences) == 2
+    assert "Caixa" in item.evidences[0].summary
+    assert "Banco" in item.evidences[0].summary
+
+
+def test_razao_suggests_alias_from_unique_name_without_auto_approving(session, tmp_path):
+    empresa = _empresa()
+    usuario = _usuario()
+    session.add_all([empresa, usuario])
+    session.flush()
+    importar_snapshot(
+        session, empresa_id=empresa.id,
+        contas=[{"codigo": 10046, "classificacao": "1.1", "nome": "Banco Santander", "tipo": "A", "grau": 2}],
+        vigencia=date(2026, 1, 1), origem="teste",
+    )
+    xlsx_path = tmp_path / "razao-alias-provavel.xlsx"
+    _write_workbook(xlsx_path, [
+        ["Conta:", "20001", "BCO. SANTANDER"],
+        ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito"],
+        ["2026-01-02", "42", "Pagamento", "10046", 250.75, None],
+    ])
+
+    result = import_razao(
+        session, xlsx_path, empresa_id=empresa.id, usuario_id=usuario.id,
+        original_filename="razao-alias-provavel.xlsx",
+    )
+
+    assert result.total_importadas == 1
+    item = session.query(ReviewItem).filter_by(source_type="razao_account_unknown").one()
+    assert "10046" in item.summary
+    assert item.status == "pending"
+    assert "BCO. SANTANDER" in item.evidences[0].summary
+
+
+def test_razao_before_first_company_snapshot_creates_temporal_review(session, tmp_path):
+    empresa = _empresa()
+    usuario = _usuario()
+    session.add_all([empresa, usuario])
+    session.flush()
+    importar_snapshot(
+        session, empresa_id=empresa.id,
+        contas=[{"codigo": 10046, "classificacao": "1.1", "nome": "Banco", "tipo": "A", "grau": 2}],
+        vigencia=date(2026, 2, 1), origem="teste",
+    )
+    xlsx_path = tmp_path / "razao-antes-vigencia.xlsx"
+    _write_workbook(xlsx_path, [
+        ["Conta:", "10046", "Banco"],
+        ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito"],
+        ["2026-01-02", "42", "Pagamento", "20001", 250.75, None],
+    ])
+
+    result = import_razao(
+        session, xlsx_path, empresa_id=empresa.id, usuario_id=usuario.id,
+        original_filename="razao-antes-vigencia.xlsx",
+    )
+
+    assert result.total_importadas == 1
+    assert result.total_invalidas == 0
+    assert session.query(ReviewItem).filter_by(source_type="razao_snapshot_missing").count() == 1
+
+
+def test_dismissed_razao_account_is_reviewed_again_in_later_lote(session, tmp_path):
+    empresa = _empresa()
+    usuario = _usuario()
+    session.add_all([empresa, usuario])
+    session.flush()
+    importar_snapshot(
+        session, empresa_id=empresa.id,
+        contas=[{"codigo": 10046, "classificacao": "1.1", "nome": "Banco", "tipo": "A", "grau": 2}],
+        vigencia=date(2026, 1, 1), origem="teste",
+    )
+
+    def import_file(number: str):
+        path = tmp_path / f"razao-{number}.xlsx"
+        _write_workbook(path, [
+            ["Conta:", "10046", "Banco"],
+            ["Data", "Numero", "Historico", "Contrapartida", "Debito", "Credito"],
+            ["2026-01-02", number, "Pagamento", "20001", 250.75, None],
+        ])
+        return import_razao(
+            session, path, empresa_id=empresa.id, usuario_id=usuario.id,
+            original_filename=path.name,
+        )
+
+    import_file("42")
+    first = session.query(ReviewItem).filter_by(source_type="razao_account_unknown").one()
+    claim_review_item(session, empresa_id=empresa.id, item_id=first.id, user_id=usuario.id)
+    dismiss_review_item(
+        session, empresa_id=empresa.id, item_id=first.id,
+        user_id=usuario.id, reason="Equivalência não confirmada",
+    )
+    import_file("43")
+
+    items = session.query(ReviewItem).filter_by(source_type="razao_account_unknown").order_by(ReviewItem.id).all()
+    assert len(items) == 2
+    assert [item.status for item in items] == ["dismissed", "pending"]
+    assert [len(item.evidences) for item in items] == [1, 1]
 
 
 def test_import_razao_persiste_saldos_normalizados_do_parser(session, tmp_path):
