@@ -62,6 +62,7 @@ const getMovimentoMock = vi.mocked(revisarMovimentoClient.getMovimento);
 const movimentos: MovimentoOperacional[] = [
   {
     id: 91,
+    reviewItemId: null,
     loteId: 15,
     empresaId: 7,
     data: "2026-01-03",
@@ -80,6 +81,7 @@ const movimentos: MovimentoOperacional[] = [
   },
   {
     id: 92,
+    reviewItemId: 503,
     loteId: 15,
     empresaId: 7,
     data: "2026-01-04",
@@ -98,6 +100,7 @@ const movimentos: MovimentoOperacional[] = [
   },
   {
     id: 93,
+    reviewItemId: null,
     loteId: 15,
     empresaId: 7,
     data: "2026-01-05",
@@ -182,6 +185,9 @@ describe("LoteMovimentosPage", () => {
     expect(
       screen.getByText("transferencia sem contrapartida"),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Abrir pendência 503" }),
+    ).toHaveAttribute("href", "/empresas/7/revisoes?itemId=503");
     expect(listMovimentosMock).toHaveBeenCalledWith(
       "jwt-de-teste",
       "7",

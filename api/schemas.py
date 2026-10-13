@@ -654,6 +654,7 @@ class MovimentoOperacionalReviewRequest(BaseModel):
 
 class MovimentoOperacionalResponse(BaseModel):
     id: int
+    review_item_id: Optional[int] = None
     lote_id: int
     empresa_id: int
     data: date
