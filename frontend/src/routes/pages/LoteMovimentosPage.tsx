@@ -406,16 +406,26 @@ export function LoteMovimentosPage() {
                     {contaParaAprovar(movimento) ?? "Sem conta"}
                   </td>
                   <td className="whitespace-nowrap px-3 py-3">
-                    <Link
-                      className="text-sm font-semibold text-brand-dark underline-offset-4 hover:underline"
-                      to={ROUTES.empresa.revisarMovimento(
-                        empresaId ?? "",
-                        String(movimento.id),
-                        loteId,
-                      )}
-                    >
-                      Abrir revisao
-                    </Link>
+                    <div className="flex flex-col items-start gap-1">
+                      <Link
+                        className="text-sm font-semibold text-brand-dark underline-offset-4 hover:underline"
+                        to={ROUTES.empresa.revisarMovimento(
+                          empresaId ?? "",
+                          String(movimento.id),
+                          loteId,
+                        )}
+                      >
+                        Abrir revisao
+                      </Link>
+                      {movimento.reviewItemId && empresaId ? (
+                        <Link
+                          className="text-xs font-semibold text-brand-dark underline"
+                          to={`${ROUTES.empresa.reviewItems(empresaId)}?itemId=${movimento.reviewItemId}`}
+                        >
+                          Abrir pendência {movimento.reviewItemId}
+                        </Link>
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               ))}

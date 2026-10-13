@@ -22,6 +22,7 @@ from core.models import (
     Usuario,
     UsuarioEmpresaPermissao,
 )
+from core.plano_contas_snapshots import importar_snapshot
 
 
 password_hash = PasswordHash.recommended()
@@ -915,6 +916,7 @@ def test_user_lists_operational_movements_by_lote_and_status_without_raw_payload
     assert response.json()["items"] == [
         {
             "id": response.json()["items"][0]["id"],
+            "review_item_id": None,
             "lote_id": lote_id,
             "empresa_id": empresa_id,
             "data": "2026-01-03",
@@ -948,6 +950,53 @@ def test_user_lists_operational_movements_by_lote_and_status_without_raw_payload
     assert "observacao" not in item
     assert "DOC-SENSIVEL-002" not in str(response.json())
     assert "saldo digitado manualmente" not in str(response.json())
+
+
+def test_operational_movement_lists_temporal_review_item_link(client):
+    from tests.conftest import TestingSessionLocal
+
+    usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(
+        permissao="leitura",
+        movimentos=[
+            {
+                "data": date(2026, 1, 3),
+                "conta_financeira": 10046,
+                "historico": "Histórico sensível",
+                "historico_normalizado": "movimento sintético",
+                "valor_original": -100,
+                "valor_absoluto": 100,
+                "direcao": "credito",
+                "tipo_movimento": "saida",
+                "status": "revisao",
+                "mensagens_validacao": ["Snapshot ausente."],
+            }
+        ],
+    )
+    with TestingSessionLocal() as db:
+        movimento = (
+            db.query(MovimentoOperacionalImportado)
+            .filter_by(lote_id=lote_id)
+            .one()
+        )
+        item = ReviewItem(
+            empresa_id=empresa_id,
+            source_type="movimento_operacional_temporal",
+            grouping_key=f"movimento:{movimento.id}",
+            summary="Movimento sem snapshot temporal.",
+            criticality="high",
+        )
+        db.add(item)
+        db.commit()
+        item_id = item.id
+
+    response = client.get(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/{lote_id}/movimentos",
+        headers=_auth_headers(usuario),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["items"][0]["review_item_id"] == item_id
+    assert "Histórico sensível" not in str(response.json())
 
 
 def test_user_without_company_access_cannot_list_operational_lotes(client):
@@ -1054,6 +1103,24 @@ def test_classificar_movimentos_returns_controlled_error_when_model_is_missing(
             },
         ],
     )
+    with TestingSessionLocal() as session:
+        importar_snapshot(
+            session,
+            empresa_id=empresa_id,
+            contas=[
+                {
+                    "codigo": codigo,
+                    "classificacao": f"1.{index}",
+                    "nome": f"Conta {codigo}",
+                    "tipo": "A",
+                    "grau": 2,
+                }
+                for index, codigo in enumerate((10046, 20001), start=1)
+            ],
+            vigencia=date(2026, 1, 1),
+            origem="snapshot-teste-modelo-ausente",
+        )
+        session.commit()
     monkeypatch.setattr(settings, "MODEL_DIR", str(tmp_path))
 
     response = client.post(
@@ -1065,7 +1132,11 @@ def test_classificar_movimentos_returns_controlled_error_when_model_is_missing(
     assert response.json()["message"] == "Modelo treinado não encontrado para a empresa"
 
     with TestingSessionLocal() as session:
-        event = session.query(AuditEvent).one()
+        event = (
+            session.query(AuditEvent)
+            .filter(AuditEvent.event_type == "operational_movements.classification_failed")
+            .one()
+        )
 
     assert event.event_type == "operational_movements.classification_failed"
     assert event.user_id == usuario.id
