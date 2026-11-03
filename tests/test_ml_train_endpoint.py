@@ -6,9 +6,11 @@ import pytest
 from pwdlib import PasswordHash
 
 from core.config import settings
+from core.plano_contas_snapshots import importar_snapshot
 from core.models import (
     AuditEvent,
     ContaContabil,
+    ContaContabilEmpresa,
     Empresa,
     LancamentoRazaoNormalizado,
     LoteImportacaoRazao,
@@ -137,6 +139,22 @@ def _seed_company_with_razao(*, permissao: str, targets: list[int]):
         session.commit()
         session.refresh(usuario)
         session.refresh(empresa)
+        importar_snapshot(
+            session,
+            empresa_id=empresa.id,
+            contas=[{
+                "codigo": account.codigo,
+                "classificacao": account.classificacao,
+                "nome": account.nome,
+                "tipo": account.tipo,
+                "grau": account.grau,
+            } for account in contas],
+            vigencia=date(2026, 1, 1),
+            origem="teste-treino-dataset",
+        )
+        session.query(ContaContabilEmpresa).filter_by(
+            empresa_id=empresa.id, codigo=10046
+        ).one().is_financial_origin = True
         session.add(
             UsuarioEmpresaPermissao(
                 usuario_id=usuario.id,
@@ -152,7 +170,12 @@ def _audit_events():
     from tests.conftest import TestingSessionLocal
 
     with TestingSessionLocal() as session:
-        return session.query(AuditEvent).order_by(AuditEvent.id).all()
+        return (
+            session.query(AuditEvent)
+            .filter(AuditEvent.event_type != "plan.snapshot_imported")
+            .order_by(AuditEvent.id)
+            .all()
+        )
 
 
 def test_train_endpoint_trains_model_from_canonical_company_razao(

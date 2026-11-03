@@ -7,6 +7,7 @@ from pwdlib import PasswordHash
 
 from core.config import settings
 from core.dataset_builder import build_dataset_treino_contrapartida
+from core.plano_contas_snapshots import importar_snapshot
 from core.models import (
     AuditEvent,
     ContaContabil,
@@ -341,6 +342,24 @@ def test_dataset_builder_uses_feedback_final_account_as_target(client):
     from tests.conftest import TestingSessionLocal
 
     with TestingSessionLocal() as session:
+        accounts = session.query(ContaContabil).all()
+        importar_snapshot(
+            session,
+            empresa_id=empresa_id,
+            contas=[{
+                "codigo": account.codigo,
+                "classificacao": account.classificacao,
+                "nome": account.nome,
+                "tipo": account.tipo,
+                "grau": account.grau,
+            } for account in accounts],
+            vigencia=date(2026, 1, 1),
+            origem="teste-feedback-dataset",
+        )
+        session.query(ContaContabilEmpresa).filter_by(
+            empresa_id=empresa_id, codigo=10046
+        ).one().is_financial_origin = True
+        session.flush()
         dataset = build_dataset_treino_contrapartida(session, empresa_id=empresa_id)
 
     assert dataset.linhas == [

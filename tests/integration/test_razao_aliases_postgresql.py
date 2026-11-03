@@ -99,7 +99,10 @@ def test_confirmed_alias_is_persisted_only_for_reviewed_company_and_snapshot():
                         reason="Destino ausente",
                     ))
                     session.flush()
-        with pytest.raises(RuntimeError, match="Confirmed aliases exist"):
-            command.downgrade(config, "-1")
+        try:
+            with pytest.raises(RuntimeError, match="Confirmed aliases exist"):
+                command.downgrade(config, "501a7c4e2d90")
+        finally:
+            command.upgrade(config, "head")
     finally:
         engine.dispose()

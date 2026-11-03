@@ -26,13 +26,20 @@ Uma linha normalizada do Razao entra no dataset quando todos os criterios abaixo
 sao verdadeiros:
 
 - pertence a empresa informada em `empresa_id`;
-- a `conta_origem` existe no catalogo `ContaContabil`;
+- possui snapshot aplicavel a data do lancamento, sem conflito de vigencia;
+- origem, contrapartida, debito, credito e target final sao contas analiticas
+  no snapshot da empresa; alias do Razao exige confirmacao humana nesse mesmo
+  snapshot;
+- nao possui pendencia critica sem resolucao valida vinculada a linha;
+- a `conta_origem` existe na identidade contabil da empresa ou no fallback
+  legado ainda autorizado;
 - a `conta_origem` esta marcada com `is_financial_origin=True`;
-- a `conta_contrapartida` existe no catalogo;
+- a `conta_contrapartida` existe no contexto da empresa;
 - a `conta_contrapartida` esta ativa;
 - a `conta_contrapartida` e analitica (`tipo = "A"`).
 
-O builder usa a flag persistida `is_financial_origin` do catalogo. Ele nao
+O builder usa a flag persistida `is_financial_origin` da identidade da empresa,
+com fallback ao catalogo legado apenas durante a transicao. Ele nao
 recalcula heuristica textual de banco, caixa ou aplicacao a partir do nome ou
 classificacao da conta.
 
@@ -40,6 +47,9 @@ Um movimento operacional importado entra como fonte complementar quando todos os
 criterios abaixo sao verdadeiros:
 
 - pertence a empresa informada em `empresa_id`;
+- possui snapshot aplicavel a data do movimento, sem conflito de vigencia;
+- as contas finais sao analiticas nesse snapshot e nao existe pendencia critica
+  sem resolucao valida vinculada ao movimento;
 - `status` e `aprovado` ou `corrigido`;
 - `elegivel_treino=True`;
 - `contrapartida_final`, `conta_debito` e `conta_credito` estao preenchidas;
@@ -66,6 +76,29 @@ dataset. Isso inclui, entre outros casos:
 Os descartes sao contabilizados em `metadata.total_descartes`. O total considera
 as linhas normalizadas e movimentos operacionais da empresa que nao entraram no
 dataset, incluindo filtros de origem, status e validacoes de target.
+
+Cada descarte tambem aparece no manifesto com tipo de fonte, identificador e
+motivo estavel. Motivos incluem `snapshot_missing`, `snapshot_conflict`,
+`account_not_in_snapshot`, `critical_review_unresolved`, `rejected`,
+`no_final_decision` e invalidade da conta ou da origem financeira. Uma
+resolucao humana valida muda a elegibilidade apenas nas composicoes seguintes.
+
+## Manifesto Da Composicao
+
+Cada chamada persistida do builder cria uma linha imutavel em
+`dataset_manifests` e retorna `manifesto` ao lado de `linhas` e `metadata`.
+O manifesto contem `id`, `hash`, `empresa_id`, `pipeline_version`,
+`schema_version`, IDs dos snapshots, fontes incluidas, exclusoes, regras,
+hashes das fontes candidatas e uma copia exata das linhas elegiveis. O hash
+SHA-256 usa JSON canonico com chaves ordenadas. Composicoes com o mesmo
+conteudo possuem o mesmo hash, mas IDs de execucao diferentes.
+
+`reconstruct_dataset_from_manifest(session, empresa_id=..., manifest_id=...)`
+verifica o hash e devolve as linhas gravadas naquele manifesto, mesmo que as
+fontes atuais tenham mudado. O acesso exige a mesma empresa. No PostgreSQL,
+um trigger impede `UPDATE` e `DELETE` da linha do manifesto. O chamador deve
+confirmar a transacao para preservar o registro; um rollback cancela toda a
+composicao. Exemplos publicados no PR devem usar apenas massa sanitizada.
 
 ## Estrutura Das Linhas
 

@@ -974,6 +974,7 @@ def test_import_razao_fixture_tabular_valida_completa_lote(session):
     assert result.warnings == []
     assert lote.warnings_metadata == {"totals_by_code": {}}
     assert [item.numero_lancamento for item in lancamentos] == ["9001", "9002", "9003"]
+    assert [item.linha_original for item in lancamentos] == [1, 2, 3]
     assert [item.direcao for item in lancamentos] == ["credito", "debito", "credito"]
     assert session.query(EmpresaContaContabil).count() == 4
 

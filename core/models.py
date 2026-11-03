@@ -1054,6 +1054,7 @@ class LancamentoRazaoNormalizado(Base):
     lote_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("lotes_importacao_razao.id"), nullable=False
     )
+    linha_original: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
     empresa_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("empresas.id"), nullable=False
     )
@@ -1209,6 +1210,22 @@ class FeedbackClassificacao(Base):
     )
     usuario: Mapped["Usuario"] = relationship(
         "Usuario", back_populates="feedbacks_classificacao"
+    )
+
+
+class DatasetManifest(Base):
+    """Immutable evidence of one company dataset composition."""
+
+    __tablename__ = "dataset_manifests"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(
+        ForeignKey("empresas.id"), nullable=False, index=True
+    )
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    content: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, server_default=func.now(), nullable=False
     )
 
 

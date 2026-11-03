@@ -103,13 +103,16 @@ def test_concurrent_imports_create_review_and_history_is_immutable():
                 text("SELECT EXISTS (SELECT 1 FROM razao_account_aliases)")
             ).scalar_one()
         if aliases_exist:
-            with pytest.raises(RuntimeError, match="Confirmed aliases exist"):
-                command.downgrade(config, "-1")
+            try:
+                with pytest.raises(RuntimeError, match="Confirmed aliases exist"):
+                    command.downgrade(config, "501a7c4e2d90")
+            finally:
+                command.upgrade(config, "head")
         else:
-            command.downgrade(config, "-1")
+            command.downgrade(config, "501a7c4e2d90")
             try:
                 with pytest.raises(RuntimeError, match="Snapshot history exists"):
-                    command.downgrade(config, "-1")
+                    command.downgrade(config, "b8c4d2e6f910")
             finally:
                 command.upgrade(config, "head")
     finally:
