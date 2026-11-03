@@ -8,6 +8,7 @@ from core.audit import record_audit_event
 from core.ml_engine import ClassificadorContabil
 from core.models import (
     LoteImportacaoMovimentoOperacional,
+    ModelVersion,
     MovimentoOperacionalImportado,
     PlanoContasImportEvent,
     PlanoContasSnapshot,
@@ -355,6 +356,12 @@ def _result(
 
 def _audit_classification(session: Session, result: dict[str, Any]) -> None:
     """Registra auditoria sem historicos, documentos ou observacoes."""
+    active_id = session.scalar(
+        select(ModelVersion.id).where(
+            ModelVersion.empresa_id == result["empresa_id"],
+            ModelVersion.status == "active",
+        )
+    )
     record_audit_event(
         session,
         event_type="operational_movements.classified",
@@ -364,5 +371,6 @@ def _audit_classification(session: Session, result: dict[str, Any]) -> None:
             "total_processado": result["quantidade_processada"],
             "total_sugerido": result["total_sugerido"],
             "total_revisao": result["total_revisao"],
+            **({"model_version_id": active_id} if active_id else {}),
         },
     )

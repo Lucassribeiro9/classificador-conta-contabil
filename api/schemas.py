@@ -786,15 +786,21 @@ class MLClassificationResponse(BaseModel):
     empresa_id: int
     quantidade_processada: int
     results: list[MLClassificationResult]
+    model_version_id: Optional[int] = None
 
 
 class MLTrainResponse(BaseModel):
     empresa_id: int
+    version_id: int
     total_linhas: int
     total_descartes: int
     contagem_por_target: dict[int, int]
     treinavel: bool
     status: str
+
+
+class MLCriticalClassesRequest(BaseModel):
+    classes: list[int]
 
 
 class MLStatusResponse(BaseModel):

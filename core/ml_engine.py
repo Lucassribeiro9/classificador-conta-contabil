@@ -1,5 +1,6 @@
 import re
 import logging
+from hashlib import sha256
 from time import perf_counter
 from pathlib import Path
 
@@ -21,7 +22,7 @@ from sqlalchemy.orm import Session
 from core.audit import record_audit_event
 from core.config import settings
 from core.dataset_builder import DatasetTreinoContrapartida
-from core.models import Transacao
+from core.models import ModelVersion, Transacao
 from core.razao_parser import normalize_razao_historico
 
 logger = logging.getLogger(__name__)
@@ -148,14 +149,53 @@ class ClassificadorContabil:
         tmp_path.replace(model_path)
 
     def model_exists_for_company(self, empresa_id: int) -> bool:
-        return self._model_path_for_company(empresa_id).exists()
+        model = self._active_version_for_company(empresa_id)
+        if model is None:
+            return self._model_path_for_company(empresa_id).exists()
+        expected = f"empresa_{empresa_id}/model_{model.id}.joblib"
+        path = self.model_dir / expected
+        return (
+            model.artifact_path == expected
+            and path.is_file()
+            and sha256(path.read_bytes()).hexdigest() == model.artifact_sha256
+        )
+
+    def _active_version_for_company(self, empresa_id: int) -> ModelVersion | None:
+        return self.db.scalar(
+            select(ModelVersion).where(
+                ModelVersion.empresa_id == empresa_id,
+                ModelVersion.status == "active",
+            )
+        )
+
+    def model_relative_path_for_company(self, empresa_id: int) -> str | None:
+        active = self._active_version_for_company(empresa_id)
+        if active is not None:
+            return active.artifact_path
+        if self._model_path_for_company(empresa_id).exists():
+            return f"empresa_{empresa_id}/model_.joblib"
+        return None
+
+    def active_model_version_id_for_company(self, empresa_id: int) -> int | None:
+        active = self._active_version_for_company(empresa_id)
+        return active.id if active is not None else None
+
+    def _load_saved_model(self, empresa_id: int):
+        active = self._active_version_for_company(empresa_id)
+        if active is None:
+            return joblib.load(self._model_path_for_company(empresa_id)), 0.70
+        expected = f"empresa_{empresa_id}/model_{active.id}.joblib"
+        path = self.model_dir / expected
+        if active.artifact_path != expected or sha256(path.read_bytes()).hexdigest() != active.artifact_sha256:
+            raise ValueError("Integridade do modelo ativo invalida")
+        return joblib.load(path), active.threshold
 
     def classify_lancamentos_from_saved_model(
         self,
         empresa_id: int,
         lancamentos: list[dict],
     ) -> list[dict]:
-        model = joblib.load(self._model_path_for_company(empresa_id))
+        model, threshold = self._load_saved_model(empresa_id)
         feature_texts = [
             self._build_dataset_feature_text(
                 historico=item["historico"],
@@ -175,7 +215,7 @@ class ClassificadorContabil:
                 {
                     "conta_contrapartida": best_class,
                     "confianca": max_prob,
-                    "needs_review": max_prob < 0.7,
+                    "needs_review": max_prob < threshold,
                 }
             )
         return predictions
@@ -192,7 +232,7 @@ class ClassificadorContabil:
             and len(allowed_target_accounts_by_movement) != len(movimentos)
         ):
             raise ValueError("A lista de contas permitidas deve corresponder aos movimentos")
-        model = joblib.load(self._model_path_for_company(empresa_id))
+        model, threshold = self._load_saved_model(empresa_id)
         feature_texts = [
             self.build_operational_movement_feature_text(
                 historico_normalizado=item["historico_normalizado"],
@@ -235,7 +275,7 @@ class ClassificadorContabil:
                 {
                     "contrapartida_sugerida": best_class,
                     "confidence_sugerida": max_prob,
-                    "status": "revisao" if max_prob < 0.70 else "sugerido",
+                    "status": "revisao" if max_prob < threshold else "sugerido",
                 }
             )
         return predictions

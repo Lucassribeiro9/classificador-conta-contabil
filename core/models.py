@@ -17,6 +17,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -54,6 +55,8 @@ class Empresa(Base):
 
     # Código identificador interno do sistema Domínio
     cod_dominio: Mapped[int] = mapped_column(Integer, nullable=False, unique=True)
+
+    ml_critical_classes: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
 
     # Status da empresa (Ativa/Inativa)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -1224,6 +1227,43 @@ class DatasetManifest(Base):
     )
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     content: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, server_default=func.now(), nullable=False
+    )
+
+
+class ModelVersion(Base):
+    """Versioned model evidence; only lifecycle status may change."""
+
+    __tablename__ = "model_versions"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('candidate', 'active', 'retired')",
+            name="ck_model_versions_status",
+        ),
+        Index(
+            "uq_model_versions_one_active_per_company",
+            "empresa_id",
+            unique=True,
+            postgresql_where=text("status = 'active'"),
+            sqlite_where=text("status = 'active'"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(
+        ForeignKey("empresas.id"), nullable=False, index=True
+    )
+    manifest_id: Mapped[int] = mapped_column(
+        ForeignKey("dataset_manifests.id"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="candidate")
+    artifact_path: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    artifact_sha256: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    threshold: Mapped[float] = mapped_column(Float, nullable=False, default=0.70)
+    metrics: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    evaluation: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    critical_classes: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.now, server_default=func.now(), nullable=False
     )
