@@ -207,6 +207,7 @@ def get_company_ml_status(
 ):
     """Consulta se a empresa tem dataset treinavel e modelo canonico salvo."""
     dataset = build_dataset_treino_contrapartida(db, empresa_id=company_id)
+    db.commit()
     metadata = dataset.metadata
     engine_ml = ClassificadorContabil(db)
     modelo_existente = engine_ml.model_exists_for_company(company_id)

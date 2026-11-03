@@ -156,6 +156,7 @@ def import_razao(
                 normalized.update(_saldo_fields_from_parsed(parsed))
                 normalized["bloco_id"] = parsed["bloco_id"]
                 normalized["empresa_id"] = empresa_id
+                normalized["linha_original"] = index
                 normalized["numero_lancamento"] = normalized.pop("numero")
                 if _is_blank(normalized.get("conta_contrapartida")):
                     block_warnings.append(
@@ -433,6 +434,7 @@ def _to_model(
     return LancamentoRazaoNormalizado(
         lote_id=lote_id,
         empresa_id=empresa_id,
+        linha_original=int(lancamento.get("linha_original", 0)),
         numero_lancamento=str(lancamento["numero_lancamento"]),
         data=_parse_date(lancamento["data"]),
         conta_origem=int(lancamento["conta_origem"]),

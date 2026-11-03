@@ -1,4 +1,5 @@
 import re
+from datetime import date
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -11,7 +12,7 @@ from sqlalchemy.pool import StaticPool
 from core.database import Base
 from core.dataset_builder import build_dataset_treino_contrapartida
 from core.ml_engine import ClassificadorContabil
-from core.models import Empresa, MovimentoOperacionalImportado, Usuario
+from core.models import ContaContabil, ContaContabilEmpresa, Empresa, MovimentoOperacionalImportado, Usuario
 from core.movimentos_operacionais_classification import (
     classificar_movimentos_operacionais_pendentes,
 )
@@ -20,6 +21,7 @@ from core.movimentos_operacionais_parser import parse_movimentos_operacionais_xl
 from core.plano_contas_financeiro import infer_is_financial_origin
 from core.plano_contas_importer import import_plano_contas
 from core.plano_contas_parser import parse_plano_contas_xlsx
+from core.plano_contas_snapshots import importar_snapshot
 from core.razao_importer import import_razao
 from core.razao_parser import parse_razao_xlsx_with_metadata
 
@@ -132,6 +134,26 @@ def test_homologacao_fixtures_complete_importer_flow(session, tmp_path):
         usuario_id=usuario.id,
         original_filename="movimentos_operacionais_hml.xlsx",
     )
+    importar_snapshot(
+        session,
+        empresa_id=empresa.id,
+        contas=[{
+            "codigo": account["codigo"],
+            "classificacao": account["classificacao"],
+            "nome": account["nome"],
+            "tipo": account["tipo"],
+            "grau": account["grau"],
+        } for account in plano],
+        vigencia=date(2026, 1, 1),
+        origem="fixture-homologacao-dataset",
+    )
+    global_accounts = {
+        account.codigo: account
+        for account in session.query(ContaContabil).all()
+    }
+    for account in session.query(ContaContabilEmpresa).filter_by(empresa_id=empresa.id).all():
+        account.is_financial_origin = global_accounts[account.codigo].is_financial_origin
+    session.flush()
     movimentos = (
         session.query(MovimentoOperacionalImportado)
         .order_by(MovimentoOperacionalImportado.documento)

@@ -7,7 +7,8 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from core.database import Base
-from core.dataset_builder import build_dataset_treino_contrapartida
+from core.dataset_builder import build_dataset_treino_contrapartida as _build_dataset
+from core.plano_contas_snapshots import importar_snapshot
 from core.models import (
     ContaContabil,
     ContaContabilEmpresa,
@@ -16,9 +17,44 @@ from core.models import (
     LoteImportacaoRazao,
     LoteImportacaoMovimentoOperacional,
     MovimentoOperacionalImportado,
+    PlanoContasImportEvent,
     Transacao,
     Usuario,
 )
+
+
+def build_dataset_treino_contrapartida(session, *, empresa_id):
+    """Exercise the established row contract with a valid temporal plan."""
+    if empresa_id is not None:
+        session.flush()
+        if session.query(PlanoContasImportEvent).filter_by(empresa_id=empresa_id).first() is None:
+            accounts = {account.codigo: account for account in session.query(ContaContabil).all()}
+            accounts.update({
+                account.codigo: account
+                for account in session.query(ContaContabilEmpresa).filter_by(empresa_id=empresa_id).all()
+            })
+            if accounts:
+                attrs = {
+                    code: (account.is_active, account.is_financial_origin)
+                    for code, account in accounts.items()
+                }
+                importar_snapshot(
+                    session,
+                    empresa_id=empresa_id,
+                    contas=[{
+                        "codigo": account.codigo,
+                        "classificacao": account.classificacao,
+                        "nome": account.nome,
+                        "tipo": account.tipo,
+                        "grau": account.grau,
+                    } for account in accounts.values()],
+                    vigencia=date(2020, 1, 1),
+                    origem="teste-contrato-dataset",
+                )
+                for account in session.query(ContaContabilEmpresa).filter_by(empresa_id=empresa_id).all():
+                    account.is_active, account.is_financial_origin = attrs[account.codigo]
+                session.flush()
+    return _build_dataset(session, empresa_id=empresa_id)
 
 
 @pytest.fixture()

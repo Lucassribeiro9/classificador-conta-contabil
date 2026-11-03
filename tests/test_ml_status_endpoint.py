@@ -6,8 +6,10 @@ import pytest
 from pwdlib import PasswordHash
 
 from core.config import settings
+from core.plano_contas_snapshots import importar_snapshot
 from core.models import (
     ContaContabil,
+    ContaContabilEmpresa,
     Empresa,
     LancamentoRazaoNormalizado,
     LoteImportacaoRazao,
@@ -157,6 +159,22 @@ def _seed_company_with_razao(*, permissao: str, targets: list[int]):
         session.commit()
         session.refresh(usuario)
         session.refresh(empresa)
+        importar_snapshot(
+            session,
+            empresa_id=empresa.id,
+            contas=[{
+                "codigo": account.codigo,
+                "classificacao": account.classificacao,
+                "nome": account.nome,
+                "tipo": account.tipo,
+                "grau": account.grau,
+            } for account in contas],
+            vigencia=date(2026, 1, 1),
+            origem="teste-status-dataset",
+        )
+        session.query(ContaContabilEmpresa).filter_by(
+            empresa_id=empresa.id, codigo=10046
+        ).one().is_financial_origin = True
         session.add(
             UsuarioEmpresaPermissao(
                 usuario_id=usuario.id,
@@ -189,6 +207,11 @@ def test_ml_status_endpoint_returns_empty_dataset_status(client, monkeypatch, tm
         "pode_classificar_movimentos": False,
         "status": "sem_razao",
     }
+    from tests.conftest import TestingSessionLocal
+    from core.models import DatasetManifest
+
+    with TestingSessionLocal() as session:
+        assert session.query(DatasetManifest).filter_by(empresa_id=empresa_id).count() == 1
 
 
 def test_ml_status_endpoint_returns_insufficient_dataset_status(
