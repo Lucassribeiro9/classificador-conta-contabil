@@ -14,11 +14,14 @@ from core.models import (
     Empresa,
     LoteImportacaoMovimentoOperacional,
     MovimentoOperacionalImportado,
+    ReviewItem,
     Usuario,
 )
 from core.movimentos_operacionais_classification import (
+    _snapshot_for_undated_movement,
     classificar_movimentos_operacionais_pendentes,
 )
+from core.plano_contas_snapshots import importar_snapshot
 
 
 @pytest.fixture()
@@ -156,6 +159,26 @@ def _train_razao_dataset_model(db, tmp_path, empresa_id: int) -> None:
     db.commit()
 
 
+def _import_classification_snapshot(session, empresa: Empresa) -> None:
+    session.flush()
+    importar_snapshot(
+        session,
+        empresa_id=empresa.id,
+        contas=[
+            {
+                "codigo": code,
+                "classificacao": f"1.{index}",
+                "nome": f"Conta {code}",
+                "tipo": "A",
+                "grau": 2,
+            }
+            for index, code in enumerate((10046, 20001, 30001), start=1)
+        ],
+        vigencia=date(2026, 1, 1),
+        origem="snapshot-classificacao-teste",
+    )
+
+
 def test_classificar_movimentos_pendentes_persiste_sugestao_e_auditoria(
     session,
     tmp_path,
@@ -177,6 +200,7 @@ def test_classificar_movimentos_pendentes_persiste_sugestao_e_auditoria(
         tipo_movimento="transferencia",
     )
     session.add_all([pendente, ja_revisao])
+    _import_classification_snapshot(session, empresa)
     session.commit()
     _train_razao_dataset_model(session, tmp_path, empresa.id)
 
@@ -204,7 +228,11 @@ def test_classificar_movimentos_pendentes_persiste_sugestao_e_auditoria(
     assert ja_revisao.contrapartida_sugerida is None
     assert ja_revisao.status == "revisao"
 
-    event = session.query(AuditEvent).one()
+    event = (
+        session.query(AuditEvent)
+        .filter(AuditEvent.event_type == "operational_movements.classified")
+        .one()
+    )
     assert event.event_type == "operational_movements.classified"
     assert event.empresa_id == empresa.id
     assert event.metadata_json["total_processado"] == 1
@@ -212,6 +240,16 @@ def test_classificar_movimentos_pendentes_persiste_sugestao_e_auditoria(
     assert event.metadata_json["total_revisao"] == 0
     assert "pagamento fornecedor" not in str(event.metadata_json)
     assert "DOC-SENSIVEL-001" not in str(event.metadata_json)
+    temporal_event = (
+        session.query(AuditEvent)
+        .filter(
+            AuditEvent.event_type == "operational_movements.temporal_context_checked"
+        )
+        .one()
+    )
+    assert temporal_event.metadata_json["context_source"] == "movement_date"
+    assert temporal_event.metadata_json["snapshot_id"] is not None
+    assert "pagamento fornecedor" not in str(temporal_event.metadata_json)
 
 
 def test_classificar_movimentos_usa_contrato_interno_independente_do_layout(
@@ -240,6 +278,7 @@ def test_classificar_movimentos_usa_contrato_interno_independente_do_layout(
         warnings_saldo=[],
     )
     session.add(pendente)
+    _import_classification_snapshot(session, empresa)
     session.commit()
     _train_razao_dataset_model(session, tmp_path, empresa.id)
 
@@ -256,3 +295,170 @@ def test_classificar_movimentos_usa_contrato_interno_independente_do_layout(
     assert pendente.valor_original == Decimal("1500.00")
     assert pendente.valor_absoluto == Decimal("1500.00")
     assert pendente.direcao == "debito"
+
+
+def test_classificacao_sem_snapshot_abstem_e_cria_revisao_temporal(
+    session,
+    monkeypatch,
+):
+    empresa = _empresa()
+    usuario = _usuario()
+    lote = _lote(empresa, usuario)
+    movimento = _movimento(
+        lote,
+        empresa,
+        status="pendente",
+        historico_normalizado="pagamento fornecedor aluguel",
+    )
+    session.add(movimento)
+    session.commit()
+
+    class FakeClassifier:
+        def __init__(self, _session, model_dir=None):
+            pass
+
+        def model_exists_for_company(self, _empresa_id):
+            return True
+
+        def classify_operational_movements_from_saved_model(self, **_kwargs):
+            return [
+                {
+                    "contrapartida_sugerida": 20001,
+                    "confidence_sugerida": 0.95,
+                    "status": "sugerido",
+                }
+            ]
+
+    monkeypatch.setattr(
+        "core.movimentos_operacionais_classification.ClassificadorContabil",
+        FakeClassifier,
+    )
+
+    result = classificar_movimentos_operacionais_pendentes(
+        session,
+        empresa_id=empresa.id,
+    )
+
+    session.refresh(movimento)
+    review = session.query(ReviewItem).one()
+    assert result == {
+        "empresa_id": empresa.id,
+        "quantidade_processada": 1,
+        "total_sugerido": 0,
+        "total_revisao": 1,
+    }
+    assert movimento.status == "revisao"
+    assert movimento.contrapartida_sugerida is None
+    assert review.source_type == "movimento_operacional_temporal"
+    assert review.grouping_key == f"movimento:{movimento.id}"
+    assert str(movimento.data) in review.summary
+    assert review.status == "pending"
+
+
+def test_classificacao_abstem_quando_conta_financeira_nao_esta_no_snapshot(
+    session,
+    monkeypatch,
+):
+    empresa = _empresa()
+    usuario = _usuario()
+    lote = _lote(empresa, usuario)
+    movimento = _movimento(
+        lote,
+        empresa,
+        status="pendente",
+        historico_normalizado="pagamento fornecedor aluguel",
+    )
+    session.add(movimento)
+    session.flush()
+    importar_snapshot(
+        session,
+        empresa_id=empresa.id,
+        contas=[
+            {
+                "codigo": 20001,
+                "classificacao": "2.1.01",
+                "nome": "Fornecedores",
+                "tipo": "A",
+                "grau": 3,
+            }
+        ],
+        vigencia=date(2026, 1, 1),
+        origem="snapshot-teste",
+    )
+    session.commit()
+
+    class FakeClassifier:
+        def __init__(self, _session, model_dir=None):
+            pass
+
+        def model_exists_for_company(self, _empresa_id):
+            return True
+
+        def classify_operational_movements_from_saved_model(self, **_kwargs):
+            raise AssertionError(
+                "Conta financeira fora do snapshot não pode ser classificada"
+            )
+
+    monkeypatch.setattr(
+        "core.movimentos_operacionais_classification.ClassificadorContabil",
+        FakeClassifier,
+    )
+
+    result = classificar_movimentos_operacionais_pendentes(
+        session,
+        empresa_id=empresa.id,
+    )
+
+    session.refresh(movimento)
+    review = session.query(ReviewItem).one()
+    assert result["total_sugerido"] == 0
+    assert result["total_revisao"] == 1
+    assert movimento.status == "revisao"
+    assert movimento.contrapartida_sugerida is None
+    assert "conta financeira" in review.summary.lower()
+
+
+def test_fallback_periodo_lote_so_usa_snapshot_quando_nao_ha_transicao(
+    session,
+):
+    empresa = _empresa()
+    usuario = _usuario()
+    lote = _lote(empresa, usuario)
+    session.add(lote)
+    session.flush()
+    importar_snapshot(
+        session,
+        empresa_id=empresa.id,
+        contas=[
+            {
+                "codigo": code,
+                "classificacao": f"1.{index}",
+                "nome": f"Conta {code}",
+                "tipo": "A",
+                "grau": 2,
+            }
+            for index, code in enumerate((10046, 20001), start=1)
+        ],
+        vigencia=date(2026, 1, 1),
+        origem="snapshot-inicial",
+    )
+    initial = _snapshot_for_undated_movement(session, empresa.id, lote)
+    assert initial is not None
+
+    importar_snapshot(
+        session,
+        empresa_id=empresa.id,
+        contas=[
+            {
+                "codigo": code,
+                "classificacao": f"2.{index}",
+                "nome": f"Conta {code}",
+                "tipo": "A",
+                "grau": 2,
+            }
+            for index, code in enumerate((10046, 20001, 30001), start=1)
+        ],
+        vigencia=date(2026, 1, 15),
+        origem="snapshot-transicao",
+    )
+    assert _snapshot_for_undated_movement(session, empresa.id, lote) is None

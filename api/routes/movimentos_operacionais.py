@@ -3,6 +3,7 @@ import os
 import tempfile
 from pathlib import Path
 
+from sqlalchemy import select
 from fastapi import (
     APIRouter,
     Depends,
@@ -39,6 +40,7 @@ from core.models import (
     Empresa,
     LoteImportacaoMovimentoOperacional,
     MovimentoOperacionalImportado,
+    ReviewItem,
     IdentidadeServico,
     Usuario,
 )
@@ -272,8 +274,31 @@ def list_company_operational_movements(
     offset = (page - 1) * limit
     total = query.count()
     movimentos = query.offset(offset).limit(limit).all()
+    review_items = (
+        db.scalars(
+            select(ReviewItem).where(
+                ReviewItem.empresa_id == empresa.id,
+                ReviewItem.source_type == "movimento_operacional_temporal",
+                ReviewItem.grouping_key.in_(
+                    [f"movimento:{item.id}" for item in movimentos]
+                ),
+            )
+        ).all()
+        if movimentos
+        else []
+    )
+    review_ids_by_movement = {
+        int(item.grouping_key.split(":", maxsplit=1)[1]): item.id
+        for item in review_items
+    }
+    response_items = [
+        MovimentoOperacionalResponse.model_validate(item).model_copy(
+            update={"review_item_id": review_ids_by_movement.get(item.id)}
+        )
+        for item in movimentos
+    ]
     return MovimentoOperacionalListResponse(
-        items=movimentos,
+        items=response_items,
         total=total,
         page=page,
         limit=limit,

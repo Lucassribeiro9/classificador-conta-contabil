@@ -184,8 +184,14 @@ class ClassificadorContabil:
         self,
         empresa_id: int,
         movimentos: list[dict],
+        allowed_target_accounts_by_movement: list[set[int]] | None = None,
     ) -> list[dict]:
         """Classifica movimentos operacionais usando modelo salvo do dataset canonico."""
+        if (
+            allowed_target_accounts_by_movement is not None
+            and len(allowed_target_accounts_by_movement) != len(movimentos)
+        ):
+            raise ValueError("A lista de contas permitidas deve corresponder aos movimentos")
         model = joblib.load(self._model_path_for_company(empresa_id))
         feature_texts = [
             self.build_operational_movement_feature_text(
@@ -201,8 +207,30 @@ class ClassificadorContabil:
         predictions: list[dict] = []
         for index in range(len(feature_texts)):
             row_probabilities = probabilities[index]
-            max_prob = float(max(row_probabilities))
-            best_class = int(classes[list(row_probabilities).index(max_prob)])
+            if allowed_target_accounts_by_movement is None:
+                candidate_indices = list(range(len(classes)))
+            else:
+                allowed_accounts = allowed_target_accounts_by_movement[index]
+                candidate_indices = [
+                    candidate_index
+                    for candidate_index, account_code in enumerate(classes)
+                    if int(account_code) in allowed_accounts
+                ]
+            if not candidate_indices:
+                predictions.append(
+                    {
+                        "contrapartida_sugerida": None,
+                        "confidence_sugerida": None,
+                        "status": "revisao",
+                    }
+                )
+                continue
+            best_index = max(
+                candidate_indices,
+                key=lambda candidate_index: float(row_probabilities[candidate_index]),
+            )
+            max_prob = float(row_probabilities[best_index])
+            best_class = int(classes[best_index])
             predictions.append(
                 {
                     "contrapartida_sugerida": best_class,

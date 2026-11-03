@@ -13,7 +13,9 @@ from core.models import AuditEvent, Empresa, Transacao
 
 @pytest.fixture()
 def db_session():
-    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+    engine = create_engine(
+        "sqlite:///:memory:", connect_args={"check_same_thread": False}
+    )
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     Base.metadata.create_all(bind=engine)
     session = SessionLocal()
@@ -129,8 +131,44 @@ def test_train_from_dataset_contract_trains_classifier(db_session, tmp_path):
     )
 
     assert predictions[0]["conta_contrapartida_predita"] in {50057, 70001}
-    assert predictions[0]["conta_contabil_predita"] == predictions[0][
-        "conta_contrapartida_predita"
+    assert (
+        predictions[0]["conta_contabil_predita"]
+        == predictions[0]["conta_contrapartida_predita"]
+    )
+
+
+def test_operational_classifier_only_suggests_accounts_in_snapshot(
+    db_session,
+    tmp_path,
+    monkeypatch,
+):
+    class FakeModel:
+        classes_ = [20001, 30001]
+
+        def predict_proba(self, _feature_texts):
+            return [[0.2, 0.8]]
+
+    monkeypatch.setattr(joblib, "load", lambda _path: FakeModel())
+    engine_ml = ClassificadorContabil(db_session, model_dir=tmp_path)
+
+    predictions = engine_ml.classify_operational_movements_from_saved_model(
+        empresa_id=1,
+        movimentos=[
+            {
+                "historico_normalizado": "pagamento fornecedor",
+                "conta_financeira": 10046,
+                "direcao": "credito",
+            }
+        ],
+        allowed_target_accounts_by_movement=[{20001}],
+    )
+
+    assert predictions == [
+        {
+            "contrapartida_sugerida": 20001,
+            "confidence_sugerida": 0.2,
+            "status": "revisao",
+        }
     ]
 
 
@@ -187,7 +225,9 @@ def test_operational_movement_feature_text_uses_normalized_history_and_context(
     )
 
 
-def test_train_from_dataset_persists_multinomial_model_for_company(db_session, tmp_path):
+def test_train_from_dataset_persists_multinomial_model_for_company(
+    db_session, tmp_path
+):
     dataset = DatasetTreinoContrapartida(
         linhas=[
             {

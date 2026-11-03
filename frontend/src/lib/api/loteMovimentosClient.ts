@@ -11,6 +11,7 @@ export type StatusMovimentoFiltro =
 
 export type MovimentoOperacional = {
   id: number;
+  reviewItemId?: number | null;
   loteId: number;
   empresaId: number;
   data: string;
@@ -66,6 +67,7 @@ export type ClassificacaoPendentesResult = {
 
 type MovimentoOperacionalApi = {
   id: number;
+  review_item_id?: number | null;
   lote_id: number;
   empresa_id: number;
   data: string;
@@ -179,6 +181,7 @@ async function fetchJson<T>(
 function mapMovimento(data: MovimentoOperacionalApi): MovimentoOperacional {
   return {
     id: data.id,
+    reviewItemId: data.review_item_id ?? null,
     loteId: data.lote_id,
     empresaId: data.empresa_id,
     data: data.data,
