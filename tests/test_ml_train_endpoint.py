@@ -197,18 +197,19 @@ def test_train_endpoint_trains_model_from_canonical_company_razao(
     assert response.status_code == 200
     assert response.json() == {
         "empresa_id": empresa_id,
+        "version_id": 1,
         "total_linhas": 10,
         "total_descartes": 0,
         "contagem_por_target": {"50057": 5, "70001": 5},
         "treinavel": True,
-        "status": "trained",
+        "status": "candidate",
     }
-    assert (tmp_path / f"empresa_{empresa_id}" / "model_.joblib").exists()
+    assert (tmp_path / f"empresa_{empresa_id}" / "model_1.joblib").exists()
     events = _audit_events()
-    assert [event.event_type for event in events] == ["model.trained"]
+    assert [event.event_type for event in events] == ["model.candidate_created"]
     assert events[0].empresa_id == empresa_id
-    assert events[0].resource_id == f"empresa_{empresa_id}/model_.joblib"
-    assert events[0].metadata_json["dataset_examples"] == 10
+    assert events[0].resource_id == "1"
+    assert events[0].metadata_json["evaluation_method"] == "holdout"
     assert "historico" not in events[0].metadata_json
 
 
@@ -262,3 +263,324 @@ def test_train_endpoint_requires_company_operation_permission(
     assert [event.event_type for event in events] == ["auth.access.denied"]
     assert events[0].empresa_id == empresa_id
     assert events[0].metadata_json == {"reason": "insufficient_permission"}
+
+
+def test_training_creates_immutable_candidate_without_activating_it(
+    client,
+    monkeypatch,
+    tmp_path,
+):
+    from tests.conftest import TestingSessionLocal
+    from core.models import ModelVersion
+
+    headers, empresa_id = _seed_company_with_razao(
+        permissao="operacao",
+        targets=[50057, 70001] * 5,
+    )
+    monkeypatch.setattr(settings, "MODEL_DIR", str(tmp_path))
+
+    response = client.post(f"/api/v1/companies/{empresa_id}/ml/train", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "candidate"
+    version_id = response.json()["version_id"]
+    with TestingSessionLocal() as session:
+        version = session.get(ModelVersion, version_id)
+        assert version.empresa_id == empresa_id
+        assert version.status == "candidate"
+        assert version.manifest_id is not None
+        assert version.evaluation["method"] in {"holdout", "stratified_kfold"}
+        assert version.artifact_sha256
+        assert session.query(ModelVersion).filter_by(
+            empresa_id=empresa_id, status="active"
+        ).count() == 0
+    assert (tmp_path / f"empresa_{empresa_id}" / f"model_{version_id}.joblib").exists()
+    assert not (tmp_path / f"empresa_{empresa_id}" / "model_.joblib").exists()
+
+
+def test_admin_promotes_candidate_and_rolls_back_without_retraining(
+    client,
+    monkeypatch,
+    tmp_path,
+):
+    from tests.conftest import TestingSessionLocal
+    from core.models import ModelVersion
+
+    headers, empresa_id = _seed_company_with_razao(
+        permissao="admin_empresa", targets=[50057, 70001] * 5,
+    )
+    monkeypatch.setattr(settings, "MODEL_DIR", str(tmp_path))
+    base = f"/api/v1/companies/{empresa_id}/ml"
+
+    first = client.post(f"{base}/train", headers=headers).json()["version_id"]
+    promoted = client.post(f"{base}/models/{first}/promote", headers=headers)
+    assert promoted.status_code == 200
+    assert promoted.json()["status"] == "active"
+    second = client.post(f"{base}/train", headers=headers).json()["version_id"]
+    promoted_second = client.post(f"{base}/models/{second}/promote", headers=headers)
+    assert promoted_second.status_code == 200
+    assert promoted_second.json()["status"] == "active"
+
+    rollback = client.post(f"{base}/models/{first}/rollback", headers=headers)
+    assert rollback.status_code == 200
+    assert rollback.json()["status"] == "active"
+    with TestingSessionLocal() as session:
+        assert session.get(ModelVersion, first).status == "active"
+        assert session.get(ModelVersion, second).status == "retired"
+        assert session.get(ModelVersion, second).evaluation["comparison_version_id"] == first
+        assert session.get(ModelVersion, second).evaluation["baseline_metrics"] is not None
+        assert session.query(ModelVersion).filter_by(
+            empresa_id=empresa_id, status="active"
+        ).count() == 1
+    assert (tmp_path / f"empresa_{empresa_id}" / f"model_{first}.joblib").exists()
+    assert (tmp_path / f"empresa_{empresa_id}" / f"model_{second}.joblib").exists()
+
+
+def test_admin_sets_critical_classes_before_evaluation_and_candidate_freezes_them(
+    client, monkeypatch, tmp_path,
+):
+    from tests.conftest import TestingSessionLocal
+    from core.models import ModelVersion
+
+    headers, empresa_id = _seed_company_with_razao(
+        permissao="admin_empresa", targets=[50057, 70001] * 5,
+    )
+    monkeypatch.setattr(settings, "MODEL_DIR", str(tmp_path))
+    base = f"/api/v1/companies/{empresa_id}/ml"
+    configured = client.request(
+        "PUT", f"{base}/critical-classes", headers=headers, json={"classes": [50057]}
+    )
+    assert configured.status_code == 200
+    first = client.post(f"{base}/train", headers=headers).json()["version_id"]
+    cleared = client.request(
+        "PUT", f"{base}/critical-classes", headers=headers, json={"classes": []}
+    )
+    assert cleared.status_code == 200
+    second = client.post(f"{base}/train", headers=headers).json()["version_id"]
+    with TestingSessionLocal() as session:
+        assert session.get(ModelVersion, first).critical_classes == [50057]
+        assert session.get(ModelVersion, second).critical_classes == []
+
+
+def test_only_promoted_version_serves_company_classification(
+    client, monkeypatch, tmp_path,
+):
+    headers, empresa_id = _seed_company_with_razao(
+        permissao="admin_empresa", targets=[50057, 70001] * 5,
+    )
+    monkeypatch.setattr(settings, "MODEL_DIR", str(tmp_path))
+    base = f"/api/v1/companies/{empresa_id}/ml"
+    version_id = client.post(f"{base}/train", headers=headers).json()["version_id"]
+    payload = {
+        "historico": "Pagamento fornecedor 1",
+        "conta_origem": 10046,
+        "direcao": "credito",
+    }
+    before = client.post(f"{base}/classification", headers=headers, json=payload)
+    assert before.status_code == 404
+
+    assert client.post(f"{base}/models/{version_id}/promote", headers=headers).status_code == 200
+    status = client.get(f"{base}/status", headers=headers)
+    assert status.status_code == 200
+    assert status.json()["modelo_path"] == f"empresa_{empresa_id}/model_{version_id}.joblib"
+    response = client.post(f"{base}/classification", headers=headers, json=payload)
+    assert response.status_code == 200
+    assert response.json()["model_version_id"] == version_id
+    assert response.json()["results"][0]["conta_contrapartida"] in {50057, 70001}
+    completed = [event for event in _audit_events() if event.event_type == "classification.completed"]
+    assert completed[-1].metadata_json["model_version_id"] == version_id
+
+
+def test_admin_can_inspect_candidate_evaluation_before_promotion(
+    client, monkeypatch, tmp_path,
+):
+    headers, empresa_id = _seed_company_with_razao(
+        permissao="admin_empresa", targets=[50057, 70001] * 5,
+    )
+    monkeypatch.setattr(settings, "MODEL_DIR", str(tmp_path))
+    base = f"/api/v1/companies/{empresa_id}/ml"
+    version_id = client.post(f"{base}/train", headers=headers).json()["version_id"]
+
+    response = client.get(f"{base}/models", headers=headers)
+
+    assert response.status_code == 200
+    assert len(response.json()["models"]) == 1
+    model = response.json()["models"][0]
+    assert model["id"] == version_id
+    assert model["status"] == "candidate"
+    assert model["manifest_id"] > 0
+    assert model["evaluation"]["valid"] is True
+    assert "macro_f1" in model["metrics"]
+    assert model["threshold"] == 0.70
+
+
+def test_promotion_rejects_candidate_below_active_guardrails(
+    client, monkeypatch, tmp_path,
+):
+    from tests.conftest import TestingSessionLocal
+    from core.models import ModelVersion
+
+    headers, empresa_id = _seed_company_with_razao(
+        permissao="admin_empresa", targets=[50057, 70001] * 5,
+    )
+    monkeypatch.setattr(settings, "MODEL_DIR", str(tmp_path))
+    base = f"/api/v1/companies/{empresa_id}/ml"
+    first = client.post(f"{base}/train", headers=headers).json()["version_id"]
+    assert client.post(f"{base}/models/{first}/promote", headers=headers).status_code == 200
+    second = client.post(f"{base}/train", headers=headers).json()["version_id"]
+    with TestingSessionLocal() as session:
+        candidate = session.get(ModelVersion, second)
+        candidate.metrics = {
+            "macro_f1": -1.0,
+            "per_class_f1": {"50057": 0.0, "70001": 0.0},
+        }
+        session.commit()
+
+    rejected = client.post(f"{base}/models/{second}/promote", headers=headers)
+
+    assert rejected.status_code == 422
+    assert "macro F1" in rejected.json()["message"]
+    assert "model.promotion_denied" in [event.event_type for event in _audit_events()]
+    with TestingSessionLocal() as session:
+        assert session.get(ModelVersion, first).status == "active"
+        assert session.get(ModelVersion, second).status == "candidate"
+
+
+def test_small_dataset_uses_reproducible_cross_validation(
+    client, monkeypatch, tmp_path,
+):
+    headers, empresa_id = _seed_company_with_razao(
+        permissao="admin_empresa", targets=[50057] * 8 + [70001] * 2,
+    )
+    monkeypatch.setattr(settings, "MODEL_DIR", str(tmp_path))
+    response = client.post(f"/api/v1/companies/{empresa_id}/ml/train", headers=headers)
+    assert response.status_code == 200
+    version_id = response.json()["version_id"]
+    models = client.get(f"/api/v1/companies/{empresa_id}/ml/models", headers=headers)
+    evaluation = models.json()["models"][0]["evaluation"]
+    assert models.json()["models"][0]["id"] == version_id
+    assert evaluation["method"] == "stratified_kfold"
+    assert evaluation["folds"] == 2
+
+
+def test_operator_cannot_promote_model_candidate(client, monkeypatch, tmp_path):
+    from tests.conftest import TestingSessionLocal
+    from core.models import ModelVersion
+
+    headers, empresa_id = _seed_company_with_razao(
+        permissao="operacao", targets=[50057, 70001] * 5,
+    )
+    monkeypatch.setattr(settings, "MODEL_DIR", str(tmp_path))
+    base = f"/api/v1/companies/{empresa_id}/ml"
+    version_id = client.post(f"{base}/train", headers=headers).json()["version_id"]
+
+    response = client.post(f"{base}/models/{version_id}/promote", headers=headers)
+
+    assert response.status_code == 403
+    with TestingSessionLocal() as session:
+        assert session.get(ModelVersion, version_id).status == "candidate"
+
+
+def test_critical_class_regression_blocks_promotion_even_with_higher_macro_f1(
+    client, monkeypatch, tmp_path,
+):
+    from tests.conftest import TestingSessionLocal
+    from core.models import ModelVersion
+
+    headers, empresa_id = _seed_company_with_razao(
+        permissao="admin_empresa", targets=[50057, 70001] * 5,
+    )
+    monkeypatch.setattr(settings, "MODEL_DIR", str(tmp_path))
+    base = f"/api/v1/companies/{empresa_id}/ml"
+    first = client.post(f"{base}/train", headers=headers).json()["version_id"]
+    assert client.post(f"{base}/models/{first}/promote", headers=headers).status_code == 200
+    configured = client.request(
+        "PUT", f"{base}/critical-classes", headers=headers, json={"classes": [50057]}
+    )
+    assert configured.status_code == 200
+    second = client.post(f"{base}/train", headers=headers).json()["version_id"]
+    with TestingSessionLocal() as session:
+        candidate = session.get(ModelVersion, second)
+        baseline = session.get(ModelVersion, first)
+        baseline_f1 = baseline.metrics["per_class_f1"]["50057"]
+        candidate.metrics = {
+            "macro_f1": baseline.metrics["macro_f1"] + 1.0,
+            "per_class_f1": {"50057": baseline_f1 - 1.0, "70001": 1.0},
+        }
+        session.commit()
+
+    response = client.post(f"{base}/models/{second}/promote", headers=headers)
+
+    assert response.status_code == 422
+    assert "classe critica" in response.json()["message"]
+
+
+def test_first_promotion_rejects_unevaluated_critical_class(
+    client, monkeypatch, tmp_path,
+):
+    headers, empresa_id = _seed_company_with_razao(
+        permissao="admin_empresa", targets=[50057, 70001] * 5,
+    )
+    monkeypatch.setattr(settings, "MODEL_DIR", str(tmp_path))
+    base = f"/api/v1/companies/{empresa_id}/ml"
+    assert client.request(
+        "PUT", f"{base}/critical-classes", headers=headers, json={"classes": [99999]}
+    ).status_code == 200
+    candidate = client.post(f"{base}/train", headers=headers).json()["version_id"]
+
+    response = client.post(f"{base}/models/{candidate}/promote", headers=headers)
+
+    assert response.status_code == 422
+    assert "sem avaliacao" in response.json()["message"]
+
+
+def test_admin_cannot_promote_model_from_another_company(
+    client, monkeypatch, tmp_path,
+):
+    from tests.conftest import TestingSessionLocal
+    from core.models import ModelVersion
+
+    headers, first_company_id = _seed_company_with_razao(
+        permissao="admin_empresa", targets=[50057, 70001] * 5,
+    )
+    monkeypatch.setattr(settings, "MODEL_DIR", str(tmp_path))
+    first_base = f"/api/v1/companies/{first_company_id}/ml"
+    version_id = client.post(f"{first_base}/train", headers=headers).json()["version_id"]
+    with TestingSessionLocal() as session:
+        user = session.query(Usuario).one()
+        user.papel = "admin"
+        other = _empresa(
+            nome_empresa="Outra empresa ML", cnpj_cpf="99888777000166",
+            api_key="api-key-outra-empresa", cod_dominio=8102,
+        )
+        session.add(other)
+        session.commit()
+        second_company_id = other.id
+        refreshed_headers = _auth_headers(user)
+
+    response = client.post(
+        f"/api/v1/companies/{second_company_id}/ml/models/{version_id}/promote",
+        headers=refreshed_headers,
+    )
+
+    assert response.status_code == 422
+    with TestingSessionLocal() as session:
+        assert session.get(ModelVersion, version_id).status == "candidate"
+
+
+def test_candidate_evaluation_becomes_stale_when_active_changes(
+    client, monkeypatch, tmp_path,
+):
+    headers, empresa_id = _seed_company_with_razao(
+        permissao="admin_empresa", targets=[50057, 70001] * 5,
+    )
+    monkeypatch.setattr(settings, "MODEL_DIR", str(tmp_path))
+    base = f"/api/v1/companies/{empresa_id}/ml"
+    first = client.post(f"{base}/train", headers=headers).json()["version_id"]
+    second = client.post(f"{base}/train", headers=headers).json()["version_id"]
+    assert client.post(f"{base}/models/{first}/promote", headers=headers).status_code == 200
+
+    response = client.post(f"{base}/models/{second}/promote", headers=headers)
+
+    assert response.status_code == 422
+    assert "desatualizada" in response.json()["message"]

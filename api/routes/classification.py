@@ -3,11 +3,13 @@ from datetime import date
 from typing import Union
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from api.schemas import (
     MLClassificationInput,
     MLClassificationResponse,
+    MLCriticalClassesRequest,
     MLStatusResponse,
     MLTrainResponse,
     PredictInput,
@@ -18,7 +20,13 @@ from core.audit import record_audit_event
 from core.conta_contabil_empresa import garantir_identidade_contabil
 from core.dataset_builder import build_dataset_treino_contrapartida
 from core.ml_engine import ClassificadorContabil
-from core.models import Empresa, Transacao
+from core.model_versions import (
+    ModelLifecycleError,
+    change_active_version,
+    create_candidate,
+)
+from core.config import settings
+from core.models import Empresa, ModelVersion, Transacao
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -49,6 +57,7 @@ def _train_or_raise(engine_ml: ClassificadorContabil, company_id: int):
 @router.post(
     "/companies/{company_id}/ml/classification",
     response_model=MLClassificationResponse,
+    response_model_exclude_none=True,
 )
 def classify_lancamentos_with_saved_model(
     company_id: int,
@@ -143,6 +152,7 @@ def classify_lancamentos_with_saved_model(
             detail="Modelo retornou conta de contrapartida inválida",
         )
 
+    active_version_id = engine_ml.active_model_version_id_for_company(company_id)
     record_audit_event(
         db,
         event_type="classification.completed",
@@ -153,6 +163,7 @@ def classify_lancamentos_with_saved_model(
             "total_revisao": sum(
                 1 for prediction in predictions if prediction["needs_review"]
             ),
+            **({"model_version_id": active_version_id} if active_version_id else {}),
         },
     )
     db.commit()
@@ -161,6 +172,7 @@ def classify_lancamentos_with_saved_model(
         "empresa_id": company_id,
         "quantidade_processada": len(predictions),
         "results": predictions,
+        "model_version_id": active_version_id,
     }
 
 
@@ -175,25 +187,128 @@ def train_company_ml_model_from_canonical_razao(
 ):
     """Treina o modelo canonico de contrapartida a partir do Razao da empresa."""
     dataset = build_dataset_treino_contrapartida(db, empresa_id=company_id)
-    engine_ml = ClassificadorContabil(db)
-    trained = engine_ml.train_from_dataset(dataset)
-    if not trained:
+    if not dataset.metadata.get("treinavel", False):
+        record_audit_event(
+            db,
+            event_type="model.train_failed",
+            empresa_id=company_id,
+            metadata={"reason": "insufficient_dataset", "dataset_examples": dataset.metadata["total_linhas"]},
+        )
         db.commit()
         raise HTTPException(
             status_code=422,
             detail="Dataset insuficiente para treino do modelo",
         )
 
+    version = create_candidate(
+        db, dataset, model_dir=settings.MODEL_DIR,
+        critical_classes=_empresa.ml_critical_classes,
+    )
     db.commit()
     metadata = dataset.metadata
     return {
         "empresa_id": company_id,
+        "version_id": version.id,
         "total_linhas": metadata["total_linhas"],
         "total_descartes": metadata["total_descartes"],
         "contagem_por_target": metadata["contagem_por_target"],
         "treinavel": metadata["treinavel"],
-        "status": "trained",
+        "status": "candidate",
     }
+
+
+@router.put("/companies/{company_id}/ml/critical-classes")
+def set_company_ml_critical_classes(
+    company_id: int,
+    payload: MLCriticalClassesRequest,
+    db: Session = DB_DEPENDENCY,
+    empresa: Empresa = Depends(require_company_access("admin_empresa")),
+):
+    if len(payload.classes) > 100 or any(value <= 0 for value in payload.classes):
+        raise HTTPException(status_code=422, detail="Lista de classes criticas invalida")
+    empresa.ml_critical_classes = sorted(set(payload.classes))
+    record_audit_event(
+        db, event_type="model.critical_classes_updated", empresa_id=company_id,
+        metadata={"total_classes": len(empresa.ml_critical_classes)},
+    )
+    db.commit()
+    return {"empresa_id": company_id, "classes": empresa.ml_critical_classes}
+
+
+@router.get("/companies/{company_id}/ml/models")
+def list_company_ml_models(
+    company_id: int,
+    db: Session = DB_DEPENDENCY,
+    _empresa: Empresa = Depends(require_company_access("admin_empresa")),
+):
+    versions = db.scalars(
+        select(ModelVersion).where(ModelVersion.empresa_id == company_id)
+        .order_by(ModelVersion.id.desc())
+    ).all()
+    return {
+        "empresa_id": company_id,
+        "models": [
+            {
+                "id": version.id,
+                "status": version.status,
+                "manifest_id": version.manifest_id,
+                "threshold": version.threshold,
+                "metrics": version.metrics,
+                "evaluation": version.evaluation,
+                "critical_classes": version.critical_classes,
+                "created_at": version.created_at.isoformat(),
+            }
+            for version in versions
+        ],
+    }
+
+
+@router.post("/companies/{company_id}/ml/models/{version_id}/promote")
+def promote_company_model(
+    company_id: int,
+    version_id: int,
+    db: Session = DB_DEPENDENCY,
+    _empresa: Empresa = Depends(require_company_access("admin_empresa")),
+):
+    try:
+        version = change_active_version(
+            db, company_id=company_id, version_id=version_id,
+            model_dir=settings.MODEL_DIR,
+        )
+    except ModelLifecycleError as exc:
+        db.rollback()
+        record_audit_event(
+            db, event_type="model.promotion_denied", empresa_id=company_id,
+            resource_id=str(version_id), metadata={"reason": str(exc)},
+        )
+        db.commit()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    db.commit()
+    return {"empresa_id": company_id, "version_id": version.id, "status": version.status}
+
+
+@router.post("/companies/{company_id}/ml/models/{version_id}/rollback")
+def rollback_company_model(
+    company_id: int,
+    version_id: int,
+    db: Session = DB_DEPENDENCY,
+    _empresa: Empresa = Depends(require_company_access("admin_empresa")),
+):
+    try:
+        version = change_active_version(
+            db, company_id=company_id, version_id=version_id,
+            model_dir=settings.MODEL_DIR, rollback=True,
+        )
+    except ModelLifecycleError as exc:
+        db.rollback()
+        record_audit_event(
+            db, event_type="model.rollback_denied", empresa_id=company_id,
+            resource_id=str(version_id), metadata={"reason": str(exc)},
+        )
+        db.commit()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    db.commit()
+    return {"empresa_id": company_id, "version_id": version.id, "status": version.status}
 
 
 @router.get(
@@ -229,9 +344,8 @@ def get_company_ml_status(
         "contagem_por_target": metadata["contagem_por_target"],
         "treinavel": treinavel,
         "modelo_existente": modelo_existente,
-        "modelo_path": f"empresa_{company_id}/model_.joblib"
-        if modelo_existente
-        else None,
+        "modelo_path": engine_ml.model_relative_path_for_company(company_id)
+        if modelo_existente else None,
         "pode_classificar_movimentos": treinavel and modelo_existente,
         "status": status,
     }
