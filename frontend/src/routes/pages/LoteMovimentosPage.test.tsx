@@ -359,6 +359,7 @@ describe("LoteMovimentosPage", () => {
       expect(classificarPendentesMock).toHaveBeenCalledWith(
         "jwt-de-teste",
         "7",
+        expect.any(Function),
       );
     });
     expect(await screen.findByRole("status")).toHaveTextContent(

@@ -84,9 +84,22 @@ def test_hml_compose_mounts_only_sanitized_seed_fixtures_as_read_only():
 
     assert compose["services"]["api"]["volumes"] == [
         "./tests/fixtures/homologacao:/app/tests/fixtures/homologacao:ro",
+        "ml-models-hml:/app/data/models",
         "razao-temp-hml:/app/data/razao-temporario",
         "technical-logs-api-hml:/app/data/logs",
     ]
+
+
+def test_hml_ml_worker_shares_models_with_api_without_public_port():
+    compose = yaml.safe_load(COMPOSE_PATH.read_text(encoding="utf-8"))
+    api = compose["services"]["api"]
+    worker = compose["services"]["ml-worker"]
+    assert "ml-models-hml:/app/data/models" in api["volumes"]
+    assert "ml-models-hml:/app/data/models" in worker["volumes"]
+    assert worker["networks"] == ["hml-db"]
+    assert "ports" not in worker
+    assert worker["command"] == "python -m scripts.ml_worker"
+    assert worker["environment"]["ML_CPU_WORKER_CONCURRENCY"] == "${ML_CPU_WORKER_CONCURRENCY_HML:-1}"
 
 
 def test_hml_compose_runs_private_razao_worker_with_environment_storage():

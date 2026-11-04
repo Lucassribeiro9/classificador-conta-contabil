@@ -103,26 +103,29 @@ def create_candidate(
     path = model_dir / relative_path
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".joblib.tmp")
-    engine.pipeline.fit(
-        [row["features"] for row in dataset.linhas],
-        [row["target_conta_contrapartida"] for row in dataset.linhas],
-    )
     try:
+        engine.pipeline.fit(
+            [row["features"] for row in dataset.linhas],
+            [row["target_conta_contrapartida"] for row in dataset.linhas],
+        )
         joblib.dump(engine.pipeline, temporary)
         model.artifact_sha256 = sha256(temporary.read_bytes()).hexdigest()
         temporary.replace(path)
+        model.artifact_path = relative_path
+        record_audit_event(
+            session,
+            event_type="model.candidate_created",
+            empresa_id=company_id,
+            resource_id=str(model.id),
+            metadata={"manifest_id": model.manifest_id, "evaluation_method": evaluation["method"]},
+        )
+        session.flush()
+        return model
+    except Exception:
+        path.unlink(missing_ok=True)
+        raise
     finally:
         temporary.unlink(missing_ok=True)
-    model.artifact_path = relative_path
-    record_audit_event(
-        session,
-        event_type="model.candidate_created",
-        empresa_id=company_id,
-        resource_id=str(model.id),
-        metadata={"manifest_id": model.manifest_id, "evaluation_method": evaluation["method"]},
-    )
-    session.flush()
-    return model
 
 
 def active_version(session: Session, company_id: int) -> ModelVersion | None:

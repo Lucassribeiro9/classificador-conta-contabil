@@ -25,6 +25,7 @@ services:
       dockerfile: Dockerfile
     image: classificador-contabil:${APP_IMAGE_TAG_PROD:-prod}
     volumes:
+      - ml-models-prod:/app/data/models
       - razao-temp-prod:/app/data/razao-temporario
       - technical-logs-api-prod:/app/data/logs
     environment:
@@ -97,6 +98,30 @@ services:
       - prod-db
     restart: unless-stopped
 
+  ml-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: classificador-contabil:${APP_IMAGE_TAG_PROD:-prod}
+    volumes:
+      - ml-models-prod:/app/data/models
+      - technical-logs-ml-prod:/app/data/logs
+    environment:
+      APP_ENV: prod
+      DATABASE_URL: ${DATABASE_URL_PROD:?Defina DATABASE_URL no ambiente de producao}
+      MODEL_DIR: /app/data/models
+      TECHNICAL_LOG_DIR: ${TECHNICAL_LOG_DIR_PROD:-/app/data/logs}
+      ML_CPU_WORKER_CONCURRENCY: ${ML_CPU_WORKER_CONCURRENCY_PROD:-1}
+      ML_JOB_LEASE_SECONDS: ${ML_JOB_LEASE_SECONDS_PROD:-600}
+      ML_JOB_POLL_INTERVAL_SECONDS: ${ML_JOB_POLL_INTERVAL_SECONDS_PROD:-3}
+    command: python -m scripts.ml_worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - prod-db
+    restart: unless-stopped
+
   frontend:
     build:
       context: ./frontend
@@ -124,6 +149,8 @@ networks:
     name: classificador-prod-edge
 
 volumes:
+  ml-models-prod:
+  technical-logs-ml-prod:
   postgres-prod-data:
     name: classificador-prod-postgres-data
   razao-temp-prod:

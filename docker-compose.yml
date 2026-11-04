@@ -8,6 +8,7 @@ services:
       - "8000:8000"
     volumes:
       - ./data:/app/data
+      - ml-models-dev:/app/data/models
       - razao-temp-dev:/app/data/razao-temporario
       - technical-logs-api-dev:/app/data/logs
     environment:
@@ -55,6 +56,27 @@ services:
       - RAZAO_LEASE_SECONDS=${RAZAO_LEASE_SECONDS:-600}
       - RAZAO_POLL_INTERVAL_SECONDS=${RAZAO_POLL_INTERVAL_SECONDS:-3}
     command: python -m scripts.razao_worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - n8n-network-test
+    restart: unless-stopped
+
+  ml-worker:
+    build: .
+    image: classificador-contabil:${APP_IMAGE_TAG:-dev}
+    volumes:
+      - ml-models-dev:/app/data/models
+      - technical-logs-ml-dev:/app/data/logs
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - MODEL_DIR=/app/data/models
+      - TECHNICAL_LOG_DIR=${TECHNICAL_LOG_DIR:-/app/data/logs}
+      - ML_CPU_WORKER_CONCURRENCY=${ML_CPU_WORKER_CONCURRENCY:-1}
+      - ML_JOB_LEASE_SECONDS=${ML_JOB_LEASE_SECONDS:-600}
+      - ML_JOB_POLL_INTERVAL_SECONDS=${ML_JOB_POLL_INTERVAL_SECONDS:-3}
+    command: python -m scripts.ml_worker
     depends_on:
       postgres:
         condition: service_healthy
@@ -126,6 +148,8 @@ networks:
     driver: bridge
 
 volumes:
+  ml-models-dev:
+  technical-logs-ml-dev:
   postgres-data:
   razao-temp-dev:
     name: ${RAZAO_TEMP_VOLUME_NAME:-classificador-dev-razao-temp}

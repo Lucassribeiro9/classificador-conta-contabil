@@ -1269,6 +1269,57 @@ class ModelVersion(Base):
     )
 
 
+class MLJob(Base):
+    """Durable technical execution; domain rows keep their own lifecycle."""
+
+    __tablename__ = "ml_jobs"
+    __table_args__ = (
+        UniqueConstraint("empresa_id", "idempotency_key", name="uq_ml_jobs_company_key"),
+        CheckConstraint(
+            "kind IN ('train', 'classify', 'classify_movements')",
+            name="ck_ml_jobs_kind",
+        ),
+        CheckConstraint(
+            "status IN ('queued', 'running', 'completed', 'failed', 'cancelled')",
+            name="ck_ml_jobs_status",
+        ),
+        CheckConstraint("progress BETWEEN 0 AND 100", name="ck_ml_jobs_progress"),
+        CheckConstraint("attempts >= 0", name="ck_ml_jobs_attempts"),
+        CheckConstraint(
+            "(status = 'running' AND lease_token IS NOT NULL AND lease_owner IS NOT NULL "
+            "AND lease_expires_at IS NOT NULL) OR "
+            "(status <> 'running' AND lease_token IS NULL AND lease_owner IS NULL "
+            "AND lease_expires_at IS NULL)",
+            name="ck_ml_jobs_lease_state",
+        ),
+        Index(
+            "uq_ml_jobs_one_running_per_company", "empresa_id", unique=True,
+            postgresql_where=text("status = 'running'"),
+            sqlite_where=text("status = 'running'"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), nullable=False, index=True)
+    requested_by: Mapped[Optional[int]] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    pool: Mapped[str] = mapped_column(String(32), nullable=False, default="ml/cpu")
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="queued")
+    progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    lease_token: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    lease_owner: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    lease_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    result: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    error_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now, server_default=func.now(), nullable=False)
+
+
 class LoteImportacaoMovimentoOperacional(Base):
     """
     Representa um lote de importacao de movimentos operacionais.

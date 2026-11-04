@@ -274,7 +274,7 @@ def test_fluxo_operacional_importa_classifica_revisa_audita_e_isola_empresa(
     pendente_id = movimentos[1]["id"]
     revisao_id = movimentos[2]["id"]
 
-    def fake_classificar(db, *, empresa_id, model_dir=None):
+    def fake_classificar(db, *, empresa_id, model_dir=None, movement_ids=None):
         pendente = db.get(MovimentoOperacionalImportado, pendente_id)
         pendente.contrapartida_sugerida = 30001
         pendente.confidence_sugerida = 0.91
@@ -298,18 +298,22 @@ def test_fluxo_operacional_importa_classifica_revisa_audita_e_isola_empresa(
         }
 
     monkeypatch.setattr(
-        "api.routes.movimentos_operacionais.classificar_movimentos_operacionais_pendentes",
+        "core.ml_worker.classificar_movimentos_operacionais_pendentes",
         fake_classificar,
     )
 
     classify_response = client.post(
         f"/api/v1/companies/{empresa_id}/movimentos-operacionais/classificar",
-        headers=_auth_headers(usuario),
+        headers={**_auth_headers(usuario), "Idempotency-Key": "flow-506"},
     )
 
-    assert classify_response.status_code == 200
-    assert classify_response.json()["quantidade_processada"] == 1
-    assert classify_response.json()["total_sugerido"] == 1
+    assert classify_response.status_code == 202
+    from core.ml_worker import MLWorker
+    assert MLWorker(TestingSessionLocal, worker_id="flow-worker", model_dir=settings.MODEL_DIR).run_once()
+    classified = client.get(classify_response.json()["status_url"], headers=_auth_headers(usuario)).json()
+    assert classified["status"] == "completed"
+    assert classified["result"]["quantidade_processada"] == 1
+    assert classified["result"]["total_sugerido"] == 1
 
     approve_response = client.post(
         f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/{lote_id}/movimentos/{pre_classificado_id}/review",
@@ -364,6 +368,7 @@ def test_fluxo_operacional_importa_classifica_revisa_audita_e_isola_empresa(
         assert event_types == [
             "operational_movements.imported",
             "operational_movements.classified",
+            "ml.job.completed",
             "operational_movements.aprovado",
             "empresa_conta.created_by_review",
             "operational_movements.corrigido",

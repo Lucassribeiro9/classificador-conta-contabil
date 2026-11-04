@@ -190,7 +190,8 @@ Treino explicito:
 
 ```bash
 curl -sS -X POST "http://localhost:8000/api/v1/companies/123/ml/train" \
-  -H "Authorization: Bearer <JWT_DE_USUARIO>"
+  -H "Authorization: Bearer <JWT_DE_USUARIO>" \
+  -H "Idempotency-Key: <CHAVE_UNICA_DA_OPERACAO>"
 ```
 
 Classificacao de contrapartida:
@@ -198,9 +199,18 @@ Classificacao de contrapartida:
 ```bash
 curl -sS -X POST "http://localhost:8000/api/v1/companies/123/ml/classification" \
   -H "Authorization: Bearer <JWT_DE_USUARIO>" \
+  -H "Idempotency-Key: <CHAVE_UNICA_DA_OPERACAO>" \
   -H "Content-Type: application/json" \
   -d '{"historico":"PAGAMENTO FORNECEDOR FICTICIO","conta_origem":10036,"direcao":"credito"}'
 ```
+
+Os dois POSTs retornam `202` com `job_id`, `status` e `status_url`. Consulte
+`GET /api/v1/companies/123/ml/jobs/{job_id}` com o mesmo JWT; `result` aparece
+somente em `completed`. `POST .../cancel` solicita cancelamento cooperativo e
+`POST .../retry` reenfileira um job em `failed`. O mesmo contrato vale para
+`POST /api/v1/companies/123/movimentos-operacionais/classificar`. Use a mesma
+`Idempotency-Key` ao repetir a mesma solicitação; payload diferente com a mesma
+chave retorna `409`.
 
 ### Feedback
 

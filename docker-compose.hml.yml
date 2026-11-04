@@ -26,6 +26,7 @@ services:
     image: classificador-contabil:${APP_IMAGE_TAG_HML:-hml}
     volumes:
       - ./tests/fixtures/homologacao:/app/tests/fixtures/homologacao:ro
+      - ml-models-hml:/app/data/models
       - razao-temp-hml:/app/data/razao-temporario
       - technical-logs-api-hml:/app/data/logs
     environment:
@@ -99,6 +100,30 @@ services:
       - hml-db
     restart: unless-stopped
 
+  ml-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: classificador-contabil:${APP_IMAGE_TAG_HML:-hml}
+    volumes:
+      - ml-models-hml:/app/data/models
+      - technical-logs-ml-hml:/app/data/logs
+    environment:
+      APP_ENV: hml
+      DATABASE_URL: ${DATABASE_URL_HML:?Defina DATABASE_URL_HML no ambiente de homologacao}
+      MODEL_DIR: /app/data/models
+      TECHNICAL_LOG_DIR: ${TECHNICAL_LOG_DIR_HML:-/app/data/logs}
+      ML_CPU_WORKER_CONCURRENCY: ${ML_CPU_WORKER_CONCURRENCY_HML:-1}
+      ML_JOB_LEASE_SECONDS: ${ML_JOB_LEASE_SECONDS_HML:-600}
+      ML_JOB_POLL_INTERVAL_SECONDS: ${ML_JOB_POLL_INTERVAL_SECONDS_HML:-3}
+    command: python -m scripts.ml_worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - hml-db
+    restart: unless-stopped
+
   frontend:
     build:
       context: ./frontend
@@ -126,6 +151,8 @@ networks:
     name: classificador-hml-edge
 
 volumes:
+  ml-models-hml:
+  technical-logs-ml-hml:
   postgres-hml-data:
     name: classificador-hml-postgres-data
   razao-temp-hml:

@@ -106,7 +106,12 @@ export function LoteMovimentosPage() {
 
   const classifyMutation = useMutation({
     mutationFn: () =>
-      loteMovimentosClient.classificarPendentes(accessToken, empresaId ?? ""),
+      loteMovimentosClient.classificarPendentes(
+        accessToken, empresaId ?? "",
+        (jobId, jobStatus, progress) => {
+          setStatusMessage(`Job ${jobId}: ${jobStatus} (${progress}%).`);
+        },
+      ),
     onSuccess: (result) => {
       setStatusMessage(
         `${result.quantidadeProcessada} pendentes classificados. ${result.totalSugerido} sugeridos, ${result.totalRevisao} para revisao.`,
@@ -117,6 +122,7 @@ export function LoteMovimentosPage() {
       });
     },
     onError: () => {
+      setStatusMessage(null);
       setMessage("Nao foi possivel classificar pendentes da empresa.");
     },
   });
@@ -339,6 +345,7 @@ export function LoteMovimentosPage() {
           <button
             className="border border-brand px-3 py-2 text-sm font-semibold text-brand-dark transition hover:bg-teal-50"
             onClick={() => classifyMutation.mutate()}
+            disabled={classifyMutation.isPending}
             type="button"
           >
             Classificar pendentes da empresa

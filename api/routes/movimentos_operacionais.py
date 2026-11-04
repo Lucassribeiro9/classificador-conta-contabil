@@ -25,7 +25,7 @@ from api.dependencies import (
 )
 from core.service_credentials import identificar_credencial_servico
 from api.schemas import (
-    ClassificacaoMovimentoOperacionalResponse,
+    MLJobAccepted,
     ImportacaoMovimentoOperacionalResponse,
     MovimentoOperacionalFeedbackImportResponse,
     MovimentoOperacionalListResponse,
@@ -36,6 +36,7 @@ from api.schemas import (
     MovimentoReviewSubmissionResponse,
 )
 from core.audit import record_audit_event
+from core.ml_jobs import IdempotencyConflict, enqueue_ml_job
 from core.models import (
     Empresa,
     LoteImportacaoMovimentoOperacional,
@@ -55,10 +56,6 @@ from core.movimentos_operacionais_feedback_importer import (
 from core.movimentos_operacionais_importer import (
     MovimentoOperacionalImportError,
     import_movimentos_operacionais,
-)
-from core.movimentos_operacionais_classification import (
-    MovimentoOperacionalModelNotFound,
-    classificar_movimentos_operacionais_pendentes,
 )
 from core.movimentos_operacionais_parser import MovimentoOperacionalParseError
 from core.movimentos_operacionais_review import (
@@ -575,29 +572,42 @@ def import_company_operational_movements(
 
 @router.post(
     "/classificar",
-    response_model=ClassificacaoMovimentoOperacionalResponse,
+    response_model=MLJobAccepted,
+    status_code=202,
 )
 def classify_company_pending_operational_movements(
     company_id: int,
     current_user: Usuario = Depends(get_current_user),
     db: Session = DB_DEPENDENCY,
-) -> ClassificacaoMovimentoOperacionalResponse:
-    """Classifica movimentos operacionais pendentes sem aprovar automaticamente."""
+    idempotency_key: str = Header(alias="Idempotency-Key"),
+) -> MLJobAccepted:
+    """Enfileira os movimentos pendentes atuais sem decidir por eles."""
     empresa = _ensure_company_for_operational_query(db, company_id)
     denial_detail = _movimentos_permission_denial_detail(current_user, empresa.id)
     if denial_detail is not None:
         raise HTTPException(status_code=403, detail=denial_detail)
 
+    movement_ids = db.scalars(select(MovimentoOperacionalImportado.id).where(
+        MovimentoOperacionalImportado.empresa_id == company_id,
+        MovimentoOperacionalImportado.status == "pendente",
+    ).order_by(MovimentoOperacionalImportado.id)).all()
     try:
-        result = classificar_movimentos_operacionais_pendentes(
-            db,
-            empresa_id=empresa.id,
+        job = enqueue_ml_job(
+            db, company_id=company_id, kind="classify_movements",
+            idempotency_key=idempotency_key,
+            requested_by=current_user.id,
+            payload={"movement_ids": movement_ids},
         )
-        db.commit()
-        return ClassificacaoMovimentoOperacionalResponse(**result)
-    except MovimentoOperacionalModelNotFound as exc:
-        db.commit()
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except IdempotencyConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    job_id, status = job.id, job.status
+    db.commit()
+    return MLJobAccepted(
+        empresa_id=company_id, job_id=job_id, status=status,
+        status_url=f"/api/v1/companies/{company_id}/ml/jobs/{job_id}",
+    )
 
 
 @router.post(

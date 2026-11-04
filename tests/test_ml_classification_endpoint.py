@@ -1,10 +1,13 @@
 from datetime import datetime, timedelta, timezone
+from uuid import uuid4
 
+import httpx
 import jwt
 import pytest
 from pwdlib import PasswordHash
 
 from core.config import settings
+from core.ml_worker import MLWorker
 from core.models import (
     AuditEvent,
     ContaContabil,
@@ -29,6 +32,37 @@ def jwt_settings():
     finally:
         settings.JWT_SECRET_KEY = previous_secret
         settings.JWT_ALGORITHM = previous_algorithm
+
+
+@pytest.fixture(autouse=True)
+def exercise_classification_job(client, monkeypatch):
+    """Keep domain assertions while driving the new queue and worker."""
+    from tests.conftest import TestingSessionLocal
+
+    original_post = client.post
+
+    def post(url, **kwargs):
+        if not url.endswith("/ml/classification"):
+            return original_post(url, **kwargs)
+        headers = {**kwargs.get("headers", {}), "Idempotency-Key": uuid4().hex}
+        accepted = original_post(url, **{**kwargs, "headers": headers})
+        if accepted.status_code != 202:
+            return accepted
+        worker = MLWorker(TestingSessionLocal, worker_id="test-classification", model_dir=settings.MODEL_DIR)
+        assert worker.run_once()
+        job = client.get(accepted.json()["status_url"], headers=headers).json()
+        if job["status"] == "failed":
+            if job["error_code"] == "model_not_found":
+                return httpx.Response(404, json={"message": "Modelo treinado não encontrado para a empresa"})
+            if job["error_code"] == "invalid_predicted_account":
+                return httpx.Response(422, json={"message": "Modelo retornou conta de contrapartida inválida"})
+        assert job["status"] == "completed", job
+        result = job["result"]
+        if result.get("model_version_id") is None:
+            result.pop("model_version_id", None)
+        return httpx.Response(200, json=result)
+
+    monkeypatch.setattr(client, "post", post)
 
 
 def _usuario(**overrides) -> Usuario:
@@ -308,8 +342,9 @@ def test_classification_endpoint_creates_started_and_completed_audit_events(
     assert [event.event_type for event in events] == [
         "classification.started",
         "classification.completed",
+        "ml.job.completed",
     ]
-    started, completed = events
+    started, completed = events[:2]
     assert started.empresa_id == empresa_id
     assert started.user_id is not None
     assert started.resource_id == "ml_classification"
@@ -360,9 +395,10 @@ def test_classification_endpoint_creates_failed_audit_event_when_model_is_missin
     events = _audit_events()
     assert [event.event_type for event in events] == [
         "classification.started",
+        "ml.job.failed",
         "classification.failed",
     ]
-    failed = events[1]
+    failed = events[2]
     assert failed.empresa_id == empresa_id
     assert failed.user_id is not None
     assert failed.resource_id == "ml_classification"

@@ -76,6 +76,17 @@ def test_dev_compose_runs_razao_worker_with_shared_private_storage():
     )
 
 
+def test_dev_ml_worker_shares_models_and_has_configurable_pool():
+    compose = _load_compose()
+    api = compose["services"]["api-contabil"]
+    worker = compose["services"]["ml-worker"]
+    assert "ml-models-dev:/app/data/models" in api["volumes"]
+    assert "ml-models-dev:/app/data/models" in worker["volumes"]
+    assert "ports" not in worker
+    assert worker["command"] == "python -m scripts.ml_worker"
+    assert "ML_CPU_WORKER_CONCURRENCY=${ML_CPU_WORKER_CONCURRENCY:-1}" in worker["environment"]
+
+
 def test_make_cleanup_is_project_scoped_and_preserves_persistent_data_by_default():
     makefile = (PROJECT_ROOT / "Makefile").read_text(encoding="utf-8")
 

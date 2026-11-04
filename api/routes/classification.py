@@ -2,34 +2,97 @@ import logging
 from datetime import date
 from typing import Union
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from api.schemas import (
     MLClassificationInput,
-    MLClassificationResponse,
     MLCriticalClassesRequest,
     MLStatusResponse,
-    MLTrainResponse,
+    MLJobAccepted,
+    MLJobStatus,
     PredictInput,
     PredictResponse,
 )
-from api.dependencies import DB_DEPENDENCY, require_company_access, verify_company
+from api.dependencies import DB_DEPENDENCY, get_current_user, require_company_access, verify_company
 from core.audit import record_audit_event
-from core.conta_contabil_empresa import garantir_identidade_contabil
 from core.dataset_builder import build_dataset_treino_contrapartida
 from core.ml_engine import ClassificadorContabil
+from core.ml_jobs import IdempotencyConflict, enqueue_ml_job
 from core.model_versions import (
     ModelLifecycleError,
     change_active_version,
-    create_candidate,
 )
 from core.config import settings
-from core.models import Empresa, ModelVersion, Transacao
+from core.models import Empresa, MLJob, ModelVersion, Transacao, Usuario
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _company_ml_job(db: Session, company_id: int, job_id: int) -> MLJob:
+    job = db.scalar(select(MLJob).where(
+        MLJob.id == job_id, MLJob.empresa_id == company_id,
+    ))
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job não encontrado")
+    return job
+
+
+def _ml_job_status(job: MLJob) -> MLJobStatus:
+    return MLJobStatus(
+        empresa_id=job.empresa_id, job_id=job.id, kind=job.kind, pool=job.pool,
+        status=job.status, progress=job.progress, attempts=job.attempts,
+        cancel_requested=job.cancel_requested,
+        result=job.result if job.status == "completed" else None,
+        error_code=job.error_code if job.status == "failed" else None,
+    )
+
+
+@router.get("/companies/{company_id}/ml/jobs/{job_id}", response_model=MLJobStatus)
+def get_company_ml_job(
+    company_id: int, job_id: int, db: Session = DB_DEPENDENCY,
+    _empresa: Empresa = Depends(require_company_access("leitura")),
+):
+    return _ml_job_status(_company_ml_job(db, company_id, job_id))
+
+
+@router.post("/companies/{company_id}/ml/jobs/{job_id}/cancel", response_model=MLJobStatus)
+def cancel_company_ml_job(
+    company_id: int, job_id: int, db: Session = DB_DEPENDENCY,
+    _empresa: Empresa = Depends(require_company_access("operacao")),
+):
+    job = _company_ml_job(db, company_id, job_id)
+    if job.status == "queued":
+        job.status = "cancelled"
+    elif job.status == "running":
+        job.cancel_requested = True
+    elif job.status != "cancelled":
+        raise HTTPException(status_code=409, detail="Job não pode ser cancelado")
+    record_audit_event(db, event_type="ml.job.cancel_requested", empresa_id=company_id,
+                       resource_id=str(job.id), metadata={"status": job.status})
+    db.commit()
+    return _ml_job_status(job)
+
+
+@router.post("/companies/{company_id}/ml/jobs/{job_id}/retry", response_model=MLJobStatus)
+def retry_company_ml_job(
+    company_id: int, job_id: int, db: Session = DB_DEPENDENCY,
+    _empresa: Empresa = Depends(require_company_access("operacao")),
+):
+    job = _company_ml_job(db, company_id, job_id)
+    if job.status != "failed":
+        raise HTTPException(status_code=409, detail="Somente job falho pode ser reenfileirado")
+    job.status = "queued"
+    job.attempts = 0
+    job.progress = 0
+    job.error_code = None
+    job.cancel_requested = False
+    record_audit_event(db, event_type="ml.job.manual_retry", empresa_id=company_id,
+                       resource_id=str(job.id), metadata={})
+    db.commit()
+    return _ml_job_status(job)
 
 
 # Decisão de domínio:
@@ -56,164 +119,70 @@ def _train_or_raise(engine_ml: ClassificadorContabil, company_id: int):
 
 @router.post(
     "/companies/{company_id}/ml/classification",
-    response_model=MLClassificationResponse,
-    response_model_exclude_none=True,
+    response_model=MLJobAccepted,
+    status_code=202,
 )
 def classify_lancamentos_with_saved_model(
     company_id: int,
     payload: Union[MLClassificationInput, list[MLClassificationInput]],
     db: Session = DB_DEPENDENCY,
     _empresa: Empresa = Depends(require_company_access("operacao")),
+    current_user: Usuario = Depends(get_current_user),
+    idempotency_key: str = Header(alias="Idempotency-Key"),
 ):
+    """Enfileira classificacao canonica sem executar inferencia no HTTP."""
     inputs = payload if isinstance(payload, list) else [payload]
     if len(inputs) > 100:
-        raise HTTPException(
-            status_code=422,
-            detail="Limite de 100 lançamentos por requisição",
-        )
-
-    engine_ml = ClassificadorContabil(db)
-    record_audit_event(
-        db,
-        event_type="classification.started",
-        empresa_id=company_id,
-        resource_id="ml_classification",
-        metadata={"total_solicitado": len(inputs)},
-    )
-    if not engine_ml.model_exists_for_company(company_id):
-        record_audit_event(
-            db,
-            event_type="classification.failed",
-            empresa_id=company_id,
-            resource_id="ml_classification",
-            metadata={
-                "total_solicitado": len(inputs),
-                "error_type": "ModelNotFound",
-                "reason": "model_not_found",
-            },
-        )
-        db.commit()
-        raise HTTPException(
-            status_code=404,
-            detail="Modelo treinado não encontrado para a empresa",
-        )
-
+        raise HTTPException(status_code=422, detail="Limite de 100 lançamentos por requisição")
     try:
-        predictions = engine_ml.classify_lancamentos_from_saved_model(
-            empresa_id=company_id,
-            lancamentos=[item.model_dump() for item in inputs],
+        job = enqueue_ml_job(
+            db, company_id=company_id, kind="classify",
+            idempotency_key=idempotency_key,
+            requested_by=current_user.id,
+            payload={"inputs": [item.model_dump(mode="json") for item in inputs]},
         )
-    except Exception as exc:
-        record_audit_event(
-            db,
-            event_type="classification.failed",
-            empresa_id=company_id,
-            resource_id="ml_classification",
-            metadata={
-                "total_solicitado": len(inputs),
-                "error_type": type(exc).__name__,
-                "reason": "classification_error",
-            },
-        )
-        db.commit()
-        raise
-
-    predicted_accounts = {
-        prediction["conta_contrapartida"] for prediction in predictions
-    }
-    contas_contextuais = [
-        garantir_identidade_contabil(
-            db, empresa_id=company_id, codigo=codigo
-        )
-        for codigo in predicted_accounts
-    ]
-    valid_accounts = {
-        conta.codigo
-        for conta in contas_contextuais
-        if conta is not None and conta.is_classificavel
-    }
-    invalid_accounts = predicted_accounts - valid_accounts
-    if invalid_accounts:
-        record_audit_event(
-            db,
-            event_type="classification.failed",
-            empresa_id=company_id,
-            resource_id="ml_classification",
-            metadata={
-                "total_solicitado": len(inputs),
-                "total_processado": len(predictions),
-                "error_type": "InvalidPredictedAccount",
-                "reason": "invalid_predicted_account",
-            },
-        )
-        db.commit()
-        raise HTTPException(
-            status_code=422,
-            detail="Modelo retornou conta de contrapartida inválida",
-        )
-
-    active_version_id = engine_ml.active_model_version_id_for_company(company_id)
-    record_audit_event(
-        db,
-        event_type="classification.completed",
-        empresa_id=company_id,
-        resource_id="ml_classification",
-        metadata={
-            "total_processado": len(predictions),
-            "total_revisao": sum(
-                1 for prediction in predictions if prediction["needs_review"]
-            ),
-            **({"model_version_id": active_version_id} if active_version_id else {}),
-        },
-    )
+    except IdempotencyConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    job_id, status = job.id, job.status
     db.commit()
-
     return {
-        "empresa_id": company_id,
-        "quantidade_processada": len(predictions),
-        "results": predictions,
-        "model_version_id": active_version_id,
+        "empresa_id": company_id, "job_id": job_id, "status": status,
+        "status_url": f"/api/v1/companies/{company_id}/ml/jobs/{job_id}",
     }
 
 
 @router.post(
     "/companies/{company_id}/ml/train",
-    response_model=MLTrainResponse,
+    response_model=MLJobAccepted,
+    status_code=202,
 )
 def train_company_ml_model_from_canonical_razao(
     company_id: int,
     db: Session = DB_DEPENDENCY,
     _empresa: Empresa = Depends(require_company_access("operacao")),
+    current_user: Usuario = Depends(get_current_user),
+    idempotency_key: str = Header(alias="Idempotency-Key"),
 ):
-    """Treina o modelo canonico de contrapartida a partir do Razao da empresa."""
-    dataset = build_dataset_treino_contrapartida(db, empresa_id=company_id)
-    if not dataset.metadata.get("treinavel", False):
-        record_audit_event(
-            db,
-            event_type="model.train_failed",
-            empresa_id=company_id,
-            metadata={"reason": "insufficient_dataset", "dataset_examples": dataset.metadata["total_linhas"]},
+    """Enfileira treino canonico sem executar ML na requisicao HTTP."""
+    try:
+        job = enqueue_ml_job(
+            db, company_id=company_id, kind="train",
+            idempotency_key=idempotency_key, payload={},
+            requested_by=current_user.id,
         )
-        db.commit()
-        raise HTTPException(
-            status_code=422,
-            detail="Dataset insuficiente para treino do modelo",
-        )
-
-    version = create_candidate(
-        db, dataset, model_dir=settings.MODEL_DIR,
-        critical_classes=_empresa.ml_critical_classes,
-    )
+    except IdempotencyConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    job_id, status = job.id, job.status
     db.commit()
-    metadata = dataset.metadata
     return {
         "empresa_id": company_id,
-        "version_id": version.id,
-        "total_linhas": metadata["total_linhas"],
-        "total_descartes": metadata["total_descartes"],
-        "contagem_por_target": metadata["contagem_por_target"],
-        "treinavel": metadata["treinavel"],
-        "status": "candidate",
+        "job_id": job_id,
+        "status": status,
+        "status_url": f"/api/v1/companies/{company_id}/ml/jobs/{job_id}",
     }
 
 

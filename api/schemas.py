@@ -799,6 +799,26 @@ class MLTrainResponse(BaseModel):
     status: str
 
 
+class MLJobAccepted(BaseModel):
+    empresa_id: int
+    job_id: int
+    status: str
+    status_url: str
+
+
+class MLJobStatus(BaseModel):
+    empresa_id: int
+    job_id: int
+    kind: str
+    pool: str
+    status: str
+    progress: int
+    attempts: int
+    cancel_requested: bool
+    result: Optional[dict] = None
+    error_code: Optional[str] = None
+
+
 class MLCriticalClassesRequest(BaseModel):
     classes: list[int]
 
