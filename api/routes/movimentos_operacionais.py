@@ -275,7 +275,10 @@ def list_company_operational_movements(
         db.scalars(
             select(ReviewItem).where(
                 ReviewItem.empresa_id == empresa.id,
-                ReviewItem.source_type == "movimento_operacional_temporal",
+                ReviewItem.source_type.in_((
+                    "movimento_operacional_temporal",
+                    "movimento_operacional_ml",
+                )),
                 ReviewItem.grouping_key.in_(
                     [f"movimento:{item.id}" for item in movimentos]
                 ),

@@ -173,6 +173,7 @@ class ReviewEvidenceResponse(BaseModel):
     source_type: str
     source_id: str
     summary: str
+    safe_metadata: dict = Field(default_factory=dict)
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
@@ -671,6 +672,7 @@ class MovimentoOperacionalResponse(BaseModel):
     contrapartida_sugerida: Optional[int] = None
     contrapartida_final: Optional[int] = None
     confidence_sugerida: Optional[float] = None
+    ml_suggestion_context: Optional[dict] = None
     status: str
     elegivel_treino: bool
     mensagens_validacao: list

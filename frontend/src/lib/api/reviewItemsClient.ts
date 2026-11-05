@@ -5,6 +5,7 @@ export type ReviewEvidence = {
   sourceType: string;
   sourceId: string;
   summary: string;
+  safeMetadata?: { lote_id?: number };
   createdAt: string;
 };
 
@@ -42,6 +43,7 @@ type ReviewEvidenceApi = {
   source_type: string;
   source_id: string;
   summary: string;
+  safe_metadata?: { lote_id?: number };
   created_at: string;
 };
 
@@ -94,6 +96,7 @@ function mapItem(item: ReviewItemApi): ReviewItem {
       sourceType: evidence.source_type,
       sourceId: evidence.source_id,
       summary: evidence.summary,
+      safeMetadata: evidence.safe_metadata,
       createdAt: evidence.created_at,
     })),
   };

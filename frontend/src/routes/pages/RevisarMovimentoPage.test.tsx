@@ -152,6 +152,57 @@ describe("RevisarMovimentoPage", () => {
     );
   });
 
+  it("exibe versao, snapshot, alternativas e exemplos elegiveis da sugestao", async () => {
+    getMovimentoMock.mockResolvedValueOnce({
+      ...movimento,
+      mlSuggestionContext: {
+        modelVersionId: 12,
+        snapshotId: 34,
+        contextDate: "2026-01-03",
+        contextSource: "movement_date",
+        confidence: 0.91,
+        alternatives: [{ accountCode: 30001, confidence: 0.08 }],
+        historicalExamples: [{
+          sourceType: "movimento", sourceId: 77,
+          movementId: 77, accountCode: 20001,
+          date: "2026-01-02", history: "exemplo elegivel autorizado",
+        }],
+        evidence: ["model_probability", "temporal_snapshot", "company_account"],
+      },
+    });
+
+    renderRevisarMovimentoPage();
+
+    expect(await screen.findByText("Modelo 12 · Snapshot 34")).toBeInTheDocument();
+    expect(screen.getByText("30001 · 8% de confianca")).toBeInTheDocument();
+    expect(screen.getByText(/exemplo elegivel autorizado/)).toBeInTheDocument();
+    expect(screen.getByText("Probabilidade do modelo")).toBeInTheDocument();
+  });
+
+  it("exibe a confianca avaliada mesmo quando a previsao se abstem", async () => {
+    getMovimentoMock.mockResolvedValueOnce({
+      ...movimento,
+      contrapartidaSugerida: null,
+      confidenceSugerida: null,
+      status: "revisao",
+      mlSuggestionContext: {
+        modelVersionId: 12,
+        snapshotId: 34,
+        contextDate: "2026-01-03",
+        contextSource: "movement_date",
+        confidence: 0.45,
+        abstentionReason: "below_threshold",
+        alternatives: [], historicalExamples: [], evidence: ["model_probability"],
+      },
+    });
+
+    renderRevisarMovimentoPage();
+
+    expect(await screen.findByText("Confianca avaliada: 45% de confianca")).toBeInTheDocument();
+    expect(screen.getByText("Abstencao: Confianca abaixo do limite da versao ativa.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Aprovar sugestao" })).toBeDisabled();
+  });
+
   it("avisa quando a conta global escolhida ainda nao esta vinculada e corrige", async () => {
     getMovimentoMock.mockResolvedValueOnce(movimento);
     searchContasMock.mockResolvedValueOnce(contas);

@@ -1438,6 +1438,7 @@ class MovimentoOperacionalImportado(Base):
     )
     contrapartida_final: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     confidence_sugerida: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    ml_suggestion_context: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False)
     row_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     elegivel_treino: Mapped[bool] = mapped_column(

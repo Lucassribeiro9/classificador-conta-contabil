@@ -6,6 +6,7 @@ from core.models import (
     MovimentoOperacionalImportado,
 )
 from core.movimentos_operacionais_review import review_movimento_operacional, MovimentoReviewError
+from core.review_items import create_review_item
 from tests.conftest import TestingSessionLocal
 from tests.test_movimentos_operacionais_api import _seed_operational_lote_with_movements
 
@@ -35,6 +36,40 @@ def test_approve_movimento_sets_status_and_final_conta(setup_db):
         # Como o movimento da fixture tem direcao="credito":
         assert result.conta_debito == 100
         assert result.conta_credito == mov.conta_financeira
+
+
+def test_decisao_humana_resolve_pendencia_ml_do_movimento(setup_db):
+    usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(permissao="operacao")
+    with TestingSessionLocal() as session:
+        session.add(ContaContabil(
+            codigo=100, classificacao="1.0.0", nome="Conta sintética de teste",
+            tipo="A", grau=3,
+        ))
+        session.flush()
+        movimento = session.query(MovimentoOperacionalImportado).filter_by(lote_id=lote_id).first()
+        movimento.status = "revisao"
+        item = create_review_item(
+            session, empresa_id=empresa_id,
+            source_type="movimento_operacional_ml",
+            grouping_key=f"movimento:{movimento.id}",
+            summary="Abstenção ML sintética", criticality="high",
+            evidence=[{
+                "source_type": "movimento_operacional",
+                "source_id": str(movimento.id),
+                "summary": "Revisão humana necessária",
+            }],
+        )
+        session.commit()
+
+        result = review_movimento_operacional(
+            db=session, movimento_id=movimento.id, empresa_id=empresa_id,
+            usuario_id=usuario.id, action="correct", conta_final=100,
+        )
+
+        session.refresh(item)
+        assert result.status == "corrigido"
+        assert result.contrapartida_final == 100
+        assert item.status == "resolved"
 
 
 def test_approve_debit_direction_debits_financial_account(setup_db):
