@@ -8,6 +8,10 @@ from core.conta_contabil_empresa import garantir_identidade_contabil
 from core.models import (
     EmpresaContaContabil,
     MovimentoOperacionalImportado,
+    ReviewItem,
+)
+from core.review_items import (
+    ReviewItemConflict, claim_review_item, resolve_review_item,
 )
 
 
@@ -30,6 +34,7 @@ def review_movimento_operacional(
 ) -> MovimentoOperacionalImportado:
     """Revisa um movimento operacional individual com regra reutilizavel."""
     movimento = _get_revisable_movimento(db, movimento_id, empresa_id)
+    ml_review = _claim_ml_review(db, movimento, usuario_id)
 
     if action == "reject":
         _reject_movimento(
@@ -39,6 +44,7 @@ def review_movimento_operacional(
             usuario_id=usuario_id,
             actor_metadata=actor_metadata,
         )
+        _resolve_ml_review(db, ml_review, empresa_id, usuario_id, action)
         return movimento
 
     if action in ACTIONS_WITH_FINAL_ACCOUNT:
@@ -60,9 +66,50 @@ def review_movimento_operacional(
             action=action,
             conta_final=conta_codigo,
         )
+        _resolve_ml_review(db, ml_review, empresa_id, usuario_id, action)
         return movimento
 
     raise MovimentoReviewError(f"Ação {action} desconhecida")
+
+
+def _claim_ml_review(
+    db: Session, movimento: MovimentoOperacionalImportado, usuario_id: int | None,
+) -> ReviewItem | None:
+    item = db.scalar(select(ReviewItem).where(
+        ReviewItem.empresa_id == movimento.empresa_id,
+        ReviewItem.source_type == "movimento_operacional_ml",
+        ReviewItem.grouping_key == f"movimento:{movimento.id}",
+    ).with_for_update())
+    if item is None or item.status in {"resolved", "dismissed"}:
+        return None
+    if usuario_id is None:
+        raise MovimentoReviewError("Pendência ML exige decisão de usuário autorizado")
+    if item.status == "in_review":
+        if item.assignee_id != usuario_id:
+            raise MovimentoReviewError("Pendência ML assumida por outra pessoa")
+        return item
+    try:
+        return claim_review_item(
+            db, empresa_id=movimento.empresa_id, item_id=item.id,
+            user_id=usuario_id,
+        )
+    except ReviewItemConflict as exc:
+        raise MovimentoReviewError(str(exc)) from exc
+
+
+def _resolve_ml_review(
+    db: Session, item: ReviewItem | None, empresa_id: int,
+    usuario_id: int | None, action: str,
+) -> None:
+    if item is None or usuario_id is None:
+        return
+    try:
+        resolve_review_item(
+            db, empresa_id=empresa_id, item_id=item.id,
+            user_id=usuario_id, reason=f"Decisão humana do movimento: {action}",
+        )
+    except ReviewItemConflict as exc:
+        raise MovimentoReviewError(str(exc)) from exc
 
 
 def _get_revisable_movimento(

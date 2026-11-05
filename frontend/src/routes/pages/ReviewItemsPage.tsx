@@ -326,6 +326,19 @@ export function ReviewItemsPage() {
                       <span className="text-xs text-slate-500">
                         {evidence.sourceType} · referência {evidence.sourceId}
                       </span>
+                      {item.sourceType === "movimento_operacional_ml" &&
+                      evidence.sourceType === "movimento_operacional" &&
+                      evidence.safeMetadata?.lote_id ? (
+                        <Link
+                          className="text-sm font-semibold text-brand-dark underline"
+                          to={ROUTES.empresa.revisarMovimento(
+                            empresaId, evidence.sourceId,
+                            String(evidence.safeMetadata.lote_id),
+                          )}
+                        >
+                          Revisar movimento {evidence.sourceId}
+                        </Link>
+                      ) : null}
                     </li>
                   ))}
                 </ul>

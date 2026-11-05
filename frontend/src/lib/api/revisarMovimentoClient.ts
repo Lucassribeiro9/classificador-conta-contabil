@@ -17,6 +17,26 @@ export type MovimentoRevisao = {
   status: string;
   elegivelTreino: boolean;
   mensagensValidacao: string[];
+  mlSuggestionContext?: MLSuggestionContext | null;
+};
+
+export type MLSuggestionContext = {
+  modelVersionId: number | null;
+  snapshotId: number | null;
+  contextDate: string | null;
+  contextSource: string;
+  confidence: number | null;
+  abstentionReason?: string;
+  alternatives: Array<{ accountCode: number; confidence: number }>;
+  historicalExamples: Array<{
+    sourceType: string;
+    sourceId: number;
+    movementId: number | null;
+    accountCode: number;
+    date: string | null;
+    history: string;
+  }>;
+  evidence: string[];
 };
 
 export type ContaContabilResumo = {
@@ -51,6 +71,24 @@ type MovimentoRevisaoApi = {
   status: string;
   elegivel_treino: boolean;
   mensagens_validacao: string[];
+  ml_suggestion_context?: {
+    model_version_id: number | null;
+    snapshot_id: number | null;
+    context_date: string | null;
+    context_source: string;
+    confidence: number | null;
+    abstention_reason?: string;
+    alternatives: Array<{ account_code: number; confidence: number }>;
+    historical_examples: Array<{
+      source_type: string;
+      source_id: number;
+      movement_id: number | null;
+      account_code: number;
+      date: string | null;
+      history: string;
+    }>;
+    evidence: string[];
+  } | null;
 };
 
 type MovimentoRevisaoListApi = {
@@ -153,6 +191,27 @@ function mapMovimento(data: MovimentoRevisaoApi): MovimentoRevisao {
     status: data.status,
     elegivelTreino: data.elegivel_treino,
     mensagensValidacao: data.mensagens_validacao,
+    mlSuggestionContext: data.ml_suggestion_context ? {
+      modelVersionId: data.ml_suggestion_context.model_version_id,
+      snapshotId: data.ml_suggestion_context.snapshot_id,
+      contextDate: data.ml_suggestion_context.context_date,
+      contextSource: data.ml_suggestion_context.context_source,
+      confidence: data.ml_suggestion_context.confidence,
+      abstentionReason: data.ml_suggestion_context.abstention_reason,
+      alternatives: data.ml_suggestion_context.alternatives.map((item) => ({
+        accountCode: item.account_code,
+        confidence: item.confidence,
+      })),
+      historicalExamples: data.ml_suggestion_context.historical_examples.map((item) => ({
+        sourceType: item.source_type,
+        sourceId: item.source_id,
+        movementId: item.movement_id,
+        accountCode: item.account_code,
+        date: item.date,
+        history: item.history,
+      })),
+      evidence: data.ml_suggestion_context.evidence,
+    } : null,
   };
 }
 

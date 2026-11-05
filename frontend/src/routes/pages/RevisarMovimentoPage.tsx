@@ -34,6 +34,27 @@ function formatStatus(status: string) {
   return labels[status] ?? status.split("_").join(" ");
 }
 
+function abstentionLabel(reason: string) {
+  const labels: Record<string, string> = {
+    below_threshold: "Confianca abaixo do limite da versao ativa.",
+    predicted_account_outside_snapshot: "Conta prevista fora do plano aplicavel.",
+    model_version_missing: "Nenhuma versao ativa de modelo disponivel.",
+    critical_review_unresolved: "Existe uma pendencia critica em aberto.",
+  };
+  return labels[reason] ?? "Revisao humana necessaria.";
+}
+
+function evidenceLabel(kind: string) {
+  const labels: Record<string, string> = {
+    model_probability: "Probabilidade do modelo",
+    temporal_snapshot: "Snapshot temporal",
+    company_account: "Conta valida da empresa",
+    critical_review: "Pendencia critica em aberto",
+    model_version_missing: "Versao ativa indisponivel",
+  };
+  return labels[kind] ?? "Evidencia registrada";
+}
+
 function contaLocal(codigo: number, origem: string): ContaContabilResumo {
   return {
     id: codigo,
@@ -362,6 +383,45 @@ export function RevisarMovimentoPage() {
                 </p>
               ))}
             </div>
+          ) : null}
+          {movimento.data.mlSuggestionContext ? (
+            <section className="mt-4 border-t border-slate-200 pt-4" aria-label="Evidencias da sugestao">
+              <h2 className="text-sm font-semibold text-slate-950">Evidencias da sugestao</h2>
+              <p className="mt-2 text-sm text-slate-700">
+                Modelo {movimento.data.mlSuggestionContext.modelVersionId ?? "indisponivel"} · Snapshot {movimento.data.mlSuggestionContext.snapshotId ?? "indisponivel"}
+              </p>
+              <p className="text-xs text-slate-500">
+                Contexto: {movimento.data.mlSuggestionContext.contextDate ?? "sem data"} · {movimento.data.mlSuggestionContext.contextSource === "movement_date" ? "data do movimento" : "periodo do lote"}
+              </p>
+              {movimento.data.mlSuggestionContext.confidence !== null ? (
+                <p className="mt-1 text-sm text-slate-700">
+                  Confianca avaliada: {formatConfidence(movimento.data.mlSuggestionContext.confidence)}
+                </p>
+              ) : null}
+              {movimento.data.mlSuggestionContext.abstentionReason ? (
+                <p className="mt-2 text-sm text-amber-900">Abstencao: {abstentionLabel(movimento.data.mlSuggestionContext.abstentionReason)}</p>
+              ) : null}
+              <h3 className="mt-3 text-sm font-semibold text-slate-800">Alternativas validas</h3>
+              <ul className="mt-1 space-y-1 text-sm text-slate-700">
+                {movimento.data.mlSuggestionContext.alternatives.map((item) => (
+                  <li key={item.accountCode}>{item.accountCode} · {formatConfidence(item.confidence)}</li>
+                ))}
+              </ul>
+              <h3 className="mt-3 text-sm font-semibold text-slate-800">Exemplos historicos elegiveis</h3>
+              <ul className="mt-1 space-y-1 text-sm text-slate-700">
+                {movimento.data.mlSuggestionContext.historicalExamples.map((item) => (
+                  <li key={`${item.sourceType}:${item.sourceId}`}>
+                    {item.history}{item.date ? ` · ${item.date}` : ""} · Conta {item.accountCode}
+                  </li>
+                ))}
+              </ul>
+              <h3 className="mt-3 text-sm font-semibold text-slate-800">Evidencias objetivas</h3>
+              <ul className="mt-1 space-y-1 text-sm text-slate-700">
+                {movimento.data.mlSuggestionContext.evidence.map((item) => (
+                  <li key={item}>{evidenceLabel(item)}</li>
+                ))}
+              </ul>
+            </section>
           ) : null}
         </div>
 

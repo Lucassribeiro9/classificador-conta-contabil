@@ -5,14 +5,21 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from core.audit import record_audit_event
+from core.dataset_builder import (
+    _is_trainable_movimento,
+    _valid_financial_origin_accounts,
+    _valid_target_accounts,
+)
 from core.ml_engine import ClassificadorContabil
 from core.models import (
+    DatasetManifest,
     LoteImportacaoMovimentoOperacional,
     ModelVersion,
     MovimentoOperacionalImportado,
     PlanoContasImportEvent,
     PlanoContasSnapshot,
     PlanoContasSnapshotEntry,
+    ReviewEvidence,
     ReviewItem,
 )
 from core.plano_contas_snapshots import SnapshotConflict, selecionar_snapshot
@@ -129,6 +136,28 @@ def classificar_movimentos_operacionais_pendentes(
             _append_validation_message(movimento, reason)
             total_revisao += 1
             continue
+        if _has_critical_review(session, empresa_id, movimento.id):
+            reason = "Há pendência crítica não resolvida para o movimento."
+            _create_ml_review(
+                session, movimento, reason=reason,
+                snapshot_id=snapshot.id, context_date=context_date,
+                context_source=context_source,
+            )
+            movimento.ml_suggestion_context = {
+                "model_version_id": None,
+                "snapshot_id": snapshot.id,
+                "context_date": context_date.isoformat() if context_date else None,
+                "context_source": context_source,
+                "confidence": None,
+                "alternatives": [],
+                "historical_examples": [],
+                "evidence": ["critical_review", "temporal_snapshot"],
+                "abstention_reason": "critical_review_unresolved",
+            }
+            movimento.status = "revisao"
+            _append_validation_message(movimento, reason)
+            total_revisao += 1
+            continue
         classifiable_movements.append(
             (movimento, snapshot, valid_accounts, context_date, context_source)
         )
@@ -142,6 +171,44 @@ def classificar_movimentos_operacionais_pendentes(
         _audit_classification(session, result)
         session.flush()
         return result
+
+    active_version = session.scalar(select(ModelVersion).where(
+        ModelVersion.empresa_id == empresa_id,
+        ModelVersion.status == "active",
+    ))
+    if active_version is None:
+        for movimento, snapshot, _accounts, context_date, context_source in classifiable_movements:
+            reason = "Não há versão ativa de modelo para sugerir contrapartida."
+            _create_ml_review(
+                session, movimento, reason=reason,
+                snapshot_id=snapshot.id, context_date=context_date,
+                context_source=context_source,
+            )
+            movimento.ml_suggestion_context = {
+                "model_version_id": None,
+                "snapshot_id": snapshot.id,
+                "context_date": context_date.isoformat() if context_date else None,
+                "context_source": context_source,
+                "confidence": None,
+                "alternatives": [],
+                "historical_examples": [],
+                "evidence": ["temporal_snapshot", "model_version_missing"],
+                "abstention_reason": "model_version_missing",
+            }
+            movimento.status = "revisao"
+            _append_validation_message(movimento, reason)
+            total_revisao += 1
+        result = _result(
+            empresa_id=empresa_id, total_sugerido=0, total_revisao=total_revisao,
+        )
+        _audit_classification(session, result)
+        session.flush()
+        return result
+
+    active_manifest = session.scalar(select(DatasetManifest).where(
+        DatasetManifest.id == active_version.manifest_id,
+        DatasetManifest.empresa_id == empresa_id,
+    ))
 
     engine = ClassificadorContabil(session, model_dir=model_dir)
     if not engine.model_exists_for_company(empresa_id):
@@ -186,14 +253,25 @@ def classificar_movimentos_operacionais_pendentes(
         context_date,
         context_source,
     ), prediction in zip(classifiable_movements, predictions):
+        movimento.ml_suggestion_context = {
+            "model_version_id": active_version.id,
+            "snapshot_id": snapshot.id,
+            "context_date": context_date.isoformat() if context_date else None,
+            "context_source": context_source,
+            "confidence": prediction["confidence_sugerida"],
+            "alternatives": prediction.get("alternatives", []),
+            "historical_examples": [],
+            "evidence": ["model_probability", "temporal_snapshot", "company_account"],
+        }
         predicted_account = prediction["contrapartida_sugerida"]
         if predicted_account is None or predicted_account not in valid_accounts:
+            abstention_reason = prediction.get("abstention_reason", "predicted_account_outside_snapshot")
             reason = (
-                "O modelo não encontrou conta analítica aplicável no snapshot."
-                if predicted_account is None
-                else "A sugestão não pertence ao snapshot aplicável."
+                "Confiança abaixo do threshold da versão ativa."
+                if abstention_reason == "below_threshold"
+                else "A previsão principal não pertence ao snapshot aplicável."
             )
-            _create_temporal_review(
+            _create_ml_review(
                 session,
                 movimento,
                 reason=reason,
@@ -201,12 +279,25 @@ def classificar_movimentos_operacionais_pendentes(
                 context_date=context_date,
                 context_source=context_source,
             )
+            movimento.ml_suggestion_context = {
+                **movimento.ml_suggestion_context,
+                "abstention_reason": abstention_reason,
+            }
             movimento.contrapartida_sugerida = None
             movimento.confidence_sugerida = None
             movimento.status = "revisao"
             _append_validation_message(movimento, reason)
             total_revisao += 1
             continue
+        movimento.ml_suggestion_context = {
+            **movimento.ml_suggestion_context,
+            "historical_examples": _historical_examples(
+                session, empresa_id=empresa_id, account_code=predicted_account,
+                snapshot_id=snapshot.id, valid_accounts=valid_accounts,
+                exclude_movement_id=movimento.id,
+                manifest_content=active_manifest.content if active_manifest else {},
+            ),
+        }
         movimento.contrapartida_sugerida = predicted_account
         movimento.confidence_sugerida = prediction["confidence_sugerida"]
         movimento.status = prediction["status"]
@@ -239,6 +330,108 @@ def _append_validation_message(
     if message not in messages:
         messages.append(message)
     movimento.mensagens_validacao = messages
+
+
+def _has_critical_review(session: Session, empresa_id: int, movement_id: int) -> bool:
+    return session.scalar(
+        select(ReviewItem.id)
+        .join(ReviewEvidence, ReviewEvidence.review_item_id == ReviewItem.id)
+        .where(
+            ReviewItem.empresa_id == empresa_id,
+            ReviewItem.criticality == "critical",
+            ReviewItem.status != "resolved",
+            ReviewEvidence.source_type == "movimento_operacional",
+            ReviewEvidence.source_id == str(movement_id),
+        )
+        .limit(1)
+    ) is not None
+
+
+def _historical_examples(
+    session: Session, *, empresa_id: int, account_code: int,
+    snapshot_id: int, valid_accounts: set[int], exclude_movement_id: int,
+    manifest_content: dict,
+) -> list[dict]:
+    candidates = session.scalars(
+        select(MovimentoOperacionalImportado)
+        .where(
+            MovimentoOperacionalImportado.empresa_id == empresa_id,
+            MovimentoOperacionalImportado.id != exclude_movement_id,
+            MovimentoOperacionalImportado.status.in_(("aprovado", "corrigido")),
+            MovimentoOperacionalImportado.elegivel_treino.is_(True),
+            MovimentoOperacionalImportado.contrapartida_final == account_code,
+        )
+        .order_by(MovimentoOperacionalImportado.data.desc(),
+                  MovimentoOperacionalImportado.id.desc())
+        .limit(100)
+    ).all()
+    valid_company_accounts = _valid_target_accounts(
+        session, empresa_id,
+        [code for candidate in candidates for code in (
+            candidate.conta_financeira, candidate.contrapartida_final,
+            candidate.conta_debito, candidate.conta_credito,
+        ) if code is not None],
+    )
+    financial_sources = _valid_financial_origin_accounts(
+        session, empresa_id, [candidate.conta_financeira for candidate in candidates],
+    )
+    examples: list[dict] = []
+    for candidate in candidates:
+        if not _is_trainable_movimento(candidate):
+            continue
+        required_accounts = {
+            candidate.conta_financeira, candidate.contrapartida_final,
+            candidate.conta_debito, candidate.conta_credito,
+        }
+        if not required_accounts <= valid_accounts or not required_accounts <= valid_company_accounts:
+            continue
+        if candidate.conta_financeira not in financial_sources:
+            continue
+        try:
+            candidate_snapshot = selecionar_snapshot(
+                session, empresa_id=empresa_id, competencia=candidate.data,
+            )
+        except SnapshotConflict:
+            continue
+        if candidate_snapshot is None or candidate_snapshot.id != snapshot_id:
+            continue
+        if _has_critical_review(session, empresa_id, candidate.id):
+            continue
+        examples.append({
+            "source_type": "movimento",
+            "source_id": candidate.id,
+            "movement_id": candidate.id,
+            "account_code": account_code,
+            "date": candidate.data.isoformat(),
+            "history": candidate.historico_normalizado[:120],
+        })
+        if len(examples) == 3:
+            break
+    if len(examples) < 3:
+        sources = manifest_content.get("sources", [])
+        rows = manifest_content.get("rows", [])
+        if isinstance(sources, list) and isinstance(rows, list) and len(sources) == len(rows):
+            for source, row in zip(sources, rows):
+                if not isinstance(source, dict) or not isinstance(row, dict):
+                    continue
+                if source.get("type") != "razao" or source.get("snapshot_id") != snapshot_id:
+                    continue
+                if row.get("target_conta_contrapartida") != account_code:
+                    continue
+                features = row.get("features")
+                if not isinstance(features, str) or not isinstance(source.get("id"), int):
+                    continue
+                examples.append({
+                    "source_type": "razao",
+                    "source_id": source["id"],
+                    "movement_id": None,
+                    "account_code": account_code,
+                    "date": None,
+                    "history": features.split(" origem_", 1)[0][:120],
+                })
+                if len(examples) == 3:
+                    break
+    return examples
 
 
 def _create_temporal_review(
@@ -276,6 +469,42 @@ def _create_temporal_review(
         context_source=context_source,
         reason="temporal_review_required",
         review_item_id=item.id,
+    )
+    return item
+
+
+def _create_ml_review(
+    session: Session,
+    movimento: MovimentoOperacionalImportado,
+    *,
+    reason: str,
+    snapshot_id: int | None,
+    context_date,
+    context_source: str,
+) -> ReviewItem:
+    item = create_review_item(
+        session,
+        empresa_id=movimento.empresa_id,
+        source_type="movimento_operacional_ml",
+        grouping_key=f"movimento:{movimento.id}",
+        summary=f"Movimento {movimento.id}: {reason}",
+        criticality="high",
+        evidence=[{
+            "source_type": "movimento_operacional",
+            "source_id": str(movimento.id),
+            "summary": reason,
+        }],
+    )
+    source_evidence = session.scalar(select(ReviewEvidence).where(
+        ReviewEvidence.review_item_id == item.id,
+        ReviewEvidence.source_type == "movimento_operacional",
+        ReviewEvidence.source_id == str(movimento.id),
+    ))
+    source_evidence.safe_metadata = {"lote_id": movimento.lote_id}
+    _audit_temporal_context(
+        session, movimento, snapshot_id=snapshot_id,
+        context_date=context_date, context_source=context_source,
+        reason="ml_abstention", review_item_id=item.id,
     )
     return item
 

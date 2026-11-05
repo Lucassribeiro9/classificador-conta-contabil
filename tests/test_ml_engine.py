@@ -137,7 +137,7 @@ def test_train_from_dataset_contract_trains_classifier(db_session, tmp_path):
     )
 
 
-def test_operational_classifier_only_suggests_accounts_in_snapshot(
+def test_operational_classifier_abstains_when_top_prediction_is_outside_snapshot(
     db_session,
     tmp_path,
     monkeypatch,
@@ -163,12 +163,36 @@ def test_operational_classifier_only_suggests_accounts_in_snapshot(
         allowed_target_accounts_by_movement=[{20001}],
     )
 
-    assert predictions == [
-        {
-            "contrapartida_sugerida": 20001,
-            "confidence_sugerida": 0.2,
-            "status": "revisao",
-        }
+    assert predictions[0]["contrapartida_sugerida"] is None
+    assert predictions[0]["status"] == "revisao"
+    assert predictions[0]["abstention_reason"] == "predicted_account_outside_snapshot"
+
+
+def test_operational_classifier_returns_three_valid_alternatives(
+    db_session, tmp_path, monkeypatch,
+):
+    class FakeModel:
+        classes_ = [20001, 30001, 40001, 50001, 60001]
+
+        def predict_proba(self, _feature_texts):
+            return [[0.71, 0.12, 0.08, 0.05, 0.04]]
+
+    monkeypatch.setattr(joblib, "load", lambda _path: FakeModel())
+    engine_ml = ClassificadorContabil(db_session, model_dir=tmp_path)
+    predictions = engine_ml.classify_operational_movements_from_saved_model(
+        empresa_id=1,
+        movimentos=[{
+            "historico_normalizado": "pagamento fornecedor",
+            "conta_financeira": 10046,
+            "direcao": "credito",
+        }],
+        allowed_target_accounts_by_movement=[{20001, 30001, 40001, 60001}],
+    )
+
+    assert predictions[0]["alternatives"] == [
+        {"account_code": 30001, "confidence": 0.12},
+        {"account_code": 40001, "confidence": 0.08},
+        {"account_code": 60001, "confidence": 0.04},
     ]
 
 

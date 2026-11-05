@@ -247,35 +247,61 @@ class ClassificadorContabil:
         predictions: list[dict] = []
         for index in range(len(feature_texts)):
             row_probabilities = probabilities[index]
-            if allowed_target_accounts_by_movement is None:
-                candidate_indices = list(range(len(classes)))
-            else:
-                allowed_accounts = allowed_target_accounts_by_movement[index]
-                candidate_indices = [
-                    candidate_index
-                    for candidate_index, account_code in enumerate(classes)
-                    if int(account_code) in allowed_accounts
-                ]
-            if not candidate_indices:
-                predictions.append(
-                    {
-                        "contrapartida_sugerida": None,
-                        "confidence_sugerida": None,
-                        "status": "revisao",
-                    }
-                )
-                continue
             best_index = max(
-                candidate_indices,
+                range(len(classes)),
                 key=lambda candidate_index: float(row_probabilities[candidate_index]),
             )
             max_prob = float(row_probabilities[best_index])
             best_class = int(classes[best_index])
+            allowed_accounts = (
+                allowed_target_accounts_by_movement[index]
+                if allowed_target_accounts_by_movement is not None
+                else {int(account_code) for account_code in classes}
+            )
+            alternatives = [
+                {
+                    "account_code": int(classes[candidate_index]),
+                    "confidence": float(row_probabilities[candidate_index]),
+                }
+                for candidate_index in sorted(
+                    range(len(classes)),
+                    key=lambda candidate_index: float(row_probabilities[candidate_index]),
+                    reverse=True,
+                )
+                if candidate_index != best_index
+                and int(classes[candidate_index]) in allowed_accounts
+            ][:3]
+            if (
+                allowed_target_accounts_by_movement is not None
+                and best_class not in allowed_target_accounts_by_movement[index]
+            ):
+                predictions.append(
+                    {
+                        "contrapartida_sugerida": None,
+                        "confidence_sugerida": max_prob,
+                        "status": "revisao",
+                        "abstention_reason": "predicted_account_outside_snapshot",
+                        "alternatives": alternatives,
+                    }
+                )
+                continue
+            if max_prob < threshold:
+                predictions.append(
+                    {
+                        "contrapartida_sugerida": None,
+                        "confidence_sugerida": max_prob,
+                        "status": "revisao",
+                        "abstention_reason": "below_threshold",
+                        "alternatives": alternatives,
+                    }
+                )
+                continue
             predictions.append(
                 {
                     "contrapartida_sugerida": best_class,
                     "confidence_sugerida": max_prob,
-                    "status": "revisao" if max_prob < threshold else "sugerido",
+                    "status": "sugerido",
+                    "alternatives": alternatives,
                 }
             )
         return predictions

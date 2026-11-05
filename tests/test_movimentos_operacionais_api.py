@@ -935,6 +935,7 @@ def test_user_lists_operational_movements_by_lote_and_status_without_raw_payload
             "contrapartida_sugerida": None,
             "contrapartida_final": None,
             "confidence_sugerida": None,
+                "ml_suggestion_context": None,
             "status": "revisao",
             "elegivel_treino": False,
             "mensagens_validacao": [
@@ -1084,14 +1085,14 @@ def test_user_with_operacao_permission_classifies_pending_operational_movements(
     }
 
 
-def test_classificar_movimentos_returns_controlled_error_when_model_is_missing(
+def test_classificar_movimentos_sem_versao_ativa_cria_revisao_visivel_na_api(
     client,
     monkeypatch,
     tmp_path,
 ):
     from tests.conftest import TestingSessionLocal
 
-    usuario, empresa_id, _ = _seed_operational_lote_with_movements(
+    usuario, empresa_id, lote_id = _seed_operational_lote_with_movements(
         permissao="operacao",
         movimentos=[
             {
@@ -1140,25 +1141,47 @@ def test_classificar_movimentos_returns_controlled_error_when_model_is_missing(
     from core.ml_worker import MLWorker
     assert MLWorker(TestingSessionLocal, worker_id="missing-model", model_dir=tmp_path).run_once()
     status = client.get(response.json()["status_url"], headers=_auth_headers(usuario)).json()
-    assert status["status"] == "failed"
-    assert status["error_code"] == "model_not_found"
+    assert status["status"] == "completed"
+    assert status["result"]["total_revisao"] == 1
+    response = client.get(
+        f"/api/v1/companies/{empresa_id}/movimentos-operacionais/lotes/{lote_id}/movimentos",
+        headers=_auth_headers(usuario),
+    )
+    assert response.status_code == 200
+    movement = response.json()["items"][0]
+    assert movement["contrapartida_sugerida"] is None
+    assert movement["contrapartida_final"] is None
+    assert movement["ml_suggestion_context"]["abstention_reason"] == "model_version_missing"
+    assert movement["review_item_id"] is not None
+    review_response = client.get(
+        f"/api/v1/companies/{empresa_id}/review-items/{movement['review_item_id']}",
+        headers=_auth_headers(usuario),
+    )
+    assert review_response.status_code == 200
+    assert review_response.json()["evidences"][0]["safe_metadata"]["lote_id"] == lote_id
+    claim_response = client.post(
+        f"/api/v1/companies/{empresa_id}/review-items/{movement['review_item_id']}/claim",
+        headers=_auth_headers(usuario),
+    )
+    assert claim_response.status_code == 200
+    assert "resolve" not in claim_response.json()["available_actions"]
+    resolve_response = client.post(
+        f"/api/v1/companies/{empresa_id}/review-items/{movement['review_item_id']}/resolve",
+        headers=_auth_headers(usuario),
+    )
+    assert resolve_response.status_code == 409
 
     with TestingSessionLocal() as session:
         event = (
             session.query(AuditEvent)
-            .filter(AuditEvent.event_type == "operational_movements.classification_failed")
+            .filter(AuditEvent.event_type == "operational_movements.classified")
             .one()
         )
 
-    assert event.event_type == "operational_movements.classification_failed"
-    assert event.user_id == usuario.id
+    assert event.event_type == "operational_movements.classified"
     assert event.empresa_id == empresa_id
     assert event.resource_id == "operational_movements_classification"
-    assert event.metadata_json == {
-        "total_pendentes": 1,
-        "error_type": "ModelNotFound",
-        "reason": "model_not_found",
-    }
+    assert event.metadata_json["total_revisao"] == 1
     assert "Pagamento pendente sensivel" not in str(event.metadata_json)
     assert "DOC-SENSIVEL-MODELO-AUSENTE" not in str(event.metadata_json)
 

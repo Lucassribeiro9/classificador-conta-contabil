@@ -107,6 +107,30 @@ describe("ReviewItemsPage", () => {
     });
   });
 
+  it("links an ML abstention to the movement review", async () => {
+    listMock.mockResolvedValue({
+      items: [{
+        id: 31, empresaId: 7, sourceType: "movimento_operacional_ml",
+        groupingKey: "movimento:91", summary: "Abstencao ML",
+        criticality: "high", status: "pending", assigneeId: null,
+        assigneeName: null, claimedAt: null,
+        createdAt: "2026-01-02T10:00:00", updatedAt: "2026-01-02T10:00:00",
+        resolvedAt: null, dismissedAt: null, availableActions: ["claim"],
+        evidences: [{
+          id: 2, sourceType: "movimento_operacional", sourceId: "91",
+          summary: "Revisao humana necessaria", safeMetadata: { lote_id: 15 },
+          createdAt: "2026-01-02T10:00:00",
+        }],
+      }],
+      total: 1, page: 1, limit: 100, hasNext: false,
+    });
+
+    renderPage();
+
+    const link = await screen.findByRole("link", { name: "Revisar movimento 91" });
+    expect(link).toHaveAttribute("href", ROUTES.empresa.revisarMovimento("7", "91", "15"));
+  });
+
   it("hides operations the API did not authorize", async () => {
     listMock.mockResolvedValue({
       items: [

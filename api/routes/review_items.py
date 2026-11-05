@@ -62,6 +62,8 @@ def _response(item: ReviewItem, user: Usuario) -> ReviewItemResponse:
         actions = [action for action in actions if action not in {"resolve", "dismiss", "reopen"}]
     if item.source_type == "razao_account_unknown":
         actions = [action for action in actions if action != "resolve"]
+    if item.source_type == "movimento_operacional_ml":
+        actions = [action for action in actions if action != "resolve"]
     data = {
         name: getattr(item, name)
         for name in ReviewItemResponse.model_fields
@@ -260,7 +262,9 @@ def resolve_item(
     item = db.query(ReviewItem).filter(
         ReviewItem.id == item_id, ReviewItem.empresa_id == company_id
     ).first()
-    if item is not None and item.source_type in {"snapshot_conflict", "razao_account_unknown"}:
+    if item is not None and item.source_type in {
+        "snapshot_conflict", "razao_account_unknown", "movimento_operacional_ml",
+    }:
         raise HTTPException(
             status_code=409,
             detail="Esta pendência exige uma decisão no fluxo específico da origem",

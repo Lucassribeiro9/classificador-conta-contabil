@@ -212,6 +212,30 @@ somente em `completed`. `POST .../cancel` solicita cancelamento cooperativo e
 `Idempotency-Key` ao repetir a mesma solicitação; payload diferente com a mesma
 chave retorna `409`.
 
+#### Sugestões temporais para movimentos operacionais
+
+Após concluir o job de `movimentos-operacionais/classificar`, consulte a lista
+do lote pelo endpoint `GET /api/v1/companies/{company_id}/movimentos-operacionais/lotes/{lote_id}/movimentos`.
+Cada movimento classificado expõe `ml_suggestion_context` com `model_version_id`,
+`snapshot_id`, `context_date`, `context_source`, `confidence`, até três
+`alternatives`, até três `historical_examples` elegíveis da mesma empresa e
+`evidence`. Uma abstenção inclui `abstention_reason` e `review_item_id` para
+acesso à central de revisões. Exemplos vêm de movimentos com decisão humana
+final, elegibilidade de treino, contas válidas e sem pendência crítica, ou de
+linhas elegíveis do Razão registradas no manifesto imutável da versão ativa.
+Cada exemplo informa `source_type` e `source_id`; `movement_id` e `date` podem
+ser nulos quando a origem é o Razão.
+
+O gate usa o threshold da versão ativa. Previsão principal inválida no snapshot,
+confiança insuficiente, período sem snapshot inequívoco, pendência crítica ou
+ausência de versão ativa impedem a sugestão. Uma conta alternativa válida não
+substitui automaticamente a previsão principal inválida. Nenhum desses estados
+define `contrapartida_final`; a pessoa revisora decide pela interface ou API.
+Uma pendência de ML oferece um link da central para o movimento; a ação genérica
+`resolve` da central é recusada. Aprovar, corrigir ou rejeitar o movimento
+conclui a pendência assumida pela mesma pessoa.
+O endpoint avulso `/ml/classification` não participa deste contrato temporal.
+
 ### Feedback
 
 Feedback novo de ML sobre lancamento normalizado:
