@@ -75,6 +75,8 @@ HTML da SPA. Registre as evidencias e revise os logs antes de liberar usuarios:
 docker compose --env-file .env.prod -f docker-compose.prod.yml logs api frontend postgres
 ```
 
+A coleta e os paineis internos seguem o [runbook de metricas](observabilidade-metricas-internas.md).
+
 ## Rollback operacional
 
 Interrompa a stack se a validacao falhar:

@@ -39,6 +39,7 @@ from api.request_context import (
 )
 from core.config import settings
 from core.technical_logging import configure_technical_logging
+from core.operational_metrics import observe_http_request, start_private_metrics_server
 
 
 logger = logging.getLogger(__name__)
@@ -47,7 +48,19 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(_app):
     configure_technical_logging(service="api", log_dir=settings.TECHNICAL_LOG_DIR)
-    yield
+    metrics_server = None
+    metrics_thread = None
+    if settings.METRICS_NETWORK_PEER:
+        metrics_server, metrics_thread = start_private_metrics_server(
+            settings.METRICS_NETWORK_PEER, settings.METRICS_PORT
+        )
+    try:
+        yield
+    finally:
+        if metrics_server is not None:
+            metrics_server.shutdown()
+            metrics_server.server_close()
+            metrics_thread.join(timeout=2)
 
 
 app = FastAPI(
@@ -76,6 +89,17 @@ async def request_context_middleware(request, call_next):
         )
     finally:
         route = request.scope.get("route")
+        elapsed_seconds = perf_counter() - started_at
+        try:
+            observe_http_request(
+                request.method,
+                getattr(route, "path", None),
+                response.status_code,
+                elapsed_seconds,
+            )
+        except Exception:
+            # Metrics are best effort and cannot change the business response.
+            pass
         logger.info(
             "request complete",
             extra={
@@ -83,7 +107,7 @@ async def request_context_middleware(request, call_next):
                 "method": request.method,
                 "route": getattr(route, "path", request.url.path),
                 "status_code": response.status_code,
-                "duration_ms": round((perf_counter() - started_at) * 1000, 3),
+                "duration_ms": round(elapsed_seconds * 1000, 3),
             },
         )
         end_audit_request_context()
