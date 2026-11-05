@@ -1,11 +1,15 @@
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
+from uuid import uuid4
+
+import httpx
 
 import jwt
 import pytest
 from pwdlib import PasswordHash
 
 from core.config import settings
+from core.ml_worker import MLWorker
 from core.plano_contas_snapshots import importar_snapshot
 from core.models import (
     AuditEvent,
@@ -20,6 +24,38 @@ from core.models import (
 
 
 password_hash = PasswordHash.recommended()
+
+
+def _train_and_wait(client, url: str, *, headers: dict):
+    """Exercise the async API and worker for model lifecycle assertions."""
+    from tests.conftest import TestingSessionLocal
+
+    accepted = client.post(url, headers={**headers, "Idempotency-Key": uuid4().hex})
+    if accepted.status_code != 202:
+        return accepted
+    worker = MLWorker(TestingSessionLocal, worker_id="test-train", model_dir=settings.MODEL_DIR)
+    assert worker.run_once()
+    status = client.get(accepted.json()["status_url"], headers=headers).json()
+    if status["status"] == "failed":
+        return httpx.Response(422, json={"message": "Dataset insuficiente para treino do modelo"})
+    assert status["status"] == "completed", status
+    return httpx.Response(200, json=status["result"])
+
+
+def _classify_and_wait(client, url: str, *, headers: dict, payload: dict):
+    from tests.conftest import TestingSessionLocal
+
+    accepted = client.post(
+        url, headers={**headers, "Idempotency-Key": uuid4().hex}, json=payload,
+    )
+    assert accepted.status_code == 202
+    worker = MLWorker(TestingSessionLocal, worker_id="test-classify", model_dir=settings.MODEL_DIR)
+    assert worker.run_once()
+    status = client.get(accepted.json()["status_url"], headers=headers).json()
+    if status["status"] == "failed" and status["error_code"] == "model_not_found":
+        return httpx.Response(404, json={"message": "Modelo treinado não encontrado para a empresa"})
+    assert status["status"] == "completed", status
+    return httpx.Response(200, json=status["result"])
 
 
 @pytest.fixture(autouse=True)
@@ -189,10 +225,7 @@ def test_train_endpoint_trains_model_from_canonical_company_razao(
     )
     monkeypatch.setattr(settings, "MODEL_DIR", str(tmp_path))
 
-    response = client.post(
-        f"/api/v1/companies/{empresa_id}/ml/train",
-        headers=headers,
-    )
+    response = _train_and_wait(client, f"/api/v1/companies/{empresa_id}/ml/train", headers=headers)
 
     assert response.status_code == 200
     assert response.json() == {
@@ -206,7 +239,7 @@ def test_train_endpoint_trains_model_from_canonical_company_razao(
     }
     assert (tmp_path / f"empresa_{empresa_id}" / "model_1.joblib").exists()
     events = _audit_events()
-    assert [event.event_type for event in events] == ["model.candidate_created"]
+    assert [event.event_type for event in events] == ["model.candidate_created", "ml.job.completed"]
     assert events[0].empresa_id == empresa_id
     assert events[0].resource_id == "1"
     assert events[0].metadata_json["evaluation_method"] == "holdout"
@@ -224,19 +257,15 @@ def test_train_endpoint_returns_422_when_dataset_is_insufficient(
     )
     monkeypatch.setattr(settings, "MODEL_DIR", str(tmp_path))
 
-    response = client.post(
-        f"/api/v1/companies/{empresa_id}/ml/train",
-        headers=headers,
-    )
+    response = _train_and_wait(client, f"/api/v1/companies/{empresa_id}/ml/train", headers=headers)
 
     assert response.status_code == 422
     assert response.json()["message"] == "Dataset insuficiente para treino do modelo"
     assert not (tmp_path / f"empresa_{empresa_id}" / "model_.joblib").exists()
     events = _audit_events()
-    assert [event.event_type for event in events] == ["model.train_failed"]
+    assert [event.event_type for event in events] == ["ml.job.failed"]
     assert events[0].empresa_id == empresa_id
-    assert events[0].metadata_json["reason"] == "insufficient_dataset"
-    assert events[0].metadata_json["dataset_examples"] == 1
+    assert events[0].metadata_json["error_code"] == "insufficient_dataset"
     assert "historico" not in events[0].metadata_json
 
 
@@ -251,10 +280,7 @@ def test_train_endpoint_requires_company_operation_permission(
     )
     monkeypatch.setattr(settings, "MODEL_DIR", str(tmp_path))
 
-    response = client.post(
-        f"/api/v1/companies/{empresa_id}/ml/train",
-        headers=headers,
-    )
+    response = _train_and_wait(client, f"/api/v1/companies/{empresa_id}/ml/train", headers=headers)
 
     assert response.status_code == 403
     assert response.json()["message"] == "Permissão insuficiente"
@@ -279,7 +305,7 @@ def test_training_creates_immutable_candidate_without_activating_it(
     )
     monkeypatch.setattr(settings, "MODEL_DIR", str(tmp_path))
 
-    response = client.post(f"/api/v1/companies/{empresa_id}/ml/train", headers=headers)
+    response = _train_and_wait(client, f"/api/v1/companies/{empresa_id}/ml/train", headers=headers)
 
     assert response.status_code == 200
     assert response.json()["status"] == "candidate"
@@ -312,11 +338,11 @@ def test_admin_promotes_candidate_and_rolls_back_without_retraining(
     monkeypatch.setattr(settings, "MODEL_DIR", str(tmp_path))
     base = f"/api/v1/companies/{empresa_id}/ml"
 
-    first = client.post(f"{base}/train", headers=headers).json()["version_id"]
+    first = _train_and_wait(client, f"{base}/train", headers=headers).json()["version_id"]
     promoted = client.post(f"{base}/models/{first}/promote", headers=headers)
     assert promoted.status_code == 200
     assert promoted.json()["status"] == "active"
-    second = client.post(f"{base}/train", headers=headers).json()["version_id"]
+    second = _train_and_wait(client, f"{base}/train", headers=headers).json()["version_id"]
     promoted_second = client.post(f"{base}/models/{second}/promote", headers=headers)
     assert promoted_second.status_code == 200
     assert promoted_second.json()["status"] == "active"
@@ -351,12 +377,12 @@ def test_admin_sets_critical_classes_before_evaluation_and_candidate_freezes_the
         "PUT", f"{base}/critical-classes", headers=headers, json={"classes": [50057]}
     )
     assert configured.status_code == 200
-    first = client.post(f"{base}/train", headers=headers).json()["version_id"]
+    first = _train_and_wait(client, f"{base}/train", headers=headers).json()["version_id"]
     cleared = client.request(
         "PUT", f"{base}/critical-classes", headers=headers, json={"classes": []}
     )
     assert cleared.status_code == 200
-    second = client.post(f"{base}/train", headers=headers).json()["version_id"]
+    second = _train_and_wait(client, f"{base}/train", headers=headers).json()["version_id"]
     with TestingSessionLocal() as session:
         assert session.get(ModelVersion, first).critical_classes == [50057]
         assert session.get(ModelVersion, second).critical_classes == []
@@ -370,20 +396,20 @@ def test_only_promoted_version_serves_company_classification(
     )
     monkeypatch.setattr(settings, "MODEL_DIR", str(tmp_path))
     base = f"/api/v1/companies/{empresa_id}/ml"
-    version_id = client.post(f"{base}/train", headers=headers).json()["version_id"]
+    version_id = _train_and_wait(client, f"{base}/train", headers=headers).json()["version_id"]
     payload = {
         "historico": "Pagamento fornecedor 1",
         "conta_origem": 10046,
         "direcao": "credito",
     }
-    before = client.post(f"{base}/classification", headers=headers, json=payload)
+    before = _classify_and_wait(client, f"{base}/classification", headers=headers, payload=payload)
     assert before.status_code == 404
 
     assert client.post(f"{base}/models/{version_id}/promote", headers=headers).status_code == 200
     status = client.get(f"{base}/status", headers=headers)
     assert status.status_code == 200
     assert status.json()["modelo_path"] == f"empresa_{empresa_id}/model_{version_id}.joblib"
-    response = client.post(f"{base}/classification", headers=headers, json=payload)
+    response = _classify_and_wait(client, f"{base}/classification", headers=headers, payload=payload)
     assert response.status_code == 200
     assert response.json()["model_version_id"] == version_id
     assert response.json()["results"][0]["conta_contrapartida"] in {50057, 70001}
@@ -399,7 +425,7 @@ def test_admin_can_inspect_candidate_evaluation_before_promotion(
     )
     monkeypatch.setattr(settings, "MODEL_DIR", str(tmp_path))
     base = f"/api/v1/companies/{empresa_id}/ml"
-    version_id = client.post(f"{base}/train", headers=headers).json()["version_id"]
+    version_id = _train_and_wait(client, f"{base}/train", headers=headers).json()["version_id"]
 
     response = client.get(f"{base}/models", headers=headers)
 
@@ -425,9 +451,9 @@ def test_promotion_rejects_candidate_below_active_guardrails(
     )
     monkeypatch.setattr(settings, "MODEL_DIR", str(tmp_path))
     base = f"/api/v1/companies/{empresa_id}/ml"
-    first = client.post(f"{base}/train", headers=headers).json()["version_id"]
+    first = _train_and_wait(client, f"{base}/train", headers=headers).json()["version_id"]
     assert client.post(f"{base}/models/{first}/promote", headers=headers).status_code == 200
-    second = client.post(f"{base}/train", headers=headers).json()["version_id"]
+    second = _train_and_wait(client, f"{base}/train", headers=headers).json()["version_id"]
     with TestingSessionLocal() as session:
         candidate = session.get(ModelVersion, second)
         candidate.metrics = {
@@ -453,7 +479,7 @@ def test_small_dataset_uses_reproducible_cross_validation(
         permissao="admin_empresa", targets=[50057] * 8 + [70001] * 2,
     )
     monkeypatch.setattr(settings, "MODEL_DIR", str(tmp_path))
-    response = client.post(f"/api/v1/companies/{empresa_id}/ml/train", headers=headers)
+    response = _train_and_wait(client, f"/api/v1/companies/{empresa_id}/ml/train", headers=headers)
     assert response.status_code == 200
     version_id = response.json()["version_id"]
     models = client.get(f"/api/v1/companies/{empresa_id}/ml/models", headers=headers)
@@ -472,7 +498,7 @@ def test_operator_cannot_promote_model_candidate(client, monkeypatch, tmp_path):
     )
     monkeypatch.setattr(settings, "MODEL_DIR", str(tmp_path))
     base = f"/api/v1/companies/{empresa_id}/ml"
-    version_id = client.post(f"{base}/train", headers=headers).json()["version_id"]
+    version_id = _train_and_wait(client, f"{base}/train", headers=headers).json()["version_id"]
 
     response = client.post(f"{base}/models/{version_id}/promote", headers=headers)
 
@@ -492,13 +518,13 @@ def test_critical_class_regression_blocks_promotion_even_with_higher_macro_f1(
     )
     monkeypatch.setattr(settings, "MODEL_DIR", str(tmp_path))
     base = f"/api/v1/companies/{empresa_id}/ml"
-    first = client.post(f"{base}/train", headers=headers).json()["version_id"]
+    first = _train_and_wait(client, f"{base}/train", headers=headers).json()["version_id"]
     assert client.post(f"{base}/models/{first}/promote", headers=headers).status_code == 200
     configured = client.request(
         "PUT", f"{base}/critical-classes", headers=headers, json={"classes": [50057]}
     )
     assert configured.status_code == 200
-    second = client.post(f"{base}/train", headers=headers).json()["version_id"]
+    second = _train_and_wait(client, f"{base}/train", headers=headers).json()["version_id"]
     with TestingSessionLocal() as session:
         candidate = session.get(ModelVersion, second)
         baseline = session.get(ModelVersion, first)
@@ -526,7 +552,7 @@ def test_first_promotion_rejects_unevaluated_critical_class(
     assert client.request(
         "PUT", f"{base}/critical-classes", headers=headers, json={"classes": [99999]}
     ).status_code == 200
-    candidate = client.post(f"{base}/train", headers=headers).json()["version_id"]
+    candidate = _train_and_wait(client, f"{base}/train", headers=headers).json()["version_id"]
 
     response = client.post(f"{base}/models/{candidate}/promote", headers=headers)
 
@@ -545,7 +571,7 @@ def test_admin_cannot_promote_model_from_another_company(
     )
     monkeypatch.setattr(settings, "MODEL_DIR", str(tmp_path))
     first_base = f"/api/v1/companies/{first_company_id}/ml"
-    version_id = client.post(f"{first_base}/train", headers=headers).json()["version_id"]
+    version_id = _train_and_wait(client, f"{first_base}/train", headers=headers).json()["version_id"]
     with TestingSessionLocal() as session:
         user = session.query(Usuario).one()
         user.papel = "admin"
@@ -576,8 +602,8 @@ def test_candidate_evaluation_becomes_stale_when_active_changes(
     )
     monkeypatch.setattr(settings, "MODEL_DIR", str(tmp_path))
     base = f"/api/v1/companies/{empresa_id}/ml"
-    first = client.post(f"{base}/train", headers=headers).json()["version_id"]
-    second = client.post(f"{base}/train", headers=headers).json()["version_id"]
+    first = _train_and_wait(client, f"{base}/train", headers=headers).json()["version_id"]
+    second = _train_and_wait(client, f"{base}/train", headers=headers).json()["version_id"]
     assert client.post(f"{base}/models/{first}/promote", headers=headers).status_code == 200
 
     response = client.post(f"{base}/models/{second}/promote", headers=headers)

@@ -56,6 +56,7 @@ def test_prod_compose_runs_private_razao_worker_with_environment_storage():
     assert worker["networks"] == ["prod-db"]
     assert "ports" not in worker
     assert api["volumes"] == [
+        "ml-models-prod:/app/data/models",
         "razao-temp-prod:/app/data/razao-temporario",
         "technical-logs-api-prod:/app/data/logs",
     ]
@@ -67,6 +68,14 @@ def test_prod_compose_runs_private_razao_worker_with_environment_storage():
     assert compose["volumes"]["razao-temp-prod"]["name"] == (
         "classificador-prod-razao-temp"
     )
+
+
+def test_prod_ml_worker_shares_private_model_volume():
+    compose = yaml.safe_load(COMPOSE_PATH.read_text(encoding="utf-8"))
+    worker = compose["services"]["ml-worker"]
+    assert "ml-models-prod:/app/data/models" in worker["volumes"]
+    assert worker["networks"] == ["prod-db"]
+    assert "ports" not in worker
 
 
 def test_prod_example_and_runbook_require_release_gate_without_real_secrets():

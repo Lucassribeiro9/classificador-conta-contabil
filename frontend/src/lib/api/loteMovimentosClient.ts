@@ -100,6 +100,20 @@ type ClassificacaoPendentesApi = {
   total_revisao: number;
 };
 
+type MLJobAcceptedApi = {
+  job_id: number;
+  status: string;
+  status_url: string;
+};
+
+type MLJobStatusApi = {
+  job_id: number;
+  status: string;
+  progress: number;
+  error_code: string | null;
+  result: ClassificacaoPendentesApi | null;
+};
+
 type ErrorResponse = {
   detail?: string;
 };
@@ -407,6 +421,7 @@ async function reviewMovimentos(
 async function classificarPendentes(
   accessToken: string,
   empresaId: string,
+  onProgress?: (jobId: number, status: string, progress: number) => void,
 ): Promise<ClassificacaoPendentesResult> {
   if (isDemoPreviewToken(accessToken)) {
     return {
@@ -417,15 +432,29 @@ async function classificarPendentes(
     };
   }
 
-  const data = await fetchJson<ClassificacaoPendentesApi>(
+  const job = await fetchJson<MLJobAcceptedApi>(
     `/api/v1/companies/${empresaId}/movimentos-operacionais/classificar`,
     accessToken,
     {
       method: "POST",
-      headers: authHeaders(accessToken),
+      headers: {
+        ...authHeaders(accessToken),
+        "Idempotency-Key": globalThis.crypto.randomUUID(),
+      },
     },
   );
-  return mapClassificacao(data);
+  onProgress?.(job.job_id, job.status, 0);
+  while (true) {
+    const current = await fetchJson<MLJobStatusApi>(job.status_url, accessToken);
+    onProgress?.(job.job_id, current.status, current.progress);
+    if (current.status === "completed" && current.result) {
+      return mapClassificacao(current.result);
+    }
+    if (current.status === "failed" || current.status === "cancelled") {
+      throw new LoteMovimentosNetworkError();
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
 }
 
 async function sendToReview(

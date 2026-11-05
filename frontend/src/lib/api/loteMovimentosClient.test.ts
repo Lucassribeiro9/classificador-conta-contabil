@@ -160,27 +160,46 @@ describe("loteMovimentosClient", () => {
   });
 
   it("classifica pendentes da empresa e normaliza erros", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      jsonResponse({
-        empresa_id: 7,
-        quantidade_processada: 2,
-        total_sugerido: 1,
-        total_revisao: 1,
-      }),
-    );
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        job_id: 506,
+        status: "queued",
+        status_url: "/api/v1/companies/7/ml/jobs/506",
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        job_id: 506,
+        status: "completed",
+        progress: 100,
+        error_code: null,
+        result: {
+          empresa_id: 7,
+          quantidade_processada: 2,
+          total_sugerido: 1,
+          total_revisao: 1,
+        },
+      }));
     vi.stubGlobal("fetch", fetchMock);
+    const onProgress = vi.fn();
 
     await expect(
-      loteMovimentosClient.classificarPendentes("jwt-de-teste", "7"),
+      loteMovimentosClient.classificarPendentes("jwt-de-teste", "7", onProgress),
     ).resolves.toEqual({
       empresaId: 7,
       quantidadeProcessada: 2,
       totalSugerido: 1,
       totalRevisao: 1,
     });
+    expect(onProgress).toHaveBeenCalledWith(506, "queued", 0);
+    expect(onProgress).toHaveBeenCalledWith(506, "completed", 100);
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/v1/companies/7/movimentos-operacionais/classificar",
-      expect.objectContaining({ method: "POST" }),
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ "Idempotency-Key": expect.any(String) }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/companies/7/ml/jobs/506", expect.any(Object),
     );
 
     vi.stubGlobal(

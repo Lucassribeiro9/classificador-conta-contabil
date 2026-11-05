@@ -1049,7 +1049,11 @@ def test_user_with_operacao_permission_classifies_pending_operational_movements(
 ):
     usuario, empresa_id, _ = _seed_operational_lote_with_movements(permissao="operacao")
 
-    def fake_classificar(db, *, empresa_id, model_dir=None):
+    from core.ml_worker import MLWorker
+    from core.config import settings
+    from tests.conftest import TestingSessionLocal
+
+    def fake_classificar(db, *, empresa_id, model_dir=None, movement_ids=None):
         return {
             "empresa_id": empresa_id,
             "quantidade_processada": 2,
@@ -1058,17 +1062,21 @@ def test_user_with_operacao_permission_classifies_pending_operational_movements(
         }
 
     monkeypatch.setattr(
-        "api.routes.movimentos_operacionais.classificar_movimentos_operacionais_pendentes",
+        "core.ml_worker.classificar_movimentos_operacionais_pendentes",
         fake_classificar,
     )
 
     response = client.post(
         f"/api/v1/companies/{empresa_id}/movimentos-operacionais/classificar",
-        headers=_auth_headers(usuario),
+        headers={**_auth_headers(usuario), "Idempotency-Key": "operational-506"},
     )
 
-    assert response.status_code == 200
-    assert response.json() == {
+    assert response.status_code == 202
+    worker = MLWorker(TestingSessionLocal, worker_id="test-operational", model_dir=settings.MODEL_DIR)
+    assert worker.run_once()
+    completed = client.get(response.json()["status_url"], headers=_auth_headers(usuario)).json()
+    assert completed["status"] == "completed"
+    assert completed["result"] == {
         "empresa_id": empresa_id,
         "quantidade_processada": 2,
         "total_sugerido": 1,
@@ -1125,11 +1133,15 @@ def test_classificar_movimentos_returns_controlled_error_when_model_is_missing(
 
     response = client.post(
         f"/api/v1/companies/{empresa_id}/movimentos-operacionais/classificar",
-        headers=_auth_headers(usuario),
+        headers={**_auth_headers(usuario), "Idempotency-Key": "missing-model-506"},
     )
 
-    assert response.status_code == 404
-    assert response.json()["message"] == "Modelo treinado não encontrado para a empresa"
+    assert response.status_code == 202
+    from core.ml_worker import MLWorker
+    assert MLWorker(TestingSessionLocal, worker_id="missing-model", model_dir=tmp_path).run_once()
+    status = client.get(response.json()["status_url"], headers=_auth_headers(usuario)).json()
+    assert status["status"] == "failed"
+    assert status["error_code"] == "model_not_found"
 
     with TestingSessionLocal() as session:
         event = (

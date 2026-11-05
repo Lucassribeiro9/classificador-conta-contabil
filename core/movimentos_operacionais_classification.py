@@ -31,6 +31,7 @@ def classificar_movimentos_operacionais_pendentes(
     *,
     empresa_id: int,
     model_dir: str | Path | None = None,
+    movement_ids: list[int] | None = None,
 ) -> dict[str, Any]:
     """Classifica movimentos operacionais pendentes de uma empresa.
 
@@ -38,13 +39,14 @@ def classificar_movimentos_operacionais_pendentes(
     e persiste apenas sugestao, confianca e status. A decisao final continua
     dependendo de revisao humana.
     """
-    movimentos = (
+    query = (
         session.query(MovimentoOperacionalImportado)
         .filter(MovimentoOperacionalImportado.empresa_id == empresa_id)
         .filter(MovimentoOperacionalImportado.status == "pendente")
-        .order_by(MovimentoOperacionalImportado.id.asc())
-        .all()
     )
+    if movement_ids is not None:
+        query = query.filter(MovimentoOperacionalImportado.id.in_(movement_ids))
+    movimentos = query.order_by(MovimentoOperacionalImportado.id.asc()).all()
     if not movimentos:
         result = _result(empresa_id=empresa_id, total_sugerido=0, total_revisao=0)
         _audit_classification(session, result)

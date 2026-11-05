@@ -215,6 +215,7 @@ Contratos reais:
 - `GET /api/v1/companies/{company_id}/movimentos-operacionais/lotes`
 - `GET /api/v1/companies/{company_id}/movimentos-operacionais/lotes/{lote_id}/movimentos`
 - `POST /api/v1/companies/{company_id}/movimentos-operacionais/classificar`
+- `GET /api/v1/companies/{company_id}/ml/jobs/{job_id}` para acompanhar a classificação iniciada
 - `POST /api/v1/companies/{company_id}/movimentos-operacionais/lotes/{lote_id}/movimentos/{movimento_id}/review`
 - `POST /api/v1/companies/{company_id}/movimentos-operacionais/lotes/{lote_id}/enviar-revisao`
 

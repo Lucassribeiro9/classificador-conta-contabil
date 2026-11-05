@@ -1,10 +1,12 @@
 # Versões do modelo de contrapartida
 
 A API técnica mantém versões por empresa. `POST /api/v1/companies/{company_id}/ml/train`
-compõe um manifesto do dataset, treina um **candidate**, avalia e grava o artefato
-em `empresa_{company_id}/model_{version_id}.joblib`. O treino não ativa o
-candidato. O endpoint exige permissão `operacao` ou superior e retorna
-`version_id` com `status=candidate`.
+exige `Idempotency-Key` e permissão `operacao` ou superior. Retorna `202` com
+`job_id` e `status_url`; o worker compõe o manifesto, treina um **candidate**,
+avalia e grava o artefato em `empresa_{company_id}/model_{version_id}.joblib`.
+O resultado do job contém `version_id` e `status=candidate`. O treino não ativa
+o candidato. Consulte [a operação dos jobs](ml-jobs-operacao.md) para acompanhar,
+cancelar e repetir uma execução.
 
 Um admin global ou usuário com `admin_empresa` pode:
 

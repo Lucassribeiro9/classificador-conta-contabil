@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     RAZAO_HEARTBEAT_SECONDS: int = Field(default=30, gt=0)
     RAZAO_LEASE_SECONDS: int = Field(default=600, gt=0)
     RAZAO_POLL_INTERVAL_SECONDS: float = Field(default=3, gt=0)
+    ML_CPU_WORKER_CONCURRENCY: int = Field(default=1, gt=0)
+    ML_JOB_LEASE_SECONDS: int = Field(default=600, gt=0)
+    ML_JOB_POLL_INTERVAL_SECONDS: float = Field(default=3, gt=0)
 
     model_config = SettingsConfigDict(
         env_file=".env", extra="ignore"  # Ignora variáveis de ambiente extras
