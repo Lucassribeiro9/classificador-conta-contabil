@@ -235,10 +235,11 @@ def test_homologacao_fixtures_complete_importer_flow(session, tmp_path):
         movimento for movimento in movimentos if movimento.documento == "HML-003"
     )
 
-    assert classificacao["total_sugerido"] == 1
-    assert classificacao["total_revisao"] == 0
-    assert movimento_sugerido.contrapartida_sugerida == 40101
-    assert movimento_sugerido.confidence_sugerida >= 0.70
+    assert classificacao["total_sugerido"] == 0
+    assert classificacao["total_revisao"] == 1
+    assert movimento_sugerido.contrapartida_sugerida is None
+    assert movimento_sugerido.contrapartida_final is None
+    assert movimento_sugerido.ml_suggestion_context["abstention_reason"] == "model_version_missing"
 
 
 def test_homologacao_fixtures_keep_only_sanitized_static_data():

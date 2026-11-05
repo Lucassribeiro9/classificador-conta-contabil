@@ -17,14 +17,14 @@ from core.razao_importer import import_razao
 pytestmark = pytest.mark.integration_postgres
 
 
-def _parsed_line(numero: int) -> dict:
+def _parsed_line(numero: int, *, origin_code: int, target_code: int) -> dict:
     return {
         "bloco_id": "bloco:postgres",
         "data": "2026-01-02",
         "numero": str(numero),
         "historico": f"Lançamento sintético {numero}",
-        "conta_origem": "10046",
-        "contrapartida": "20001",
+        "conta_origem": str(origin_code),
+        "contrapartida": str(target_code),
         "debito": "10.00",
         "credito": None,
     }
@@ -39,6 +39,8 @@ def test_sql_statements_scale_with_blocks_instead_of_rows(tmp_path, monkeypatch)
     engine = create_engine(database_url)
     session = sessionmaker(bind=engine)()
     suffix = uuid4().hex[:10]
+    origin_code = 1_000_000_000 + int(suffix, 16) % 500_000_000
+    target_code = origin_code + 1
     empresa = Empresa(
         nome_empresa=f"Empresa blocos {suffix}",
         cnpj_cpf=str(int(suffix, 16) % 10**14).zfill(14),
@@ -57,16 +59,16 @@ def test_sql_statements_scale_with_blocks_instead_of_rows(tmp_path, monkeypatch)
             empresa,
             usuario,
             ContaContabil(
-                codigo=10046,
-                classificacao="1.1.10046",
-                nome="CONTA 10046",
+                codigo=origin_code,
+                classificacao=f"1.1.{origin_code}",
+                nome=f"CONTA {origin_code}",
                 tipo="A",
                 grau=6,
             ),
             ContaContabil(
-                codigo=20001,
-                classificacao="1.1.20001",
-                nome="CONTA 20001",
+                codigo=target_code,
+                classificacao=f"1.1.{target_code}",
+                nome=f"CONTA {target_code}",
                 tipo="A",
                 grau=6,
             ),
@@ -75,7 +77,10 @@ def test_sql_statements_scale_with_blocks_instead_of_rows(tmp_path, monkeypatch)
     session.flush()
     row_count = 40
     block_size = 7
-    parsed = [_parsed_line(index) for index in range(1, row_count + 1)]
+    parsed = [
+        _parsed_line(index, origin_code=origin_code, target_code=target_code)
+        for index in range(1, row_count + 1)
+    ]
     monkeypatch.setattr(
         razao_importer,
         "_parse_lancamentos_and_validate_company",
@@ -117,7 +122,9 @@ def test_sql_statements_scale_with_blocks_instead_of_rows(tmp_path, monkeypatch)
         assert len(entry_inserts) == ceil(row_count / block_size)
         assert all(many for _, many in entry_inserts)
         assert result.total_importadas == row_count
-        assert session.query(LancamentoRazaoNormalizado).count() == row_count
+        assert session.query(LancamentoRazaoNormalizado).filter_by(
+            empresa_id=empresa.id,
+        ).count() == row_count
     finally:
         session.rollback()
         session.close()
