@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     SERVICE_CREDENTIAL_SECRET: str = os.getenv("SERVICE_CREDENTIAL_SECRET", "")
     MODEL_DIR: str = os.getenv("MODEL_DIR", "./data/models")
     TECHNICAL_LOG_DIR: str = os.getenv("TECHNICAL_LOG_DIR", "./data/logs")
+    METRICS_NETWORK_PEER: str = ""
+    METRICS_PORT: int = Field(default=9000, ge=0, le=65535)
 
     RAZAO_STORAGE_DIR: str = "./data/razao-temporario"
     RAZAO_UPLOAD_MAX_BYTES: int = Field(default=50_000_000, gt=0)

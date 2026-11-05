@@ -128,6 +128,8 @@ docker compose --env-file .env.hml -f docker-compose.edge.yml logs nginx
 docker compose --env-file .env.hml -f docker-compose.hml.yml logs api frontend postgres
 ```
 
+A coleta e os paineis internos seguem o [runbook de metricas](observabilidade-metricas-internas.md).
+
 ## Rollback operacional
 
 ```bash

@@ -11,6 +11,7 @@ from core.config import settings
 from core.database import SessionLocal
 from core.razao_storage import RazaoStorage
 from core.razao_worker import build_workers, process_razao_upload
+from core.operational_metrics import start_private_process_metrics_server
 from core.technical_logging import configure_technical_logging
 
 
@@ -28,35 +29,47 @@ def main() -> None:
         service="razao-worker",
         log_dir=settings.TECHNICAL_LOG_DIR,
     )
-    stop_event = Event()
-    signal(SIGTERM, lambda *_: stop_event.set())
-    signal(SIGINT, lambda *_: stop_event.set())
-    storage = RazaoStorage.from_settings(settings, sessions=SessionLocal)
-    worker_id = getenv("HOSTNAME") or gethostname() or "razao-worker"
-    workers = build_workers(
-        SessionLocal,
-        storage,
-        process_razao_upload,
-        worker_id=worker_id,
-        settings=settings,
-    )
-    threads = [
-        Thread(
-            target=run_worker_loop,
-            kwargs={
-                "worker": worker,
-                "storage": storage,
-                "poll_seconds": settings.RAZAO_POLL_INTERVAL_SECONDS,
-                "stop_event": stop_event,
-            },
-            name=f"razao-consumer-{index}",
+    metrics_server = None
+    metrics_thread = None
+    if settings.METRICS_NETWORK_PEER:
+        metrics_server, metrics_thread = start_private_process_metrics_server(
+            settings.METRICS_NETWORK_PEER, settings.METRICS_PORT
         )
-        for index, worker in enumerate(workers, start=1)
-    ]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
+    try:
+        stop_event = Event()
+        signal(SIGTERM, lambda *_: stop_event.set())
+        signal(SIGINT, lambda *_: stop_event.set())
+        storage = RazaoStorage.from_settings(settings, sessions=SessionLocal)
+        worker_id = getenv("HOSTNAME") or gethostname() or "razao-worker"
+        workers = build_workers(
+            SessionLocal,
+            storage,
+            process_razao_upload,
+            worker_id=worker_id,
+            settings=settings,
+        )
+        threads = [
+            Thread(
+                target=run_worker_loop,
+                kwargs={
+                    "worker": worker,
+                    "storage": storage,
+                    "poll_seconds": settings.RAZAO_POLL_INTERVAL_SECONDS,
+                    "stop_event": stop_event,
+                },
+                name=f"razao-consumer-{index}",
+            )
+            for index, worker in enumerate(workers, start=1)
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+    finally:
+        if metrics_server is not None:
+            metrics_server.shutdown()
+            metrics_server.server_close()
+            metrics_thread.join(timeout=2)
 
 
 if __name__ == "__main__":

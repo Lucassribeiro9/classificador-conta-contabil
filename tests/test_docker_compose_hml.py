@@ -63,6 +63,8 @@ def test_hml_compose_uses_only_environment_scoped_runtime_variables():
             "${SERVICE_CREDENTIAL_SECRET_HML:?Defina SERVICE_CREDENTIAL_SECRET_HML no ambiente de homologacao}"
         ),
         "TECHNICAL_LOG_DIR": "${TECHNICAL_LOG_DIR_HML:-/app/data/logs}",
+        "METRICS_NETWORK_PEER": "postgres",
+        "METRICS_PORT": "9000",
         "CORS_ALLOWED_ORIGINS": (
             "${CORS_ALLOWED_ORIGINS_HML:-https://classificador-hml.interno}"
         ),
